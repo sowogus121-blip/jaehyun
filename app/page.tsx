@@ -156,6 +156,8 @@ export default function Home() {
   const [reviewData, setReviewData] = useState<SiteReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const vworldKeyRef = useRef<HTMLInputElement>(null);
+  const lawOcRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("lh-plan-lab-project");
@@ -196,11 +198,13 @@ export default function Home() {
   const update = <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => setInput((current) => ({ ...current, [key]: value }));
 
   const lookupAddress = async () => {
+    const activeVworldKey = (vworldKeyRef.current?.value || vworldKey).trim();
     if (!input.address.trim()) return setToast("주소를 먼저 입력해 주세요.");
-    if (!vworldKey) return setToast("VWorld API 키를 먼저 입력해 주세요.");
+    if (!activeVworldKey) return setToast("VWorld API 키를 먼저 입력해 주세요.");
+    setVworldKey(activeVworldKey);
     setToast("공공 주소 API를 조회하고 있습니다…");
     try {
-      const response = await fetch(`/api/site-lookup?query=${encodeURIComponent(input.address)}`, { headers: { "x-vworld-api-key": vworldKey } });
+      const response = await fetch(`/api/site-lookup?query=${encodeURIComponent(input.address)}`, { headers: { "x-vworld-api-key": activeVworldKey } });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       update("address", data.address);
@@ -211,10 +215,14 @@ export default function Home() {
   };
 
   const runSiteReview = async () => {
+    const activeVworldKey = (vworldKeyRef.current?.value || vworldKey).trim();
+    const activeLawOc = (lawOcRef.current?.value || lawOc).trim();
     if (!input.address.trim()) return setToast("검토할 주소를 먼저 입력해 주세요.");
-    if (!vworldKey && !lawOc) return setToast("VWorld API 키 또는 국가법령정보 공동활용 OC를 입력해 주세요.");
-    sessionStorage.setItem("lh-plan-vworld-key", vworldKey);
-    sessionStorage.setItem("lh-plan-law-oc", lawOc);
+    if (!activeVworldKey && !activeLawOc) return setToast("VWorld API 키 또는 국가법령정보 공동활용 OC를 입력해 주세요.");
+    setVworldKey(activeVworldKey);
+    setLawOc(activeLawOc);
+    sessionStorage.setItem("lh-plan-vworld-key", activeVworldKey);
+    sessionStorage.setItem("lh-plan-law-oc", activeLawOc);
     setIsReviewing(true);
     setToast("공식 API에서 대상지와 현행 법령을 조회하고 있습니다…");
     try {
@@ -222,8 +230,8 @@ export default function Home() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(vworldKey ? { "x-vworld-api-key": vworldKey } : {}),
-          ...(lawOc ? { "x-law-api-oc": lawOc } : {}),
+          ...(activeVworldKey ? { "x-vworld-api-key": activeVworldKey } : {}),
+          ...(activeLawOc ? { "x-law-api-oc": activeLawOc } : {}),
         },
         body: JSON.stringify({ address: input.address }),
       });
@@ -320,8 +328,8 @@ export default function Home() {
           <section className="card api-connect-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>키는 서버에 저장하지 않고 현재 브라우저 세션에서만 사용합니다.</p></div><span className={`connection-pill ${vworldKey || lawOc ? "connected" : ""}`}><i />{vworldKey || lawOc ? "입력됨" : "연결 필요"}</span></div>
             <div className="api-connect-grid">
-              <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input type="password" autoComplete="off" value={vworldKey} onChange={(e) => setVworldKey(e.target.value.trim())} placeholder="VWorld에서 발급받은 Key" /></Field>
-              <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input type="password" autoComplete="off" value={lawOc} onChange={(e) => setLawOc(e.target.value.trim())} placeholder="공동활용 신청 시 등록한 OC" /></Field>
+              <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input ref={vworldKeyRef} type="password" autoComplete="off" value={vworldKey} onInput={(e) => setVworldKey(e.currentTarget.value.trim())} onChange={(e) => setVworldKey(e.target.value.trim())} placeholder="VWorld에서 발급받은 Key" /></Field>
+              <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input ref={lawOcRef} type="password" autoComplete="off" value={lawOc} onInput={(e) => setLawOc(e.currentTarget.value.trim())} onChange={(e) => setLawOc(e.target.value.trim())} placeholder="공동활용 신청 시 등록한 OC" /></Field>
               <div className="api-links"><a href="https://www.vworld.kr/dev/v4dv_apikey_s001.do" target="_blank" rel="noreferrer">VWorld 키 발급 ↗</a><a href="https://open.law.go.kr/LSO/openApi/guideList.do" target="_blank" rel="noreferrer">법령 API 신청 ↗</a></div>
               <button className="button primary review-button" disabled={isReviewing} onClick={runSiteReview}>{isReviewing ? "공식자료 조회 중…" : "대상지 통합 법규검토"}</button>
             </div>
