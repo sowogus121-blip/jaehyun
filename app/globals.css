@@ -70,6 +70,7 @@ main { grid-column: 2; min-width: 0; }
 .topbar > div:first-child { display: flex; align-items: center; gap: 9px; color: #98a3ad; font-size: 11px; }
 .topbar > div:first-child i { color: #cad1d6; }.topbar > div:first-child b { color: #30465a; font-weight: 600; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
+.build-version { padding: 4px 7px; color: #2d6f64; background: #e6f4ef; border-radius: 10px; font-size: 8px; font-weight: 800; letter-spacing: .04em; }
 .autosave { display: flex; align-items: center; gap: 6px; margin-right: 8px; color: #6f8291; font-size: 10px; }
 .autosave i { width: 6px; height: 6px; border-radius: 50%; background: #26a586; }.autosave b { font-weight: 500; }
 .button { min-height: 36px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 5px; border: 1px solid transparent; font-size: 11px; font-weight: 600; cursor: pointer; transition: .15s ease; }

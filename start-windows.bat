@@ -24,12 +24,8 @@ if not exist "node_modules\next\package.json" (
 
 echo.
 echo [2/3] Preparing the production application...
-if not exist ".next\BUILD_ID" (
-  call npm run build
-  if errorlevel 1 goto build_failed
-) else (
-  echo Production build is already prepared.
-)
+call npm run build
+if errorlevel 1 goto build_failed
 
 echo.
 echo [3/3] Starting LH Plan Lab...
@@ -37,8 +33,9 @@ echo The browser will open automatically when the server is ready.
 echo Keep the server window open while using the program.
 echo.
 
-curl.exe -fsS http://127.0.0.1:3000/ -o NUL >nul 2>nul
-if not errorlevel 1 goto server_ready
+echo Closing any previous LH Plan Lab server on port 3000...
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":3000" ^| findstr "LISTENING"') do taskkill /PID %%P /F >nul 2>nul
+timeout /t 2 /nobreak >nul
 
 start "LH Plan Lab Server" cmd.exe /k "npm start"
 set /a WAIT_COUNT=0
@@ -53,7 +50,7 @@ goto wait_for_server
 
 :server_ready
 echo LH Plan Lab is ready. Opening the browser...
-start "" "http://127.0.0.1:3000"
+start "" "http://127.0.0.1:3000/?launcher=v0.4.0"
 timeout /t 2 /nobreak >nul
 goto end
 
