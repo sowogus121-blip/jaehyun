@@ -14,12 +14,25 @@ if errorlevel 1 goto node_missing
 where npm >nul 2>nul
 if errorlevel 1 goto node_missing
 
-echo [1/2] Checking project dependencies...
-call npm ci --no-audit --no-fund
-if errorlevel 1 goto install_failed
+echo [1/3] Checking project dependencies...
+if not exist "node_modules\next\package.json" (
+  call npm ci --no-audit --no-fund
+  if errorlevel 1 goto install_failed
+) else (
+  echo Dependencies are already installed.
+)
 
 echo.
-echo [2/2] Starting LH Plan Lab...
+echo [2/3] Preparing the production application...
+if not exist ".next\BUILD_ID" (
+  call npm run build
+  if errorlevel 1 goto build_failed
+) else (
+  echo Production build is already prepared.
+)
+
+echo.
+echo [3/3] Starting LH Plan Lab...
 echo The browser will open automatically when the server is ready.
 echo Keep the server window open while using the program.
 echo.
@@ -27,7 +40,7 @@ echo.
 curl.exe -fsS http://127.0.0.1:3000/ -o NUL >nul 2>nul
 if not errorlevel 1 goto server_ready
 
-start "LH Plan Lab Server" cmd.exe /k "npm run dev"
+start "LH Plan Lab Server" cmd.exe /k "npm start"
 set /a WAIT_COUNT=0
 
 :wait_for_server
@@ -56,6 +69,14 @@ exit /b 1
 echo.
 echo [ERROR] Dependency installation failed.
 echo Check the error message above and your Internet connection.
+echo.
+pause
+exit /b 1
+
+:build_failed
+echo.
+echo [ERROR] Production build failed.
+echo Check the error message above.
 echo.
 pause
 exit /b 1
