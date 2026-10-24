@@ -4,7 +4,7 @@ export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("query")?.trim();
   if (!query) return NextResponse.json({ error: "주소를 입력해 주세요." }, { status: 400 });
 
-  const apiKey = process.env.VWORLD_API_KEY;
+  const apiKey = request.headers.get("x-vworld-api-key")?.trim() || process.env.VWORLD_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       {

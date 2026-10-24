@@ -115,3 +115,32 @@ export interface UploadedDocument {
   status: "ready" | "needs-integration";
   uploadedAt: string;
 }
+
+export interface SiteReviewResult {
+  status: "verified" | "partial" | "integration-required";
+  checkedAt: string;
+  location: {
+    address: string;
+    parcelAddress: string | null;
+    x: string;
+    y: string;
+  } | null;
+  landUse: Array<{
+    category: string;
+    name: string;
+    code: string;
+    source: string;
+    status: "verified";
+  }>;
+  laws: Array<{
+    name: string;
+    promulgationDate: string | null;
+    enforcementDate: string | null;
+    ministry: string | null;
+    link: string;
+    status: "verified";
+  }>;
+  missing: string[];
+  errors: string[];
+  unresolved: string[];
+}

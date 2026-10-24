@@ -2,7 +2,7 @@
 
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ALTERNATIVES, DEFAULT_INPUT, calculateAll } from "@/lib/calculator";
-import type { AlternativeResult, ProjectInput, UploadedDocument } from "@/lib/types";
+import type { AlternativeResult, ProjectInput, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
 type IconName = "site" | "law" | "lh" | "scale" | "report" | "search" | "upload" | "save" | "download" | "alert" | "check" | "building" | "parking" | "area" | "height" | "chevron" | "database" | "settings" | "history";
 
@@ -151,6 +151,10 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [versionCount, setVersionCount] = useState(0);
+  const [vworldKey, setVworldKey] = useState("");
+  const [lawOc, setLawOc] = useState("");
+  const [reviewData, setReviewData] = useState<SiteReviewResult | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -160,11 +164,14 @@ export default function Home() {
         const parsed = JSON.parse(saved);
         setInput({ ...DEFAULT_INPUT, ...parsed.input });
         setDocuments(parsed.documents ?? []);
+        setReviewData(parsed.reviewData ?? null);
         setSavedAt(parsed.savedAt ?? null);
       } catch { /* invalid local data is ignored */ }
     }
     const versions = JSON.parse(localStorage.getItem("lh-plan-lab-versions") ?? "[]");
     setVersionCount(Array.isArray(versions) ? versions.length : 0);
+    setVworldKey(sessionStorage.getItem("lh-plan-vworld-key") ?? "");
+    setLawOc(sessionStorage.getItem("lh-plan-law-oc") ?? "");
   }, []);
 
   const results = useMemo(() => calculateAll(input), [input]);
@@ -174,11 +181,11 @@ export default function Home() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      localStorage.setItem("lh-plan-lab-project", JSON.stringify({ input, documents, savedAt: new Date().toISOString() }));
+      localStorage.setItem("lh-plan-lab-project", JSON.stringify({ input, documents, reviewData, savedAt: new Date().toISOString() }));
       setSavedAt(new Date().toISOString());
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [input, documents]);
+  }, [input, documents, reviewData]);
 
   useEffect(() => {
     if (!toast) return;
@@ -190,15 +197,47 @@ export default function Home() {
 
   const lookupAddress = async () => {
     if (!input.address.trim()) return setToast("주소를 먼저 입력해 주세요.");
+    if (!vworldKey) return setToast("VWorld API 키를 먼저 입력해 주세요.");
     setToast("공공 주소 API를 조회하고 있습니다…");
     try {
-      const response = await fetch(`/api/site-lookup?query=${encodeURIComponent(input.address)}`);
+      const response = await fetch(`/api/site-lookup?query=${encodeURIComponent(input.address)}`, { headers: { "x-vworld-api-key": vworldKey } });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       update("address", data.address);
       setToast(`주소 확인 완료 · ${data.source}`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "주소 조회에 실패했습니다.");
+    }
+  };
+
+  const runSiteReview = async () => {
+    if (!input.address.trim()) return setToast("검토할 주소를 먼저 입력해 주세요.");
+    if (!vworldKey && !lawOc) return setToast("VWorld API 키 또는 국가법령정보 공동활용 OC를 입력해 주세요.");
+    sessionStorage.setItem("lh-plan-vworld-key", vworldKey);
+    sessionStorage.setItem("lh-plan-law-oc", lawOc);
+    setIsReviewing(true);
+    setToast("공식 API에서 대상지와 현행 법령을 조회하고 있습니다…");
+    try {
+      const response = await fetch("/api/site-review", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(vworldKey ? { "x-vworld-api-key": vworldKey } : {}),
+          ...(lawOc ? { "x-law-api-oc": lawOc } : {}),
+        },
+        body: JSON.stringify({ address: input.address }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "통합검토 요청에 실패했습니다.");
+      setReviewData(data);
+      if (data.location?.address) update("address", data.location.address);
+      if (data.landUse?.[0]?.name) update("zone", `${data.landUse[0].name} (VWorld 확인)`);
+      setToast(`공식자료 ${data.laws.length + data.landUse.length + (data.location ? 1 : 0)}건을 확인했습니다.`);
+      setActiveTab(1);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "통합 법규검토에 실패했습니다.");
+    } finally {
+      setIsReviewing(false);
     }
   };
 
@@ -226,7 +265,7 @@ export default function Home() {
     setToast(`검토 버전 ${next.length}을 저장했습니다.`);
   };
 
-  const exportProject = () => downloadBlob(JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), input, documents }, null, 2), "application/json", "lh-plan-lab-project.json");
+  const exportProject = () => downloadBlob(JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), input, documents, reviewData }, null, 2), "application/json", "lh-plan-lab-project.json");
   const exportExcel = () => {
     const headings = ["항목", ...results.map((r) => `${r.definition.id} ${r.definition.shortName}`)];
     const rows = [
@@ -278,6 +317,17 @@ export default function Home() {
             {input.businessMode === "undecided" && <div className="notice amber"><Icon name="alert" /><div><b>사업방식이 확정되지 않았습니다.</b><span>매입약정 0.3대 특례와 관련 인센티브는 자동 적용하지 않고 별도 검토사항으로 유지합니다.</span></div></div>}
           </section>
 
+          <section className="card api-connect-card">
+            <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>키는 서버에 저장하지 않고 현재 브라우저 세션에서만 사용합니다.</p></div><span className={`connection-pill ${vworldKey || lawOc ? "connected" : ""}`}><i />{vworldKey || lawOc ? "입력됨" : "연결 필요"}</span></div>
+            <div className="api-connect-grid">
+              <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input type="password" autoComplete="off" value={vworldKey} onChange={(e) => setVworldKey(e.target.value.trim())} placeholder="VWorld에서 발급받은 Key" /></Field>
+              <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input type="password" autoComplete="off" value={lawOc} onChange={(e) => setLawOc(e.target.value.trim())} placeholder="공동활용 신청 시 등록한 OC" /></Field>
+              <div className="api-links"><a href="https://www.vworld.kr/dev/v4dv_apikey_s001.do" target="_blank" rel="noreferrer">VWorld 키 발급 ↗</a><a href="https://open.law.go.kr/LSO/openApi/guideList.do" target="_blank" rel="noreferrer">법령 API 신청 ↗</a></div>
+              <button className="button primary review-button" disabled={isReviewing} onClick={runSiteReview}>{isReviewing ? "공식자료 조회 중…" : "대상지 통합 법규검토"}</button>
+            </div>
+            <div className="api-scope"><span><Icon name="check" size={14} /> 자동확인: 주소·좌표·용도지역·현행 국가법령</span><span><Icon name="alert" size={14} /> 별도확인: 지자체 조례·지구단위계획 결정도서·LH 지역본부 공고</span></div>
+          </section>
+
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => update("address", e.target.value)} placeholder="도로명주소 또는 지번주소" /></div><button className="button primary" onClick={lookupAddress}>공공주소 조회</button></div>
@@ -324,8 +374,16 @@ export default function Home() {
 
         {activeTab === 1 && <>
           <SectionHeader eyebrow="02 · REGULATION REVIEW" title="법규 및 도시계획 검토" description="확인된 원문, 사용자 입력, 자료 미확보 상태를 분리합니다. 미확인 값으로 적법 판정을 만들지 않습니다." action={<a className="official-link" href="https://www.law.go.kr" target="_blank" rel="noreferrer">국가법령정보센터 ↗</a>} />
-          <div className="review-overview"><div><span className="overview-icon navy"><Icon name="database" /></span><span><b>12</b><small>검토 항목</small></span></div><div><span className="overview-icon green"><Icon name="check" /></span><span><b>0</b><small>원문 확인</small></span></div><div><span className="overview-icon blue"><Icon name="save" /></span><span><b>4</b><small>사용자 입력</small></span></div><div><span className="overview-icon orange"><Icon name="alert" /></span><span><b>8</b><small>확인 필요</small></span></div></div>
-          <div className="notice danger"><Icon name="alert" /><div><b>법규 원문이 연결되지 않아 적법성 확정 판정을 보류합니다.</b><span>아래 수치는 사업성 비교용 계획 가정입니다. 관할청·LH 협의와 최신 법령/조례/결정도서 대조가 필요합니다.</span></div></div>
+          <div className="review-overview"><div><span className="overview-icon navy"><Icon name="database" /></span><span><b>{12 + (reviewData?.laws.length ?? 0) + (reviewData?.landUse.length ?? 0)}</b><small>검토 항목</small></span></div><div><span className="overview-icon green"><Icon name="check" /></span><span><b>{(reviewData?.laws.length ?? 0) + (reviewData?.landUse.length ?? 0) + (reviewData?.location ? 1 : 0)}</b><small>공식 API 확인</small></span></div><div><span className="overview-icon blue"><Icon name="save" /></span><span><b>4</b><small>사용자 입력</small></span></div><div><span className="overview-icon orange"><Icon name="alert" /></span><span><b>{reviewData?.unresolved.length ?? 8}</b><small>확인 필요</small></span></div></div>
+          {!reviewData ? <div className="notice danger"><Icon name="alert" /><div><b>공식 API 검토가 아직 실행되지 않았습니다.</b><span>대상지 입력 화면에서 API 키를 연결하고 ‘대상지 통합 법규검토’를 실행해 주세요.</span></div></div> : <div className={`notice ${reviewData.status === "verified" ? "success" : "amber"}`}><Icon name={reviewData.status === "verified" ? "check" : "alert"} /><div><b>{reviewData.status === "verified" ? "공식 API 조회를 완료했습니다." : "일부 공식자료를 확인했으며 추가 연결이 필요합니다."}</b><span>확인시각 {new Date(reviewData.checkedAt).toLocaleString("ko-KR")} · 적법성 최종판정은 관할청/LH 협의가 필요합니다.</span></div></div>}
+          {reviewData && <section className="card official-results-card">
+            <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 확인 결과</h3><p>국가공간정보포털과 국가법령정보센터가 반환한 원문 메타데이터입니다.</p></div><button className="button ghost" disabled={isReviewing} onClick={runSiteReview}>다시 조회</button></div>
+            {reviewData.location && <div className="verified-location"><Badge status="verified" /><span><b>{reviewData.location.address}</b><small>{reviewData.location.parcelAddress || "지번주소 없음"} · 좌표 {reviewData.location.x}, {reviewData.location.y}</small></span></div>}
+            {reviewData.landUse.length > 0 && <div className="official-group"><h4>토지이용 · 용도지역</h4>{reviewData.landUse.map((item) => <div className="official-row" key={`${item.code}-${item.name}`}><Badge status="verified" /><b>{item.name}</b><span>{item.source}</span><code>{item.code}</code></div>)}</div>}
+            {reviewData.laws.length > 0 && <div className="official-group"><h4>현행 국가법령</h4>{reviewData.laws.map((law) => <a className="official-row" href={law.link} target="_blank" rel="noreferrer" key={law.name}><Badge status="verified" /><b>{law.name}</b><span>{law.ministry || "소관부처 확인"} · 시행 {law.enforcementDate || "일자 미확보"}</span><em>원문 ↗</em></a>)}</div>}
+            {(reviewData.missing.length > 0 || reviewData.errors.length > 0) && <div className="api-errors">{reviewData.missing.map((name) => <span key={name}><Icon name="alert" size={13} /> {name} 연결 필요</span>)}{reviewData.errors.map((error) => <span key={error}><Icon name="alert" size={13} /> {error}</span>)}</div>}
+            <div className="unresolved-list"><h4>별도 원문 확인사항</h4>{reviewData.unresolved.map((item) => <span key={item}>{item}</span>)}</div>
+          </section>}
           <div className="reg-grid">{regulationGroups.map((group) => <section className="card regulation-card" key={group.title}><div className="reg-title"><span><Icon name={group.icon} /></span><div><h3>{group.title}</h3><p>{group.summary}</p></div></div><div className="reg-items">{group.items.map((item) => <details key={item.name}><summary><span>{item.name}</span><span className="reg-value">{item.value}</span><Badge status={item.status} /><Icon name="chevron" size={15} /></summary><div className="reg-detail"><b>적용 근거 / 확인사항</b><p>{item.source}</p><span>확인일 2026.10.24 · 자동 확정 아님</span></div></details>)}</div></section>)}</div>
           <section className="card relaxation-card">
             <div className="card-title"><div className="title-icon orange"><Icon name="scale" /></div><div><h3>용적률 완화 시나리오</h3><p>완화제도 존재만으로 자동 적용하지 않으며, 요건 확인 전 조건부 분석으로 분리합니다.</p></div><Toggle checked={input.useRelaxedFar} onChange={(v) => update("useRelaxedFar", v)} label="완화안 반영" /></div>
