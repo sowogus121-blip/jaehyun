@@ -45,7 +45,7 @@ async function fetchJson(url: string) {
   }
 }
 
-async function geocode(address: string, key: string) {
+async function geocode(address: string, key: string, domain: string) {
   const params = new URLSearchParams({
     service: "search",
     request: "search",
@@ -57,6 +57,7 @@ async function geocode(address: string, key: string) {
     format: "json",
     errorformat: "json",
     key,
+    domain,
   });
   const data = await fetchJson(`https://api.vworld.kr/req/search?${params.toString()}`);
   const item = data?.response?.result?.items?.[0];
@@ -69,14 +70,14 @@ async function geocode(address: string, key: string) {
   };
 }
 
-async function getLandUse(x: string, y: string, key: string) {
+async function getLandUse(x: string, y: string, key: string, domain: string) {
   const results = await Promise.allSettled(LAND_USE_LAYERS.map(async (layer) => {
     const params = new URLSearchParams({
       service: "data",
       request: "GetFeature",
       data: layer.code,
       key,
-      domain: "localhost",
+      domain,
       format: "json",
       geometry: "false",
       attribute: "true",
@@ -136,8 +137,8 @@ export async function POST(request: NextRequest) {
   let landUse: Awaited<ReturnType<typeof getLandUse>> = [];
   if (vworldKey) {
     try {
-      location = await geocode(address, vworldKey);
-      landUse = await getLandUse(location.x, location.y, vworldKey);
+      location = await geocode(address, vworldKey, request.nextUrl.origin);
+      landUse = await getLandUse(location.x, location.y, vworldKey, request.nextUrl.origin);
       if (landUse.length === 0) errors.push("VWorld 좌표는 확인했지만 해당 위치의 용도지역 응답이 없습니다.");
     } catch (error) {
       errors.push(`VWorld 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);

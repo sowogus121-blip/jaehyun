@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     format: "json",
     errorformat: "json",
     key: apiKey,
+    domain: request.nextUrl.origin,
   });
 
   try {
