@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import {
+  ALTERNATIVES,
+  DEFAULT_INPUT,
+  calculateAll,
+  calculateAlternative,
+  calculateFacilities,
+  getEvidenceStatus,
+  getGrossAreaPerUnit,
+  isSpecialParkingEligible,
+} from "../lib/calculator";
+
+describe("LH Plan Lab calculation engine", () => {
+  it("calculates 46㎡ apartment at 75% efficiency", () => {
+    expect(getGrossAreaPerUnit(46, 0.75)).toBeCloseTo(61.3333, 3);
+  });
+
+  it("calculates 25㎡ officetel at 45% efficiency", () => {
+    expect(getGrossAreaPerUnit(25, 0.45)).toBeCloseTo(55.5556, 3);
+  });
+
+  it("calculates four alternatives independently", () => {
+    const results = calculateAll(DEFAULT_INPUT);
+    expect(results.map((result) => result.definition.id)).toEqual(["A-1", "A-2", "B-1", "B-2"]);
+    expect(results).toHaveLength(4);
+    expect(results[0]).not.toBe(results[1]);
+  });
+
+  it("respects FAR and building coverage limits", () => {
+    const result = calculateAlternative(DEFAULT_INPUT, ALTERNATIVES[0]);
+    expect(result.farCountedArea).toBeLessThanOrEqual(result.farLimitArea);
+    expect(result.plannedBcr).toBeLessThanOrEqual(DEFAULT_INPUT.buildingCoverageRatio);
+  });
+
+  it("rounds parking demand upward", () => {
+    const input = { ...DEFAULT_INPUT, apartmentParkingRatio: 0.73, lhApartmentParkingRatio: 0 };
+    const result = calculateAlternative(input, ALTERNATIVES[0]);
+    expect(result.parking.legalCount).toBe(Math.ceil(result.unitCount * 0.73));
+  });
+
+  it("applies 0.3 special only to eligible purchase officetel", () => {
+    const eligible = { ...DEFAULT_INPUT, businessMode: "purchase" as const, specialParkingEnabled: true };
+    expect(isSpecialParkingEligible(eligible, ALTERNATIVES[2])).toBe(true);
+    expect(isSpecialParkingEligible(eligible, ALTERNATIVES[0])).toBe(false);
+    expect(isSpecialParkingEligible({ ...eligible, businessMode: "undecided" }, ALTERNATIVES[2])).toBe(false);
+  });
+
+  it("recalculates facilities across unit thresholds", () => {
+    const before = calculateFacilities("apartment", 49).reduce((sum, item) => sum + item.area, 0);
+    const after = calculateFacilities("apartment", 50).reduce((sum, item) => sum + item.area, 0);
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it("separates total floor area from FAR-counted area", () => {
+    const result = calculateAlternative(DEFAULT_INPUT, ALTERNATIVES[0]);
+    expect(result.totalFloorArea).toBeGreaterThan(result.farCountedArea);
+    expect(result.belowGroundArea).toBeGreaterThan(0);
+  });
+
+  it("warns and falls back when mechanical parking is unavailable", () => {
+    const result = calculateAlternative({ ...DEFAULT_INPUT, mechanicalAllowed: false }, ALTERNATIVES[1]);
+    expect(result.parking.mechanicalCount).toBe(0);
+    expect(result.parking.selfCount).toBe(result.parking.finalCount);
+    expect(result.warnings.some((warning) => warning.includes("전량 자주식"))).toBe(true);
+  });
+
+  it("marks missing legal evidence as unknown", () => {
+    expect(getEvidenceStatus(false)).toBe("unknown");
+    expect(getEvidenceStatus(false, true)).toBe("user");
+  });
+});
