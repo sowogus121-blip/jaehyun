@@ -155,6 +155,7 @@ export default function Home() {
   const [lawOc, setLawOc] = useState("");
   const [reviewData, setReviewData] = useState<SiteReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [apiPanelMessage, setApiPanelMessage] = useState("두 값을 입력한 뒤 통합 법규검토를 실행하세요.");
   const uploadRef = useRef<HTMLInputElement>(null);
   const vworldKeyRef = useRef<HTMLInputElement>(null);
   const lawOcRef = useRef<HTMLInputElement>(null);
@@ -172,8 +173,12 @@ export default function Home() {
     }
     const versions = JSON.parse(localStorage.getItem("lh-plan-lab-versions") ?? "[]");
     setVersionCount(Array.isArray(versions) ? versions.length : 0);
-    setVworldKey(sessionStorage.getItem("lh-plan-vworld-key") ?? "");
-    setLawOc(sessionStorage.getItem("lh-plan-law-oc") ?? "");
+    const savedVworldKey = sessionStorage.getItem("lh-plan-vworld-key") ?? "";
+    const savedLawOc = sessionStorage.getItem("lh-plan-law-oc") ?? "";
+    setVworldKey(savedVworldKey);
+    setLawOc(savedLawOc);
+    if (vworldKeyRef.current) vworldKeyRef.current.value = savedVworldKey;
+    if (lawOcRef.current) lawOcRef.current.value = savedLawOc;
   }, []);
 
   const results = useMemo(() => calculateAll(input), [input]);
@@ -198,9 +203,12 @@ export default function Home() {
   const update = <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => setInput((current) => ({ ...current, [key]: value }));
 
   const lookupAddress = async () => {
-    const activeVworldKey = (vworldKeyRef.current?.value || vworldKey).trim();
+    const activeVworldKey = (document.querySelector<HTMLInputElement>("#vworld-api-key")?.value || vworldKey).trim();
     if (!input.address.trim()) return setToast("주소를 먼저 입력해 주세요.");
-    if (!activeVworldKey) return setToast("VWorld API 키를 먼저 입력해 주세요.");
+    if (!activeVworldKey) {
+      setApiPanelMessage("VWorld API 키가 비어 있습니다.");
+      return setToast("VWorld API 키를 먼저 입력해 주세요.");
+    }
     setVworldKey(activeVworldKey);
     setToast("공공 주소 API를 조회하고 있습니다…");
     try {
@@ -215,15 +223,22 @@ export default function Home() {
   };
 
   const runSiteReview = async () => {
-    const activeVworldKey = (vworldKeyRef.current?.value || vworldKey).trim();
-    const activeLawOc = (lawOcRef.current?.value || lawOc).trim();
-    if (!input.address.trim()) return setToast("검토할 주소를 먼저 입력해 주세요.");
-    if (!activeVworldKey && !activeLawOc) return setToast("VWorld API 키 또는 국가법령정보 공동활용 OC를 입력해 주세요.");
+    const activeVworldKey = (document.querySelector<HTMLInputElement>("#vworld-api-key")?.value || vworldKey).trim();
+    const activeLawOc = (document.querySelector<HTMLInputElement>("#law-api-oc")?.value || lawOc).trim();
+    if (!input.address.trim()) {
+      setApiPanelMessage("대상지 주소가 비어 있습니다. 위 대상지 위치에 주소를 입력해 주세요.");
+      return setToast("검토할 주소를 먼저 입력해 주세요.");
+    }
+    if (!activeVworldKey && !activeLawOc) {
+      setApiPanelMessage("입력칸의 값을 프로그램이 읽지 못했습니다. 최신 버전에서 다시 붙여 넣어 주세요.");
+      return setToast("VWorld API 키 또는 국가법령정보 공동활용 OC를 입력해 주세요.");
+    }
     setVworldKey(activeVworldKey);
     setLawOc(activeLawOc);
     sessionStorage.setItem("lh-plan-vworld-key", activeVworldKey);
     sessionStorage.setItem("lh-plan-law-oc", activeLawOc);
     setIsReviewing(true);
+    setApiPanelMessage(`입력 확인 완료 · VWorld ${activeVworldKey ? "사용" : "미사용"} · 법령 API ${activeLawOc ? "사용" : "미사용"} · 공식자료 조회 중…`);
     setToast("공식 API에서 대상지와 현행 법령을 조회하고 있습니다…");
     try {
       const response = await fetch("/api/site-review", {
@@ -241,9 +256,12 @@ export default function Home() {
       if (data.location?.address) update("address", data.location.address);
       if (data.landUse?.[0]?.name) update("zone", `${data.landUse[0].name} (VWorld 확인)`);
       setToast(`공식자료 ${data.laws.length + data.landUse.length + (data.location ? 1 : 0)}건을 확인했습니다.`);
+      setApiPanelMessage(`조회 완료 · 주소 ${data.location ? 1 : 0}건 · 용도지역 ${data.landUse.length}건 · 현행 법령 ${data.laws.length}건${data.errors.length ? ` · 오류 ${data.errors.length}건` : ""}`);
       setActiveTab(1);
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "통합 법규검토에 실패했습니다.");
+      const message = error instanceof Error ? error.message : "통합 법규검토에 실패했습니다.";
+      setApiPanelMessage(`조회 실패 · ${message}`);
+      setToast(message);
     } finally {
       setIsReviewing(false);
     }
@@ -328,12 +346,13 @@ export default function Home() {
           <section className="card api-connect-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>키는 서버에 저장하지 않고 현재 브라우저 세션에서만 사용합니다.</p></div><span className={`connection-pill ${vworldKey || lawOc ? "connected" : ""}`}><i />{vworldKey || lawOc ? "입력됨" : "연결 필요"}</span></div>
             <div className="api-connect-grid">
-              <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input ref={vworldKeyRef} type="password" autoComplete="off" value={vworldKey} onInput={(e) => setVworldKey(e.currentTarget.value.trim())} onChange={(e) => setVworldKey(e.target.value.trim())} placeholder="VWorld에서 발급받은 Key" /></Field>
-              <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input ref={lawOcRef} type="password" autoComplete="off" value={lawOc} onInput={(e) => setLawOc(e.currentTarget.value.trim())} onChange={(e) => setLawOc(e.target.value.trim())} placeholder="공동활용 신청 시 등록한 OC" /></Field>
+              <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input id="vworld-api-key" ref={vworldKeyRef} className="secret-input" type="text" autoComplete="off" onInput={(e) => setVworldKey(e.currentTarget.value.trim())} placeholder="VWorld에서 발급받은 Key" /></Field>
+              <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input id="law-api-oc" ref={lawOcRef} className="secret-input" type="text" autoComplete="off" onInput={(e) => setLawOc(e.currentTarget.value.trim())} placeholder="공동활용 신청 시 등록한 OC" /></Field>
               <div className="api-links"><a href="https://www.vworld.kr/dev/v4dv_apikey_s001.do" target="_blank" rel="noreferrer">VWorld 키 발급 ↗</a><a href="https://open.law.go.kr/LSO/openApi/guideList.do" target="_blank" rel="noreferrer">법령 API 신청 ↗</a></div>
-              <button className="button primary review-button" disabled={isReviewing} onClick={runSiteReview}>{isReviewing ? "공식자료 조회 중…" : "대상지 통합 법규검토"}</button>
+              <button type="button" className="button primary review-button" disabled={isReviewing} onClick={runSiteReview}>{isReviewing ? "공식자료 조회 중…" : "대상지 통합 법규검토"}</button>
             </div>
             <div className="api-scope"><span><Icon name="check" size={14} /> 자동확인: 주소·좌표·용도지역·현행 국가법령</span><span><Icon name="alert" size={14} /> 별도확인: 지자체 조례·지구단위계획 결정도서·LH 지역본부 공고</span></div>
+            <div className={`api-panel-message ${isReviewing ? "loading" : ""}`}><i />{apiPanelMessage}</div>
           </section>
 
           <section className="card form-card">
