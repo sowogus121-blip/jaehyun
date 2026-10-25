@@ -32,6 +32,34 @@ function decodeXml(value: string) {
     .trim();
 }
 
+/** Search the ENTIRE official document for parking passages. The old generic
+ * candidate limit of 80 and early-page matches concealed the later parking chapters.
+ * This only extracts candidate evidence; no numeric rule is approved by this parser.
+ */
+export function extractParkingPassages(text:string):DocumentCandidate[]{
+  const lines=text.replace(/\r/g,"").split(/\n+/).map(l=>l.trim()).filter(Boolean);
+  const matches:DocumentCandidate[]=[];
+  const visited=new Set<string>();
+  const relevant=/(?:기계식|주차\s*(?:대수|비율|계획|시설|기준|관리)|주차장|0[.]3\s*대|세대당\s*0[.]3|오토발렛|카리프트|승강기\s*방식|공공주택\s*특별법\s*시행령\s*제\s*37\s*조)/i;
+  const classify=(v:string)=>{
+    if(/0[.]3\s*대|세대당\s*0[.]3|주차기준\s*완화|주차\s*규정\s*완화/.test(v))return "LH 0.3대 주차특례";
+    if(/기계식|오토발렛|카리프트|주차타워|승강기\s*방식/.test(v))return "LH 기계식 주차";
+    return "LH 주차장 인수·설계기준";
+  };
+  for(let i=0;i<lines.length;i++){
+    if(!relevant.test(lines[i]))continue;
+    const text=[lines[Math.max(0,i-1)],lines[i],lines[i+1]??"",lines[i+2]??""].join(" ").replace(/\s+/g," ").trim().slice(0,480);
+    if(text.length<12)continue;
+    const key=text.replace(/\s+/g,"").slice(0,110);
+    if(visited.has(key))continue;
+    visited.add(key);
+    const number=text.match(/(-?\d+(?:\.\d+)?)\s*(%|퍼센트|대\/세대|대\/호|대|m|미터|층|㎡)/i);
+    matches.push({topic:classify(text),quote:text,value:number?Number(number[1]):null,unit:number?number[2]:null,verified:false});
+    if(matches.length>=45)break;
+  }
+  return matches;
+}
+
 export function extractRuleCandidates(text: string): DocumentCandidate[] {
   const sentences = text.split(/(?<=[다함음]\.|[。!?])|\n+/).map((item) => item.trim()).filter(Boolean);
   const topicPatterns: Array<[string, RegExp]> = [
@@ -153,7 +181,8 @@ export async function parseUploadedDocument(file: File): Promise<DocumentAnalysi
     pageCount,
     textLength: normalized.length,
     preview: normalized.slice(0, 1200),
-    candidates: extractRuleCandidates(normalized),
+    // Reserve room for late parking sections before the 80 generic article candidates.
+    candidates: [...extractParkingPassages(normalized), ...extractRuleCandidates(normalized)].slice(0, 125),
     warnings,
   };
 }
