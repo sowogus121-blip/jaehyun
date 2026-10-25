@@ -80,6 +80,13 @@ export function buildDecisionDashboard(
       blockers.push("해당 용도지역의 조례 일반 건폐율·용적률 조문을 확인하지 못했어. 임의 수치를 사용하지 않아.");
     if(input.maxFloors<=0 && input.maxHeight<=0)
       blockers.push("최고층수·높이 미확인: 아래 수량은 '지상 10층'을 가정한 시험 계산이야.");
+    if(input.maxFloors===10 && input.maxHeight<=0)
+      blockers.push("10층은 초기 자동 가정값이야. 지구단위계획·높이·일조 검토를 통해 실제 가능 층수를 확인해야 해.");
+    if(review.parcel?.approximate)
+      blockers.push("지적면적은 도형에서 산출한 개략값이야. 토지대장 면적으로 대조해야 해.");
+    if(!review.applicationAssessmentComplete)
+      blockers.push("공동주택·오피스텔 허용용도와 LH 매입 적합성은 아직 대상지별 확정판정이 아니야.");
+    blockers.push("대지 안의 공지·정북일조·채광·동간거리·실제 건축가능 영역 및 피난·소방 배치 미검증이야.");
     if(input.apartmentParkingRatio<=0 || input.officetelParkingRatio<=0)
       blockers.push("법정 주차계수가 미확인되어 주차대수·지하층수를 확정할 수 없어.");
     if(review.districtPlan!==false)
@@ -92,7 +99,7 @@ export function buildDecisionDashboard(
   }
   const assumptions=[
     "건폐율·용적률은 확인된 조례 일반기준 또는 사용자가 입력한 가정이며, 지구단위·완화 상한 적용확정 전",
-    input.maxFloors>0?"층수는 사용자 계획 가정":input.maxHeight>0?"사용자 최고높이를 층고 3.3m로 환산한 시험 층수":"지상 10층 가정 · 허가 가능한 최고층수 아님",
+    input.maxFloors===10 && input.maxHeight<=0?"지상 10층 초기 자동 가정 · 법정 최고층수 확인값 아님":input.maxFloors>0?"층수는 사용자 계획 가정 · 법적 최고층 확정 전":input.maxHeight>0?"사용자 최고높이를 층고 3.3m로 환산한 시험 층수":"지상 10층 가정 · 허가 가능한 최고층수 아님",
     "대지형상·접도·건축선·일조·코어·피난·소방의 상세 건축배치 미반영",
     "주차계수가 없는 경우 주차대수는 '미산정'이며 0대 허용을 의미하지 않음",
   ];
