@@ -591,3 +591,45 @@ a.law-reference-item:hover { background: #f2f7fa; border-color: #b4cbd8; }
 @media(max-width:1110px){.decision-dashboard-body{grid-template-columns:1fr}.decision-dashboard-left{border-right:0;border-bottom:1px solid #e4ecef}.decision-dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.decision-dashboard-header{flex-direction:column;align-items:flex-start;padding:17px}.decision-dashboard-header h3{font-size:19px}.decision-dashboard-metrics>div{padding:13px}.decision-dashboard-metrics strong{font-size:17px}.decision-dashboard-left,.decision-dashboard-right{padding:14px}.decision-alternatives,.decision-checks{grid-template-columns:1fr}.decision-regulations{padding:13px}.decision-dashboard-disclaimer{padding:11px 14px}}
 @media print{.decision-dashboard{box-shadow:none;break-inside:avoid}.decision-links{display:none}}
+
+
+/* Make LH parking PDF content readable without hiding source conditions. */
+.lh-parking-audit {border:1px solid #d0e1e7;border-top:4px solid #327889;border-radius:6px;background:#fff;margin:0 0 21px;box-shadow:var(--shadow);overflow:hidden;}
+.lh-parking-audit-head {display:flex;justify-content:space-between;align-items:center;gap:16px;padding:21px 23px 17px;}
+.lh-parking-audit-head h3 {font-size:19px;color:#224d61;font-weight:850;margin:6px 0;}
+.lh-parking-audit-head p {font-size:11px;color:#698390;line-height:1.6;margin:0;}
+.lh-parking-audit-state {font-size:11px;font-weight:750;color:#38727d;background:#eaf5f5;padding:8px 11px;border-radius:4px;flex-shrink:0;}
+.lh-parking-highlights {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid #dce7eb;border-bottom:1px solid #dce7eb;background:#f1f8f9;}
+.lh-parking-highlights>div {display:flex;flex-direction:column;gap:7px;padding:18px 16px;border-right:1px solid #dce7eb;min-width:0;}
+.lh-parking-highlights>div:last-child {border-right:0;}
+.lh-parking-highlights small {font-size:10px;color:#648392;}
+.lh-parking-highlights strong {font-size:23px;line-height:1.2;font-weight:850;color:#266777;overflow-wrap:anywhere;}
+.lh-parking-highlights span {font-size:10px;color:#718996;line-height:1.5;}
+.lh-parking-clause-groups {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;padding:17px 20px;}
+.lh-parking-group {min-width:0;}
+.lh-parking-group-label {display:flex;align-items:center;justify-content:space-between;padding:10px 11px;background:#e8f1f4;border:1px solid #d6e6eb;gap:10px;color:#376476;}
+.lh-parking-group-label b {font-size:12px;}
+.lh-parking-group-label small {font-size:10px;}
+.lh-parking-clause {border:1px solid #e0e9ed;border-top:none;background:#fff;}
+.lh-parking-clause summary {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 11px;cursor:pointer;list-style:none;}
+.lh-parking-clause summary::-webkit-details-marker{display:none;}
+.lh-parking-clause summary>span {display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}
+.lh-parking-clause summary b {font-size:12px;color:#36596e;}
+.lh-parking-clause summary small {font-size:11px;color:#6a8391;line-height:1.6;overflow-wrap:anywhere;}
+.lh-parking-clause summary em {font-style:normal;font-size:9px;font-weight:750;white-space:nowrap;background:#f5ecdb;color:#98723c;padding:6px;border-radius:3px;}
+.lh-parking-clause>div {padding:12px 14px;border-top:1px solid #e5edef;background:#f8fbfc;}
+.lh-parking-clause>div p {font-size:10px;color:#647d8b;margin:0 0 8px;}
+.lh-parking-clause>div ul {font-size:11px;line-height:1.7;color:#506c79;padding-left:18px;margin:0 0 9px;}
+.lh-parking-clause>div a {font-size:11px;color:#216d84;font-weight:750;}
+.lh-parking-preview {display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px 22px;background:#fef8ed;border-top:1px solid #ebdec8;}
+.lh-parking-preview b {font-size:12px;color:#815e30;}
+.lh-parking-preview p {font-size:13px;font-weight:800;color:#6c5238;margin:7px 0;}
+.lh-parking-preview small {color:#977e64;font-size:10px;line-height:1.6;}
+.lh-parking-preview button {white-space:nowrap;}
+.lh-parking-no-source {padding:20px;color:#84643b;font-size:12px;background:#fff9ed;}
+.lh-parking-no-source p {font-size:11px;color:#9b8067;line-height:1.6;}
+.lh-parking-audit-footer {display:flex;align-items:center;justify-content:space-between;gap:14px;border-top:1px solid #e3ecf0;padding:12px 23px;color:#758d9b;font-size:10px;line-height:1.6;}
+.lh-parking-audit-footer a {white-space:nowrap;color:#287386;font-weight:750;font-size:11px;}
+@media(max-width:1100px){.lh-parking-highlights{grid-template-columns:repeat(2,minmax(0,1fr));}.lh-parking-clause-groups{grid-template-columns:1fr;}}
+@media(max-width:600px){.lh-parking-audit-head,.lh-parking-preview,.lh-parking-audit-footer{flex-direction:column;align-items:flex-start;}.lh-parking-audit-head{padding:17px}.lh-parking-highlights>div{padding:12px}.lh-parking-highlights strong{font-size:18px}.lh-parking-clause-groups{padding:12px}.lh-parking-clause summary{align-items:flex-start}.lh-parking-clause summary em{white-space:normal;text-align:center;max-width:90px}.lh-parking-audit-footer{padding:13px;}}
+@media print{.lh-parking-audit{break-inside:avoid;box-shadow:none}.lh-parking-clause>div{display:block}}

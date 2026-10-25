@@ -19,6 +19,8 @@ export function screenParking03(input: ProjectInput, alternative: AlternativeDef
   const isPurchase = input.businessMode === "purchase";
   const checked = input.specialParkingEnabled;
   const isOfficetel = alternative.useType === "officetel";
+  const supplyEligible = input.lhSupplyType === "youth" || input.lhSupplyType === "senior";
+  const supplyUndecided = input.lhSupplyType === "undecided";
   const checks: Parking03Screening["checks"] = [
     {
       id: "area", label: "세대당 전용면적 30㎡ 미만",
@@ -29,6 +31,11 @@ export function screenParking03(input: ProjectInput, alternative: AlternativeDef
       id: "mode", label: "공공주택사업자 매도약정 대상 사업",
       status: input.businessMode === "undecided" ? "unknown" : isPurchase ? "pass" : "fail",
       detail: isPurchase ? "사업방식만 매입약정으로 선택됨 · 체결 여부 별도 확인" : "민간 신축매입약정 여부 확인 필요",
+    },
+    {
+      id: "supply", label: "청년형 또는 고령자형 공급유형",
+      status: supplyUndecided ? "unknown" : supplyEligible ? "pass" : "fail",
+      detail: supplyUndecided ? "LH 공급유형 미선택 · 청년/고령자 여부 확인" : supplyEligible ? "공급유형 조건(입지기준은 별도) 검토 가능" : "신혼·일반형에는 이 0.3대 특례 기준 적용 불가",
     },
     {
       id: "agreement", label: "실제 공공주택사업자 매도약정 체결",
@@ -52,10 +59,10 @@ export function screenParking03(input: ProjectInput, alternative: AlternativeDef
       detail: input.specialParkingApproval === "approved" ? "사용자 승인 확인 선택 · 관련 문서 확인 요망" : "승인 확인 전",
     },
   ];
-  const basePossible = areaMatches && isPurchase && checked && input.specialParkingApproval !== "rejected";
+  const basePossible = areaMatches && isPurchase && checked && (supplyEligible || supplyUndecided) && input.specialParkingApproval !== "rejected";
   const canApply = basePossible && checks.every((check) => check.status === "pass");
   return {
-    status: !areaMatches || (input.businessMode !== "undecided" && !isPurchase) ||
+    status: !areaMatches || (!supplyEligible && !supplyUndecided) || (input.businessMode !== "undecided" && !isPurchase) ||
       input.specialParkingApproval === "rejected" ? "ineligible" : canApply ? "confirmed" : "conditional",
     canShowConditional: basePossible,
     canApply,
