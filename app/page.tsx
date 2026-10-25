@@ -152,24 +152,31 @@ function downloadBlob(content: BlobPart, type: string, filename: string) {
 }
 
 function ComparisonTable({ results, input }: { results: AlternativeResult[]; input: ProjectInput }) {
+  const check = getMassingReadiness(input);
+  const ready = check.canEstimateUnits;
+  const val = (amount: number, suffix = "") => ready ? f(amount) + suffix : "미산정";
+  const parkingKnown = (r: AlternativeResult) =>
+    r.definition.useType === "apartment" ? check.hasApartmentParking : check.hasOfficetelParking;
+  const park = (r: AlternativeResult, amount: number, suffix = "대") =>
+    ready && parkingKnown(r) ? f(amount) + suffix : "미산정";
   const rows: [string, (result: AlternativeResult) => ReactNode][] = [
     ["주용도", (r) => r.definition.useType === "apartment" ? "공동주택" : "업무시설(오피스텔)"],
-    ["세대·호실수", (r) => <b>{r.unitCount}{r.definition.useType === "apartment" ? "세대" : "호"}</b>],
+    ["세대·호실수", (r) => <b>{val(r.unitCount, r.definition.useType === "apartment" ? "세대" : "호")}</b>],
     ["전용면적 / 전용률", (r) => `${r.definition.exclusiveArea}㎡ / ${r.definition.efficiency * 100}%`],
-    ["계획 건축면적", (r) => `${f(r.plannedBuildingArea)}㎡`],
-    ["계획 건폐율", (r) => `${r.plannedBcr}%`],
-    ["적용 / 계획 용적률", (r) => `${input.useRelaxedFar ? input.relaxedFar : input.baseFar}% / ${r.plannedFar}%`],
-    ["용적률 산정 연면적", (r) => `${f(r.farCountedArea)}㎡`],
-    ["지하 / 전체 연면적", (r) => `${f(r.belowGroundArea)}㎡ / ${f(r.totalFloorArea)}㎡`],
-    ["계획 규모", (r) => `지상 ${r.recommendedFloors}층 / 지하 ${r.parking.basementFloors}층`],
-    ["추정 높이", (r) => `${r.estimatedHeight}m`],
-    ["부대복리시설", (r) => `${f(r.amenityArea)}㎡`],
-    ["조경면적", (r) => `${f(r.landscapeArea)}㎡`],
-    ["원 법정 / LH 요구", (r) => `${r.parking.originalLegalCount}대 / ${r.parking.lhCount}대${r.parking.lhRequirementVerified ? "(확인)" : "(가정)"}`],
-    ["최종 계획주차", (r) => <b>{r.parking.finalCount}대</b>],
-    ["주차 구성", (r) => `자주 ${r.parking.selfCount} · 기계 ${r.parking.mechanicalCount}`],
-    ["주차장 필요면적", (r) => `${f(r.parking.area)}㎡`],
-    ["0.3대 특례", (r) => r.parking.specialApplied ? <span className="text-orange">승인 반영</span> : r.parking.conditionalCount !== null ? `조건부 ${r.parking.conditionalCount}대 / 기본 ${r.parking.fallbackCount}대` : "미적용"],
+    ["계획 건축면적", (r) => val(r.plannedBuildingArea, "㎡")],
+    ["계획 건폐율", (r) => val(r.plannedBcr, "%")],
+    ["적용 / 계획 용적률", (r) => ready ? `${input.useRelaxedFar ? input.relaxedFar : input.baseFar}% / ${r.plannedFar}% (입력 가정)` : "미산정"],
+    ["용적률 산정 연면적", (r) => val(r.farCountedArea, "㎡")],
+    ["지하 / 전체 연면적", (r) => !ready || !parkingKnown(r) ? "주차계수 확인 후 산정" : `${f(r.belowGroundArea)}㎡ / ${f(r.totalFloorArea)}㎡`],
+    ["계획 규모", (r) => ready ? `지상 ${r.recommendedFloors}층 / ${parkingKnown(r) ? "지하 " + r.parking.basementFloors + "층" : "지하 미산정"}` : "미산정"],
+    ["추정 높이", (r) => val(r.estimatedHeight, "m")],
+    ["부대복리시설", (r) => val(r.amenityArea, "㎡")],
+    ["조경면적", () => input.landscapeRatio > 0 && ready ? f(input.siteArea * input.landscapeRatio / 100) + "㎡ (가정)" : "의무율 미확인"],
+    ["원 법정 / LH 요구", (r) => park(r, r.parking.originalLegalCount) + " / LH 인수기준 별도확인"],
+    ["최종 계획주차", (r) => <b>{park(r, r.parking.finalCount)}</b>],
+    ["주차 구성", (r) => !ready || !parkingKnown(r) ? "미산정" : `자주 ${r.parking.selfCount} · 기계 ${r.parking.mechanicalCount}`],
+    ["주차장 필요면적", (r) => park(r, r.parking.area, "㎡")],
+    ["0.3대 특례", (r) => r.parking.specialApplied ? "사용자 승인확인값 반영" : r.parking.conditionalCount !== null ? "조건부 검토 / 기본값 유지" : "미적용"],
     ["법규·LH 적합성", (r) => <Badge status={r.eligibility} />],
   ];
   return <div className="table-scroll"><table className="comparison-table"><thead><tr><th>구분</th>{results.map((r) => <th key={r.definition.id}><span>{r.definition.id}</span>{r.definition.shortName}</th>)}</tr></thead><tbody>{rows.map(([label, getter]) => <tr key={label}><th>{label}</th>{results.map((r) => <td key={r.definition.id}>{getter(r)}</td>)}</tr>)}</tbody></table></div>;
