@@ -1,16 +1,28 @@
 import type { SiteReviewResult } from "./types";
 import { getOrdinanceZoneStandards } from "./legal-review-report";
 
+export const MAX_ASSEMBLY_PARCELS = 20;
+export const MAX_EXTRA_PARCELS = MAX_ASSEMBLY_PARCELS - 1;
+
+/** One address per row; commas and + also work for bulk pasting lot numbers. */
+export function splitAssemblyAddresses(value: string): string[] {
+  return value.split(/[\r\n,+]+/).map(s=>s.trim()).filter(Boolean);
+}
+
 export function normalizeAssemblyAddresses(primary: string, raw: string[]): string[] {
   const parts=primary.trim().split(/\s+/).filter(Boolean);
   const region=parts.slice(0,2).join(" ");
   const dong=parts.length>=3?parts[2]:"";
   const seen=new Set([primary.replace(/\s+/g,"").trim()]);
-  return raw.map(x=>x.trim()).filter(Boolean).map(x=>{
+  return raw.flatMap(splitAssemblyAddresses).map(x=>{
     if(/^\d+(?:-\d+)?$/.test(x) && dong)return region+" "+dong+" "+x;
-    if(/^(?:[\p{Script=Hangul}\d]+(?:동|읍|면|리))\s+\d+(?:-\d+)?$/u.test(x)&&region)return region+" "+x;
+    // "가능동 72-5", "동대신동1가 10-2", etc.
+    if(/^[^\s]+\s+\d+(?:-\d+)?$/.test(x) && region)return region+" "+x;
+    // A local district + neighborhood but missing only the province.
+    if(/^(?:[^\s]+(?:시|군|구))\s+[^\s]+\s+\d+(?:-\d+)?$/.test(x) && parts[0])
+      return parts[0]+" "+x;
     return x;
-  }).filter(x=>{const key=x.replace(/\s+/g,"");if(seen.has(key))return false;seen.add(key);return true;}).slice(0,9);
+  }).filter(x=>{const key=x.replace(/\s+/g,"");if(seen.has(key))return false;seen.add(key);return true;});
 }
 export interface AssemblyParcel {
   number:number;address:string;area:number|null;zone:string|null;pnu:string|null;
