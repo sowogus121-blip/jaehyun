@@ -1,6 +1,5 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { PDFParse } from "pdf-parse";
 
 export type DocumentCandidate = {
   topic: string;
@@ -68,7 +67,13 @@ export function extractRuleCandidates(text: string): DocumentCandidate[] {
 }
 
 async function parsePdf(data: Uint8Array) {
-  const parser = new PDFParse({ data });
+  // pdf-parse evaluates pdfjs-dist on import, which accesses DOMMatrix.
+  // Import only during PDF extraction so the entire site-review route never
+  // crashes at module startup in Vercel's Node.js serverless environment.
+  // The worker sets up CanvasFactory before loading PDFParse.
+  const { CanvasFactory } = await import("pdf-parse/worker");
+  const { PDFParse } = await import("pdf-parse");
+  const parser = new PDFParse({ data, CanvasFactory });
   try {
     const result = await parser.getText();
     return { text: result.text, pageCount: result.total || null };
