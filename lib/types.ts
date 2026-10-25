@@ -239,6 +239,14 @@ export interface SiteReviewResult {
     retrievalStatus: "metadata-only" | "full-text";
     applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
   }>;
+  nationalArticleCandidates?: Array<{
+    sourceTitle: string;
+    sourceUrl: string;
+    topic: string;
+    article: string;
+    excerpt: string;
+    verified: false;
+  }>;
   ordinanceArticleCandidates?: Array<{
     sourceTitle: string;
     sourceUrl: string;
