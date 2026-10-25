@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { findLatestLhPurchaseNotice, parseLhAttachments, parseLhPurchaseList } from "../lib/server/lh-notice";
+import { findLatestLhPurchaseNotice, parseLhAttachments, parseLhPurchaseList, buildLhPagingBody, countLhListPages, isSameProvinceNotice } from "../lib/server/lh-notice";
 import { ALTERNATIVES, DEFAULT_INPUT, calculateAlternative, calculateFacilities } from "../lib/calculator";
 import { DEFAULT_CALCULATION_CONTEXT } from "../lib/calculator";
 
@@ -58,4 +58,38 @@ describe("Official LH purchase announcements",()=>{
     const baseline=calculateFacilities("apartment",58);
     expect(baseline.find(x=>x.name==="주민공동공간")?.area).toBe(0);
   });
+  it("disambiguates same-named districts across metropolitan areas", () => {
+    expect(isSameProvinceNotice("(부산지역) 신축 매입약정 공고","서구","부산광역시 서구")).toBe(true);
+    expect(isSameProvinceNotice("(대전충남지역본부) 신축 매입약정 공고","서구","부산광역시 서구")).toBe(false);
+    expect(isSameProvinceNotice("(광주전남) 공고","북구","광주광역시 북구")).toBe(true);
+    expect(isSameProvinceNotice("(대구경북) 공고","북구","광주광역시 북구")).toBe(false);
+    expect(isSameProvinceNotice("(경기북부) 공고","의정부시","경기도 의정부시")).toBe(true);
+  });
+  it("uses LH's POST currPage paging form to cover notices outside page one", () => {
+    const withPager=html+'<form name="pagingForm" method="post"><input type="hidden" name="currPage" value="1"/><input type="hidden" name="panEdDt" value="20261025"/><input type="hidden" name="mi" value="1076"/><a onclick="goPaging(2)">2</a></form>';
+    expect(countLhListPages(withPager)).toBe(2);
+    const body=buildLhPagingBody(withPager,2);
+    expect(body?.get("currPage")).toBe("2");
+    expect(body?.get("panEdDt")).toBe("20261025");
+    expect(body?.get("mi")).toBe("1076");
+    expect(buildLhPagingBody(withPager,7)).toBeNull();
+  });
+  it("finds a different municipality notice on page two without inheriting 2026 경기북부 numeric rules", async () => {
+    const firstPage=html+'<form name="pagingForm"><input type="hidden" name="currPage" value="1"/><input type="hidden" name="mi" value="1076"/><a onclick="goPaging(2)">2</a></form>';
+    const secondPage='<tr><td>1</td><td>민간신축 매입약정</td><td><a data-id1="1950" class="slpaInfoBtn"><span>(전북지역) 2026년 익산시 민간 신축 매입약정 공고</span></a></td><td>익산시</td><td>2026.10.20</td><td>2026.11.20</td></tr>';
+    const fetchMock=vi.spyOn(globalThis,"fetch").mockImplementation(async (url,init)=>{
+      const str=String(url);
+      if(str.includes("/pch/view.do"))return new Response('<a href="/lhapply/lhFile.do?fileid=991991" title="file">최신공고문.pdf</a>',{headers:{"Content-Type":"text/html"}});
+      return new Response(init?.method==="POST"?secondPage:firstPage,{headers:{"Content-Type":"text/html"}});
+    });
+    try{
+      const result=await findLatestLhPurchaseNotice("익산시","전북특별자치도 익산시");
+      expect(result?.id).toBe("1950");
+      expect(result?.matchedDistrict).toBe("익산시");
+      expect(result?.rules).toBeNull();
+      expect(result?.pdfUrl).toContain("991991");
+      expect(fetchMock.mock.calls.some((call)=>call[1]?.method==="POST")).toBe(true);
+    }finally{fetchMock.mockRestore()}
+  });
+
 });
