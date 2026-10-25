@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findSitePreset } from "../../../lib/site-presets";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
+import { extractOrdinanceArticles, type OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
 
 type LawRecord = {
   name: string;
@@ -16,6 +17,8 @@ type LawRecord = {
 type OrdinanceRecord = {
   name: string;
   localGovernment: string | null;
+  detailId: string | null;
+  detailMst: string | null;
   promulgationDate: string | null;
   enforcementDate: string | null;
   link: string;
@@ -270,18 +273,37 @@ async function searchOrdinance(query: string, oc: string): Promise<OrdinanceReco
   if (!root || typeof root !== "object") throw new Error("국가법령정보센터 자치법규 응답 형식을 확인할 수 없습니다.");
   const raw = root.ordin ?? root.law;
   const rows = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  const row = rows[0] as Record<string, unknown> | undefined;
+  // Do not use the API's first hit: a different municipality's ordinance
+  // can otherwise be presented as the ordinance governing this address.
+  const normalized = (value: unknown) => String(value ?? "").replace(/\\s+/g, "");
+  const row = rows.find((candidate: Record<string, unknown>) =>
+    normalized(candidate["자치법규명"] ?? candidate["법령명한글"]) === normalized(query)
+  ) as Record<string, unknown> | undefined;
   if (!row) return null;
   const detail = String(row["자치법규상세링크"] ?? row["법령상세링크"] ?? "");
   return {
     name: String(row["자치법규명"] ?? row["법령명한글"] ?? query),
     localGovernment: row["지자체기관명"] ? String(row["지자체기관명"]) : null,
+    detailId: row["자치법규ID"] ? String(row["자치법규ID"]) : null,
+    detailMst: row["자치법규일련번호"] ? String(row["자치법규일련번호"]) : null,
     promulgationDate: row["공포일자"] ? String(row["공포일자"]) : null,
     enforcementDate: row["시행일자"] ? String(row["시행일자"]) : null,
     link: detail.startsWith("http") ? detail : `https://www.law.go.kr${detail}`,
     retrievalStatus: "metadata-only",
     applicationStatus: "not-assessed",
   };
+}
+
+async function fetchOrdinanceArticleCandidates(ordinance: OrdinanceRecord, oc: string): Promise<OrdinanceArticleCandidate[]> {
+  if (!ordinance.detailId && !ordinance.detailMst) return [];
+  const params = new URLSearchParams({ OC: oc, target: "ordin", type: "JSON" });
+  if (ordinance.detailId) params.set("ID", ordinance.detailId);
+  else if (ordinance.detailMst) params.set("MST", ordinance.detailMst);
+  const data = await fetchJson(`https://www.law.go.kr/DRF/lawService.do?${params.toString()}`);
+  if (data?.resultCode && String(data.resultCode) !== "00") {
+    throw new Error(String(data.resultMsg ?? "자치법규 본문 API 오류"));
+  }
+  return extractOrdinanceArticles(data, ordinance.name, ordinance.link);
 }
 
 function localGovernmentFromAddress(address: string) {
@@ -429,6 +451,17 @@ export async function POST(request: NextRequest) {
       errors.push(`관할 자치법규 ${ordinanceFailures.length}개 조회 실패: ${[...new Set(ordinanceFailures)].join(" / ")}`);
     }
   }
+  // Reading the official full text is a separate step from finding its title.
+  // Keyword matches remain unverified candidates; applicability is NOT inferred.
+  let ordinanceArticleCandidates: OrdinanceArticleCandidate[] = [];
+  if (lawOc && ordinances.length) {
+    const detailResults = await Promise.allSettled(ordinances.map((ordinance) => fetchOrdinanceArticleCandidates(ordinance, lawOc)));
+    const detailErrors = detailResults.flatMap((result) => result.status === "rejected"
+      ? [result.reason instanceof Error ? result.reason.message : "자치법규 원문 요청 오류"]
+      : []);
+    if (detailErrors.length) errors.push(`자치법규 본문 조회 ${detailErrors.length}건 실패: ${[...new Set(detailErrors)].join(" / ")}`);
+    ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  }
   const webSearch = await webSearchPromise;
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
@@ -448,12 +481,13 @@ export async function POST(request: NextRequest) {
     parcels,
     laws,
     ordinances,
+    ordinanceArticleCandidates,
     ruleFindings: [],
     webSearch,
     missing,
     errors,
     unresolved: [
-      ordinances.length ? "관할 자치법규 세부 조문별 적용 여부" : "관할 지자체 건축·주차장 조례 원문",
+      ordinances.length ? "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요" : "관할 지자체 건축·주차장 조례 원문",
       ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
       "지구단위계획 결정도서 및 시행지침",
       "해당 연도 LH 지역본부 매입공고",
