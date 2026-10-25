@@ -1,6 +1,7 @@
 import type { ProjectInput, SiteLookupDetails, SiteReviewResult } from "./types";
 import type { ReviewedRule } from "./rule-application";
 import { screenParking03 } from "./lh-parking-screen";
+import { getLhParkingReview } from "./lh-parking-review";
 import { ALTERNATIVES } from "./calculator";
 
 export type LegalRowStatus = "source" | "conditional" | "unknown" | "user";
@@ -179,17 +180,41 @@ export function buildLegalReviewReport(
     "건축법령 · 소방시설 설치 및 관리에 관한 법률",
     "개략 규모만으로 소방시설·피난층 적용 판정 불가", "unknown");
 
+  const lhParking = getLhParkingReview(review?.lhNotice??null,input);
+  const verifiedParking=lhParking.verifiedOriginal;
+  const parkingExtracted=lhParking.clauses.filter(c=>c.status==="extracted-unverified");
   const mechanical = findArticle(review, "주차장 설치 및 관리 조례", ["기계식주차", "기계식"]);
   add("mechanical", "LH·주차 검토", "기계식주차 (조례)",
     "설치 가능 용도·총 주차대수 대비 허용비율·최소 주차대수 확인",
     citation(mechanical, "주차장법령 · 관할 주차장 조례"),
     "공동주택·오피스텔별 허용여부와 주차장법 시행규칙 대조 필요",
     mechanical ? "conditional" : "unknown", mechanical?.sourceUrl || parkingOrdinance, mechanical?.excerpt || null);
-  add("mechanical-lh", "LH·주차 검토", "기계식주차 (LH 인수기준)",
-    lhDocument ? "공식 공고 후보 확보 · 관련 비율 및 적용주택 유형 검증 필요" : "관할 LH 최신 공고의 기계식 허용기준 미확보",
-    lhDocument?.title || "LH 지역본부 공고 · 주차장 인수지침",
-    "지자체 허용 여부와 LH 인수기준은 모두 충족해야 함",
-    lhDocument ? "conditional" : "unknown", lhDocument?.sourceUrl || null, lhDocument?.preview || null);
+  add("mechanical-lh", "LH·주차 검토", "기계식주차 (LH 공고 인수기준)",
+    verifiedParking ? "총 주차대수 50% 이하 · 도시철도역 출구 직선 500m 이내 · 주거용 오피스텔/도시형생활주택" :
+      parkingExtracted.length ? "해당 지역 LH PDF 주차 관련 문구 "+parkingExtracted.length+"건 추출 · 적용 검증 전" :
+      lhParking.noticeTitle ? "관할 LH 공고 확보 · 주차 조항 원문분석 미완료" : "관할 LH 공고 미확인",
+    review?.lhNotice?.title || lhDocument?.title || "LH 지역본부 공고 · 주차장 인수지침",
+    verifiedParking ? "청년·신혼신생아 입주형 / 150세대 미만 기계식 20대 미만 우대 / 0.3대 완화시 기계식 지양 · 대상지 적용 전" :
+      "LH 원문 추출여부와 실제 인수·입지 조건은 구분해 확인",
+    verifiedParking || parkingExtracted.length ? "conditional" : "unknown",
+    lhParking.sourceUrl||lhDocument?.sourceUrl||null,
+    verifiedParking ? "경기북부 2026년 4차 공고문 p.11 · 기계식주차 50% 한도, 역세권 500m, 기계식 형식 및 배치조건" :
+      parkingExtracted.find(x=>x.category==="기계식 주차")?.quote??null);
+  if(verifiedParking) {
+    const noticeSource=review?.lhNotice?.title||"LH 경기북부 4차 공고";
+    add("lh-parking-machine-other","LH·주차 검토","LH 기계식주차 세부제한",
+      "150세대 미만 기계식 20대 미만 우대 · 세대 벽 연접 금지 · 주차타워 상부 주거 배치 금지",
+      noticeSource+" · p.11","일반 공동주택·근생 등 허용 대상 외 주차는 자주식 계획. 주차관리실 설치",
+      "conditional",lhParking.sourceUrl,"승강기·평면왕복·다층순환 방식, 오토발렛 / 50% 일부 초과는 심의 수용여부 결정");
+    add("lh-parking03-terms","LH·주차 검토","LH 전용 30㎡ 미만 0.3대 적용요건",
+      "청년·고령자형 전용 30㎡ 미만 · 청년은 역 출구/대학 교문 500m · 고령자는 입지 제한 없음",
+      noticeSource+" · p.9","매입약정·허가권자 적용 근거·공공기여 협의 필요. 신혼형 46㎡에는 이 조항 적용 안 됨",
+      "conditional",lhParking.sourceUrl,"공공주택특별법 시행령 제37조제4항 0.3대 주차 완화 시 LH 협의");
+    add("lh-parking-design","LH·주차 검토","LH 주차장 설계·운영기준",
+      "50대 이상 경사로 2차선 폭 6m 이상 · 지하 5층 이상 또는 터파기 20m 초과 계획 지양",
+      noticeSource+" · p.5","법적 의무와 LH 설계 지침을 구분하여 반영, 주차 동선과 관리실 확인",
+      "conditional",lhParking.sourceUrl,null);
+  }
   const apr = selectedRule("apartmentParkingRatio");
   add("apt-parking", "LH·주차 검토", "주차 — 공동주택 46㎡",
     input.apartmentParkingRatio > 0 ? input.apartmentParkingRatio + "대/세대 (계획 입력)" : "별표의 전용면적별 대수 및 세대당 최소대수 확인 필요",
@@ -205,11 +230,11 @@ export function buildLegalReviewReport(
   const screening = screenParking03(input, ALTERNATIVES[2]);
   const missingChecks = screening.checks.filter((item) => item.status !== "pass").map((item) => item.label);
   add("special-parking", "LH·주차 검토", "LH 주차 0.3대/호 특례",
-    !input.specialParkingEnabled ? "미적용 · 특례 요건 검토 전" : screening.canApply ? "0.3대/호 (사용자 승인·요건 확인)" : screening.status === "ineligible" ? "현 사업조건에서는 특례 미적용" : "0.3대/호 조건부 비교안 · 기본 주차계수 유지",
-    "공공주택 특별법 시행령 관련 조항 · LH 지역본부 공고",
+    !input.specialParkingEnabled ? verifiedParking ? "LH 공고상 0.3대 조건 확인 · 시나리오 미선택" : "미적용 · 특례 요건 검토 전" : screening.canApply ? "0.3대/호 (사용자 승인·요건 확인)" : screening.status === "ineligible" ? "현 사업조건에서는 특례 미적용" : "0.3대/호 조건부 비교안 · 기본 주차계수 유지",
+    verifiedParking ? (review?.lhNotice?.title||"LH 경기북부 4차") + " · p.9 / 공공주택 특별법 시행령 제37조제4항" : "공공주택 특별법 시행령 관련 조항 · LH 지역본부 공고",
     missingChecks.length ? "미확인: " + missingChecks.join(", ") : "사용자 확인값으로 계산 · 허가권자 적용 근거 확인",
     !input.specialParkingEnabled ? "unknown" : screening.canApply ? "user" : screening.status === "conditional" ? "conditional" : "unknown",
-    screening.sourceUrl);
+    verifiedParking ? lhParking.sourceUrl : screening.sourceUrl);
 
   const calculatedLimits: LegalReviewReport["calculatedLimits"] = [
     { label: "건폐율 · 계산 입력", value: input.buildingCoverageRatio > 0 ? input.buildingCoverageRatio + "%" : "미입력",
