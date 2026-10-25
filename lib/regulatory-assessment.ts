@@ -35,6 +35,7 @@ export function deriveCalculationContext(review: SiteReviewResult | null, input:
     usePermissions,
     lhPurchaseEligibility,
     mechanicalParkingEligibility: input.mechanicalAllowed ? mechanicalFinding : "ineligible",
+    lhPurchaseMechanicalRestrictedToOfficetelOrUrban: Boolean(review?.lhNotice?.rules && input.businessMode === "purchase"),
   };
 }
 

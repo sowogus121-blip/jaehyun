@@ -172,6 +172,7 @@ function ComparisonTable({ results, input }: { results: AlternativeResult[]; inp
     ["추정 높이", (r) => val(r.estimatedHeight, "m")],
     ["부대복리시설", (r) => val(r.amenityArea, "㎡")],
     ["조경면적", () => input.landscapeRatio > 0 && ready ? f(input.siteArea * input.landscapeRatio / 100) + "㎡ (가정)" : "의무율 미확인"],
+    ["LH 주차 가정 (미확정)", (r) => { const ratio = r.definition.useType === "apartment" ? input.lhApartmentParkingRatio : input.lhOfficetelParkingRatio; return ratio > 0 && ready ? Math.ceil(r.unitCount * ratio) + "대 (LH 기준 검증 전)" : "가정 미입력"; }],
     ["원 법정 / LH 요구", (r) => park(r, r.parking.originalLegalCount) + " / LH 인수기준 별도확인"],
     ["최종 계획주차", (r) => <b>{park(r, r.parking.finalCount)}</b>],
     ["주차 구성", (r) => !ready || !parkingKnown(r) ? "미산정" : `자주 ${r.parking.selfCount} · 기계 ${r.parking.mechanicalCount}`],
@@ -230,6 +231,9 @@ export default function Home() {
   const autoZoningCandidates = suggestZoningRules(reviewData);
   const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules), [input, reviewData, lookupDetails, activeRules]);
   const preliminaryLimits = getPreliminaryOrdinanceInputs(legalReport.rows);
+  const lhNotice = reviewData?.lhNotice ?? null;
+  const lhRules = lhNotice?.rules ?? null;
+  const exampleRelaxedFar = preliminaryLimits ? Math.round(preliminaryLimits.far * 1.2 * 100) / 100 : null;
   const readiness = getMassingReadiness(input);
   const formattedReviewDate = new Date().toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
   const parking03 = screenParking03(input, ALTERNATIVES[2]);
@@ -282,7 +286,7 @@ export default function Home() {
       key === "parcelList" || key === "multipleParcels" ? [] : removeRuleForEditedField(current, key));
   };
 
-  const startPreliminaryScenario = () => {
+  const startPreliminaryScenario = (farOption: "base" | "example" = "base") => {
     if (!preliminaryLimits || !reviewData) {
       setToast("관할 도시계획조례의 해당 용도지역 건폐율·용적률 일반기준 원문부터 확인해 주세요.");
       return;
@@ -295,11 +299,12 @@ export default function Home() {
       ...current,
       buildingCoverageRatio: preliminaryLimits.bcr,
       baseFar: preliminaryLimits.far,
-      useRelaxedFar: false,
+      relaxedFar: Math.round(preliminaryLimits.far * 1.2 * 100) / 100,
+      useRelaxedFar: farOption === "example",
       maxFloors: scenarioFloors,
     }));
     setReviewedRules((current) => current.filter((rule) => !["buildingCoverageRatio", "baseFar", "maxFloors"].includes(rule.field)));
-    setToast("조례 일반기준과 가정 층수로 예비 규모를 계산했어. 주차계수·높이·LH 적합성은 미확정이야.");
+    setToast(farOption === "example" ? "완화율 120%를 가정한 비교안이야. 대상지 적용 여부는 확인되지 않았어." : "조례 일반기준으로 예비 규모를 계산했어. 주차계수·높이·LH 적합성은 미확정이야.");
     setActiveTab(3);
   };
 
@@ -363,6 +368,7 @@ export default function Home() {
       const resolvedAddress = review.location?.parcelAddress || review.location?.address || address;
       const addressParts = resolvedAddress.split(/\s+/);
       setReviewData(review);
+      const automaticOrdinance = getPreliminaryOrdinanceInputs(buildLegalReviewReport({ ...input, address: resolvedAddress }, review, null).rows);
       setInput((current) => ({
         ...current,
         address: resolvedAddress,
@@ -370,6 +376,14 @@ export default function Home() {
         ...(addressParts[1] ? { district: addressParts[1] } : {}),
         ...(zoneValue ? { zone: zoneValue } : {}),
         ...(review.parcel?.area ? { siteArea: review.parcel.area } : {}),
+        ...(automaticOrdinance ? {
+          buildingCoverageRatio: current.buildingCoverageRatio > 0 ? current.buildingCoverageRatio : automaticOrdinance.bcr,
+          baseFar: current.baseFar > 0 ? current.baseFar : automaticOrdinance.far,
+          relaxedFar: current.relaxedFar > 0 ? current.relaxedFar : Math.round(automaticOrdinance.far * 1.2 * 100) / 100,
+          maxFloors: current.maxFloors > 0 || current.maxHeight > 0 ? current.maxFloors : 10,
+          ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { mechanicalMaxRatio: Math.min(current.mechanicalMaxRatio, review.lhNotice.rules.mechanicalMaxPercent) } : {}),
+        } : {}),
+        ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { businessMode: "purchase" as const, regionalOffice: "경기북부지역본부" } : {}),
         ...(review.districtPlan !== null ? { districtPlan: review.districtPlan } : {}),
         // The generic national zoning upper limit is NOT the local ordinance
         // or district-unit-plan FAR. Display as a reference; never auto-apply.
@@ -615,6 +629,26 @@ export default function Home() {
 
         {activeTab === 1 && <>
           <SectionHeader eyebrow="02 · REGULATION REVIEW" title="법규 및 도시계획 검토" description="확인된 원문, 사용자 입력, 자료 미확보 상태를 분리합니다. 미확인 값으로 적법 판정을 만들지 않습니다." action={<a className="official-link" href="https://www.law.go.kr" target="_blank" rel="noreferrer">국가법령정보센터 ↗</a>} />
+          {reviewData && <section className="site-decision-summary" aria-label="주소 한 번 조회한 핵심 결론">
+            <div className="site-decision-title"><div><span>주소 기반 자동 검토</span><h3>{input.address}</h3><p>확인된 사항과 조건부 제한을 대안별로 바로 보여줘. 인허가·매입 승인 이전 단계야.</p></div><button type="button" className="button ghost" onClick={runSiteReview} disabled={isReviewing}>공식자료 새로 조회</button></div>
+            <div className="site-decision-grid">{results.map(result => {
+              const isApartment = result.definition.useType === "apartment";
+              const areaOk = lhRules ? result.definition.exclusiveArea >= (isApartment ? lhRules.newlywedMinimumArea : lhRules.youthMinimumArea) : null;
+              const mechanicalRestriction = isApartment && result.definition.parkingMode === "mechanical" && Boolean(lhRules);
+              const knownParking = isApartment ? readiness.hasApartmentParking : readiness.hasOfficetelParking;
+              return <div key={result.definition.id} className="site-decision-tile">
+                <div><span>{result.definition.id} · {result.definition.shortName}</span><span className={"site-pill " + (mechanicalRestriction ? "problem" : "tentative")}>{mechanicalRestriction ? "LH 기준상 기계식 대상 제외" : "조건부 · 추가 확인 필요"}</span></div>
+                <strong>{readiness.canEstimateUnits ? result.unitCount + (isApartment ? "세대" : "호실") : "규모 미산정"}</strong>
+                <p>{areaOk === true ? "LH 전용면적 기준 충족" : areaOk === false ? "LH 전용면적 기준 미달" : "LH 공급유형 요건 미확인"}</p>
+                <small>{mechanicalRestriction ? "해당 LH 공고의 기계식 허용 용도는 주거용오피스텔·도시형생활주택" : knownParking ? "입력 주차계수 " + (isApartment ? input.apartmentParkingRatio : input.officetelParkingRatio) + "대 적용 · " + result.parking.finalCount + "대" : "주차대수 별도 검토 · 0대 판정 아님"}</small>
+              </div>;
+            })}</div>
+            <div className="site-decision-foot">미확정 사유: 허용용도·일조·최고높이·최신 LH 인수기준·주차·지구단위계획 조건의 대상지 판정 미완료. 예비 규모 산정은 조례 일반값과 10층 가정 사용.</div>
+          </section>}
+          {lhNotice && <section className="lh-latest-banner"><div><span className="site-pill tentative">LH 지역 공고 직접 조회</span><h3>{lhNotice.title}</h3><p>게시 {lhNotice.publishedAt} · 마감 {lhNotice.closesAt} · 지역 {lhNotice.matchedDistrict} · {lhNotice.isCurrent ? "접수기간 내" : "접수기간 경과"}</p>
+            <p>{lhRules ? "공고문 PDF의 최소규모·면적·커뮤니티·기계식주차 기준을 확인했어. 입지 및 인허가 적용성은 별도." : "LH 공식 공고를 찾았지만 이 차수의 상세 숫자 추출은 미확인."}</p></div>
+            <div className="lh-latest-links"><a href={lhNotice.url} target="_blank" rel="noopener noreferrer">LH 공고 열기 ↗</a>{lhNotice.pdfUrl && <a href={lhNotice.pdfUrl} target="_blank" rel="noopener noreferrer">공고문 PDF ↗</a>}{lhNotice.guideUrl && <a href={lhNotice.guideUrl} target="_blank" rel="noopener noreferrer">가이드라인 ZIP ↗</a>}</div>
+          </section>}
           <section className="card law-report-card" aria-label="법규검토 총괄표">
             <div className="law-report-heading">
               <div>
@@ -636,7 +670,17 @@ export default function Home() {
                 <small>최고층수는 직접 가정하는 값이며 지구단위계획·일조·주차·LH 인수 조건을 확정하지 않아.</small>
               </div>
               <label>가정 층수 <input type="number" aria-label="예비 계획 층수" min="1" max="60" step="1" value={scenarioFloors} onChange={(e) => setScenarioFloors(Number(e.target.value) || 0)} />층</label>
-              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData} onClick={startPreliminaryScenario}>조건부 4개안 계산 <Icon name="chevron" size={15}/></button>
+              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData} onClick={() => startPreliminaryScenario("base")}>기본안 4개 비교 <Icon name="chevron" size={15}/></button>
+            </div>
+            {preliminaryLimits && <div className="far-compare-strip">
+              <div><span>조례 일반 용적률</span><b>{preliminaryLimits.far}%</b><small>조문 일반기준 · 지구단위 검증 전</small></div>
+              <div className="far-compare-arrow">→</div>
+              <div><span>120% 완화 가정안</span><b>{exampleRelaxedFar}%</b><small>완화요건 미확인 · 승인값 아님</small></div>
+              <button type="button" className="button ghost" onClick={() => startPreliminaryScenario("example")} disabled={!reviewData}>완화 가정 비교</button>
+            </div>}
+            <div className="parking-inline-settings"><div><b>주차대수 바로 계산</b><small>현재 미확정 법정계수 대신 입력하는 계획 가정값이야. 입력 즉시 4개 대안이 갱신돼.</small></div>
+              <label>공동주택 <input aria-label="공동주택 주차계수 빠른 입력" type="number" min="0" step="0.1" value={input.apartmentParkingRatio || ""} placeholder="대/세대" onChange={e => update("apartmentParkingRatio", Number(e.target.value))} /></label>
+              <label>오피스텔 <input aria-label="오피스텔 주차계수 빠른 입력" type="number" min="0" step="0.1" value={input.officetelParkingRatio || ""} placeholder="대/호" onChange={e => update("officetelParkingRatio", Number(e.target.value))} /></label>
             </div>
             <div className="law-report-stats">
               <div><span>대상지</span><strong>{input.address || "주소 입력 필요"}</strong><small>검토 대상</small></div>
@@ -806,6 +850,16 @@ export default function Home() {
         {activeTab === 2 && <>
           <SectionHeader eyebrow="03 · LH GUIDELINE" title="LH 기준 및 특례 검토" description="LH 직접건설과 민간 신축매입약정 기준을 혼용하지 않고 사업방식별로 판단합니다." />
           <div className="notice navy"><Icon name="lh" /><div><b>{input.businessMode === "purchase" ? "민간 신축매입약정 검토 모드" : input.businessMode === "direct" ? "LH 직접건설 검토 모드" : "사업방식 미정 · 특례 확정 적용 보류"}</b><span>지역본부: {input.regionalOffice} · 최신 공고문 및 설계·시공 가이드라인 원문 연결 필요</span></div></div>
+          {lhNotice && <section className="lh-rule-sheet">
+            <div><strong>{lhNotice.title}</strong><span>공식 지역본부 공고 · {lhNotice.publishedAt} · <a href={lhNotice.url} target="_blank" rel="noopener noreferrer">원문 ↗</a></span></div>
+            {lhRules ? <div className="lh-rule-grid">
+              <article><span>신청 최소규모</span><b>{lhRules.minimumHomes}세대(호) 이상</b><small>규제지역은 {lhRules.regulatedMinimumHomes}호 기준 · 규제지역 지정 여부 별도 확인</small></article>
+              <article><span>신혼 / 청년 전용면적</span><b>{lhRules.newlywedMinimumArea}㎡ 이상 / {lhRules.youthMinimumArea}~{lhRules.youthMaximumArea}㎡</b><small>신혼 2실 / 청년 1실 이상 · 실제 평면 필요</small></article>
+              <article><span>기계식주차 한도</span><b>{lhRules.mechanicalMaxPercent}% 이하</b><small>역 출구 {lhRules.mechanicalTransitMaxMeters}m 이내 · 주거용 오피스텔·도시형생활주택</small></article>
+              <article><span>청년형 0.3대 특례</span><b>0.3대/호 (조건부)</b><small>전용 {lhRules.parking03MaxArea}㎡ 미만 · 역 또는 대학 {lhRules.parking03YouthMaxMeters}m · 협의·적용검증 필요</small></article>
+              <article><span>커뮤니티공간</span><b>{lhRules.communityThreshold}호 이상</b><small>청년·신혼형 · 관리사무소 {lhRules.managementOfficeThreshold}호 이상</small></article>
+            </div> : <p>공식 공고가 확인됐지만 최신 첨부 원문을 확인하지 못해 숫자 적용을 보류해.</p>}
+          </section>}
           <div className="lh-layout">
             <section className="card settings-card"><div className="card-title"><div className="title-icon"><Icon name="parking" /></div><div><h3>주차 기준 시뮬레이션</h3><p>계획 가정값이며 법정·LH 원문 확인 전 확정값이 아닙니다.</p></div></div><div className="form-grid two compact">
               <NumberField label="공동주택 법정계수" value={input.apartmentParkingRatio} onChange={(v) => update("apartmentParkingRatio", v)} suffix="대/세대" step={0.1} />
@@ -815,7 +869,7 @@ export default function Home() {
               <NumberField label="자주식 면적계수" value={input.selfParkingAreaPerCar} onChange={(v) => update("selfParkingAreaPerCar", v)} suffix="㎡/대" hint="계획 가정값" />
               <NumberField label="기계식 설비계수" value={input.mechanicalAreaPerCar} onChange={(v) => update("mechanicalAreaPerCar", v)} suffix="㎡/대" hint="형식별 재검토" />
               <Field label="0.3대 특례 승인상태" hint="승인 전에는 기본 주차대수를 적용"><select value={input.specialParkingApproval} onChange={(e) => update("specialParkingApproval", e.target.value as ProjectInput["specialParkingApproval"])}><option value="not-reviewed">미검토</option><option value="conditional">조건부 검토</option><option value="approved">공식 승인 확인</option><option value="rejected">적용 불가 확인</option></select></Field>
-            </div><div className="toggle-stack">
+            </div><div className="lh-parking-usage-hint">입력한 주차계수는 즉시 계산해. <b>법정계수</b>는 기본 주차대수로, <b>LH계수</b>는 공고·입지 검증 전까지 별도 가정 대수로 표시해. 법적 자동 확정은 하지 않아.</div><div className="toggle-stack">
               <Toggle checked={input.purchaseAgreementConfirmed} onChange={(v) => update("purchaseAgreementConfirmed", v)} label="공공주택사업자 매도약정 체결 원본 확인" note="예정 또는 신청 상태는 해당하지 않음"/>
               <Toggle checked={input.specialParkingUseScopeConfirmed} onChange={(v) => update("specialParkingUseScopeConfirmed", v)} label="오피스텔 등 해당 용도의 특례 대상 인정 확인" note="관할 허가권자/LH의 실제 적용범위 확인"/>
               <Toggle checked={input.specialParkingLhConfirmed} onChange={(v) => update("specialParkingLhConfirmed", v)} label="최신 LH 지역본부 공고 및 추가요건 확인" note="입지·공급유형 및 지역별 조건 포함"/>

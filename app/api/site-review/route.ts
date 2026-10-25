@@ -3,6 +3,7 @@ import { findSitePreset } from "../../../lib/site-presets";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
+import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { extractOrdinanceArticles, type OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
 
 type LawRecord = {
@@ -452,6 +453,8 @@ export async function POST(request: NextRequest) {
   const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
   const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
   const localGovernment = localGovernmentFromAddress(preset?.address ?? address);
+  const districtForLh = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? "";
+  const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh).catch(() => null);
   const webSearchPromise = searchOfficialSources({
     address: preset?.address ?? address,
     localGovernment,
@@ -516,6 +519,7 @@ export async function POST(request: NextRequest) {
   }
   const webSearch = await webSearchPromise;
   const officialDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
+  const lhNotice = await lhNoticePromise;
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
 
@@ -539,6 +543,7 @@ export async function POST(request: NextRequest) {
     ruleFindings: [],
     webSearch,
     officialDocuments,
+    lhNotice,
     missing,
     errors,
     unresolved: [
@@ -547,7 +552,7 @@ export async function POST(request: NextRequest) {
       officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
         ? "지구단위계획 관련 문서를 추출했지만 해당 필지·획지별 결정도서와 변경고시 검증 필요"
         : "지구단위계획 결정도서 및 시행지침 원문 확보 필요",
-      officialDocuments.documents.some((item) => item.kind === "lh-notice" && item.status === "analyzed")
+      lhNotice?.rules || officialDocuments.documents.some((item) => item.kind === "lh-notice" && item.status === "analyzed")
         ? "LH 관련 문서를 추출했지만 해당 지역본부·공급유형·공고 연도와 인수기준 대조 필요"
         : "해당 연도 LH 지역본부 매입공고 원문 확보 필요",
       "일조·인동거리·소방활동공간 배치 검토",

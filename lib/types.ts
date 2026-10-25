@@ -1,3 +1,4 @@
+import type { LhNotice } from "./server/lh-notice";
 export type BusinessMode = "direct" | "purchase" | "other" | "undecided";
 export type EvidenceStatus = "verified" | "user" | "unknown" | "review";
 export type ParkingMode = "self" | "mechanical";
@@ -101,6 +102,7 @@ export interface CalculationContext {
   usePermissions: Record<UseType, AlternativeEligibilityStatus>;
   lhPurchaseEligibility: Record<UseType, AlternativeEligibilityStatus>;
   mechanicalParkingEligibility: AlternativeEligibilityStatus;
+  lhPurchaseMechanicalRestrictedToOfficetelOrUrban?: boolean;
 }
 
 export interface AlternativeResult {
@@ -268,6 +270,7 @@ export interface SiteReviewResult {
     conditions: string[];
     verified: boolean;
   }>;
+  lhNotice?: LhNotice | null;
   webSearch: {
     status: "completed" | "not-configured" | "failed";
     provider: "Brave Search" | null;
