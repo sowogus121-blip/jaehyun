@@ -63,8 +63,10 @@ function norm(value: string) {
 export function selectOfficialDocumentSources(
   results: OfficialSearchResult[],
   localGovernment: string,
+  siteAddress = "",
 ): Array<{ result: OfficialSearchResult; kind: OfficialDocumentKind }> {
   const location = norm(localGovernment.split(/\s+/).at(-1) ?? "");
+  const neighborhood = siteAddress.match(/([가-힣]{2,8}(?:동|읍|면|리))\s*\d/)?.[1] ?? null;
   const selected: Array<{ result: OfficialSearchResult; kind: OfficialDocumentKind }> = [];
   const seen = new Set<string>();
   for (const result of results) {
@@ -79,7 +81,12 @@ export function selectOfficialDocumentSources(
     } else if (query.includes("지구단위계획") &&
       /지구단위계획|시행지침|결정고시/.test(title) &&
       (!location || title.includes(location))) {
-      kind = "district-plan";
+      // City-wide notices are relevant context, but a notice naming only an
+      // unrelated neighborhood is NOT evidence for the requested address.
+      const namedNeighborhoods = [...result.title.matchAll(/(?:^|[\s(·,])([가-힣]{2,8}(?:동|읍|면|리))(?=$|[\s)·,])/g)]
+        .map((match) => match[1]);
+      if (!neighborhood || namedNeighborhoods.length === 0 ||
+        namedNeighborhoods.includes(neighborhood)) kind = "district-plan";
     }
     if (kind) {
       seen.add(result.url);
@@ -204,8 +211,9 @@ async function analyzeOne(
 export async function collectOfficialDocuments(
   results: OfficialSearchResult[],
   localGovernment: string,
+  siteAddress = "",
 ): Promise<OfficialDocumentCollection> {
-  const selected = selectOfficialDocumentSources(results, localGovernment);
+  const selected = selectOfficialDocumentSources(results, localGovernment, siteAddress);
   const picked: typeof selected = [];
   for (const kind of ["district-plan", "lh-notice"] as const) {
     picked.push(...selected.filter((item) => item.kind === kind).slice(0, MAX_PER_KIND));
