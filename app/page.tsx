@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ALTERNATIVES, DEFAULT_INPUT, calculateAll, resetSiteDependentInput } from "@/lib/calculator";
 import { calculateReviewCompleteness, deriveCalculationContext } from "@/lib/regulatory-assessment";
 import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRuleForEditedField } from "@/lib/rule-application";
@@ -456,7 +456,7 @@ export default function Home() {
       const response = await fetch("/api/export/xlsx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, results, reviewData, reviewedRules: activeRules }),
+        body: JSON.stringify({ input, results, reviewData, lookupDetails, reviewedRules: activeRules }),
       });
       if (!response.ok) throw new Error((await response.json()).error || "XLSX 생성 실패");
       downloadBlob(await response.blob(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "LH-Plan-Lab.xlsx");
@@ -603,7 +603,7 @@ export default function Home() {
             <div className="law-table-wrap">
               <table className="law-report-table">
                 <thead><tr><th>구분</th><th>법규 검토내용</th><th>관련 법령·조례</th><th>판정</th><th>비고 / 추가 검증</th></tr></thead>
-                <tbody>{legalReport.rows.map((item, index) => <>
+                <tbody>{legalReport.rows.map((item, index) => <Fragment key={item.id}>
                   {(index === 0 || legalReport.rows[index - 1].section !== item.section) && <tr className="law-section-heading" key={item.section}><td colSpan={5}>{item.section}</td></tr>}
                   <tr key={item.id}>
                     <th scope="row">{item.label}</th>
@@ -616,7 +616,7 @@ export default function Home() {
                     <td><span className={"legal-flag legal-flag-" + item.status}>{item.status === "source" ? "원문 확인" : item.status === "conditional" ? "조건부" : item.status === "user" ? "계획 입력" : "미확정"}</span></td>
                     <td className="law-note">{item.note}</td>
                   </tr>
-                </>)}</tbody>
+                </Fragment>)}</tbody>
               </table>
             </div>
             <div className="law-calculation-panel">
