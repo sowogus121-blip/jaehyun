@@ -138,4 +138,28 @@ describe("LH Plan Lab calculation engine", () => {
     expect(results.every((result) => !result.recommendable)).toBe(true);
     expect(results.every((result) => result.eligibility === "unknown")).toBe(true);
   });
+  it("keeps project efficiency defaults 75% and 45% and updates all four alternatives", () => {
+    expect(DEFAULT_INPUT.apartmentEfficiency).toBe(75);
+    expect(DEFAULT_INPUT.officetelEfficiency).toBe(45);
+    const base=calculateAll(EXAMPLE_INPUT);
+    expect(base.map((r) => r.definition.efficiency)).toEqual([0.75,0.75,0.45,0.45]);
+    const changed=calculateAll({...EXAMPLE_INPUT,apartmentEfficiency:80,officetelEfficiency:55});
+    expect(changed.map((r) => r.definition.efficiency)).toEqual([0.8,0.8,0.55,0.55]);
+    expect(changed[0].grossAreaPerUnit).toBeLessThan(base[0].grossAreaPerUnit);
+    expect(changed[2].grossAreaPerUnit).toBeLessThan(base[2].grossAreaPerUnit);
+    expect(changed[0].unitCount).toBeGreaterThanOrEqual(base[0].unitCount);
+    expect(changed[2].unitCount).toBeGreaterThanOrEqual(base[2].unitCount);
+    expect(changed[0].formulas.some((value)=>value.includes("80%"))).toBe(true);
+    expect(changed[2].formulas.some((value)=>value.includes("55%"))).toBe(true);
+  });
+
+  it("preserves user efficiencies when changing site while clearing parcel-specific zoning", () => {
+    const current={...EXAMPLE_INPUT,apartmentEfficiency:82,officetelEfficiency:49};
+    const reset=resetSiteDependentInput(current,"부산광역시 수영구 광안동 10-1");
+    expect(reset.apartmentEfficiency).toBe(82);
+    expect(reset.officetelEfficiency).toBe(49);
+    expect(reset.baseFar).toBe(0);
+    expect(reset.siteArea).toBe(0);
+  });
+
 });
