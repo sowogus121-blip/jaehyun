@@ -62,7 +62,7 @@ describe("site review API", () => {
     const d=await res.json();
     expect(d.location).toBeNull();
     expect(d.parcel).toBeNull();
-    expect(d.errors.join(" ")).toContain("인접 필지가 대신 조회");
+    expect(d.errors.join(" ")).toContain("면적·법규를 합산하지");
   });
 
   it("queries governing metro AND borough ordinances for Busan Seo-gu without cross-district contamination", async()=>{
