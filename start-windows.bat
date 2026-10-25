@@ -50,7 +50,7 @@ goto wait_for_server
 
 :server_ready
 echo LH Plan Lab is ready. Opening the browser...
-start "" "http://127.0.0.1:3000/?launcher=v0.4.0"
+start "" "http://127.0.0.1:3000/?launcher=v0.5.0"
 timeout /t 2 /nobreak >nul
 goto end
 

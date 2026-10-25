@@ -2,7 +2,7 @@
 
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ALTERNATIVES, DEFAULT_INPUT, calculateAll } from "@/lib/calculator";
-import type { AlternativeResult, ProjectInput, SiteReviewResult, UploadedDocument } from "@/lib/types";
+import type { AlternativeResult, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
 type IconName = "site" | "law" | "lh" | "scale" | "report" | "search" | "upload" | "save" | "download" | "alert" | "check" | "building" | "parking" | "area" | "height" | "chevron" | "database" | "settings" | "history";
 
@@ -154,6 +154,7 @@ export default function Home() {
   const [vworldKey, setVworldKey] = useState("");
   const [lawOc, setLawOc] = useState("");
   const [reviewData, setReviewData] = useState<SiteReviewResult | null>(null);
+  const [lookupDetails, setLookupDetails] = useState<SiteLookupDetails | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [apiPanelMessage, setApiPanelMessage] = useState("두 값을 입력한 뒤 통합 법규검토를 실행하세요.");
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -168,6 +169,7 @@ export default function Home() {
         setInput({ ...DEFAULT_INPUT, ...parsed.input });
         setDocuments(parsed.documents ?? []);
         setReviewData(parsed.reviewData ?? null);
+        setLookupDetails(parsed.lookupDetails ?? null);
         setSavedAt(parsed.savedAt ?? null);
       } catch { /* invalid local data is ignored */ }
     }
@@ -188,11 +190,11 @@ export default function Home() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      localStorage.setItem("lh-plan-lab-project", JSON.stringify({ input, documents, reviewData, savedAt: new Date().toISOString() }));
+      localStorage.setItem("lh-plan-lab-project", JSON.stringify({ input, documents, reviewData, lookupDetails, savedAt: new Date().toISOString() }));
       setSavedAt(new Date().toISOString());
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [input, documents, reviewData]);
+  }, [input, documents, reviewData, lookupDetails]);
 
   useEffect(() => {
     if (!toast) return;
@@ -205,18 +207,32 @@ export default function Home() {
   const lookupAddress = async () => {
     const activeVworldKey = (document.querySelector<HTMLInputElement>("#vworld-api-key")?.value || vworldKey).trim();
     if (!input.address.trim()) return setToast("주소를 먼저 입력해 주세요.");
-    if (!activeVworldKey) {
-      setApiPanelMessage("VWorld API 키가 비어 있습니다.");
-      return setToast("VWorld API 키를 먼저 입력해 주세요.");
-    }
-    setVworldKey(activeVworldKey);
+    if (activeVworldKey) setVworldKey(activeVworldKey);
     setToast("공공 주소 API를 조회하고 있습니다…");
     try {
-      const response = await fetch(`/api/site-lookup?query=${encodeURIComponent(input.address)}`, { headers: { "x-vworld-api-key": activeVworldKey } });
+      const params = new URLSearchParams({ query: input.address, province: input.province, district: input.district });
+      const response = await fetch(`/api/site-lookup?${params.toString()}`, { headers: activeVworldKey ? { "x-vworld-api-key": activeVworldKey } : {} });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      update("address", data.address);
-      setToast(`주소 확인 완료 · ${data.source}`);
+      const details = data.siteDetails as SiteLookupDetails | null;
+      setInput((current) => ({
+        ...current,
+        address: data.parcelAddress || data.address,
+        ...(details ? {
+          province: details.province,
+          district: details.district,
+          siteArea: details.siteArea,
+          zone: `${details.zone} (공식문서 확인)`,
+          districtPlan: details.districtPlan,
+          roadWidth: details.planningRoadWidth,
+          buildingCoverageRatio: details.buildingCoverageRatioAssumption,
+          baseFar: details.farAssumption,
+          relaxedFar: details.farAssumption,
+          useRelaxedFar: false,
+        } : {}),
+      }));
+      setLookupDetails(details);
+      setToast(details ? `대상지 정보 자동입력 완료 · ${details.siteArea.toLocaleString()}㎡ · ${details.zone}` : `주소 확인 완료 · ${data.source}`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "주소 조회에 실패했습니다.");
     }
@@ -291,7 +307,7 @@ export default function Home() {
     setToast(`검토 버전 ${next.length}을 저장했습니다.`);
   };
 
-  const exportProject = () => downloadBlob(JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), input, documents, reviewData }, null, 2), "application/json", "lh-plan-lab-project.json");
+  const exportProject = () => downloadBlob(JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), input, documents, reviewData, lookupDetails }, null, 2), "application/json", "lh-plan-lab-project.json");
   const exportExcel = () => {
     const headings = ["항목", ...results.map((r) => `${r.definition.id} ${r.definition.shortName}`)];
     const rows = [
@@ -320,7 +336,7 @@ export default function Home() {
     </aside>
 
     <main>
-      <header className="topbar"><div><span>프로젝트</span><i>/</i><b>{input.projectName || "새 프로젝트"}</b></div><div className="top-actions"><span className="build-version">v0.4.0</span><span className="autosave"><i /><b>{savedAt ? "자동 저장됨" : "저장 준비"}</b></span><button className="button ghost" onClick={saveVersion}><Icon name="save" size={17} /> 버전 저장</button><button className="button dark" onClick={() => setActiveTab(4)}><Icon name="report" size={17} /> 결과 보고서</button></div></header>
+      <header className="topbar"><div><span>프로젝트</span><i>/</i><b>{input.projectName || "새 프로젝트"}</b></div><div className="top-actions"><span className="build-version">v0.5.0</span><span className="autosave"><i /><b>{savedAt ? "자동 저장됨" : "저장 준비"}</b></span><button className="button ghost" onClick={saveVersion}><Icon name="save" size={17} /> 버전 저장</button><button className="button dark" onClick={() => setActiveTab(4)}><Icon name="report" size={17} /> 결과 보고서</button></div></header>
 
       <div className="content">
         {activeTab === 0 && <>
@@ -357,7 +373,13 @@ export default function Home() {
 
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
-            <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => update("address", e.target.value)} placeholder="도로명주소 또는 지번주소" /></div><button className="button primary" onClick={lookupAddress}>공공주소 조회</button></div>
+            <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { update("address", e.target.value); setLookupDetails(null); }} placeholder="예: 가능동 75-1 또는 도로명주소" /></div><button className="button primary" onClick={lookupAddress}>공공주소 조회</button></div>
+            {lookupDetails && <div className="lookup-result-card">
+              <div className="lookup-result-head"><Badge status="verified" /><b>{input.address}</b><span>{lookupDetails.source} · {lookupDetails.confirmedAt} 확인</span></div>
+              <div className="lookup-result-grid"><span><small>대지면적</small><b>{lookupDetails.siteArea.toLocaleString()}㎡</b></span><span><small>지목</small><b>{lookupDetails.landCategory}</b></span><span><small>용도지역</small><b>{lookupDetails.zone}</b></span><span><small>개별공시지가</small><b>{lookupDetails.publicPricePerSqm.toLocaleString()}원/㎡</b></span></div>
+              <div className="lookup-result-lines"><span><Icon name="site" size={14} /><b>접도</b>{lookupDetails.roads.join(" · ")}</span><span><Icon name="law" size={14} /><b>지역·구역</b>{[...lookupDetails.restrictions, lookupDetails.landscape].join(" · ")}</span></div>
+              {lookupDetails.warnings.map((warning) => <div className="lookup-warning" key={warning}><Icon name="alert" size={13} />{warning}</div>)}
+            </div>}
             <div className="form-grid three compact">
               <Field label="시·도"><input value={input.province} onChange={(e) => update("province", e.target.value)} /></Field>
               <Field label="시·군·구"><input value={input.district} onChange={(e) => update("district", e.target.value)} /></Field>

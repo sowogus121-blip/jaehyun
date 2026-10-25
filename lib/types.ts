@@ -144,3 +144,24 @@ export interface SiteReviewResult {
   errors: string[];
   unresolved: string[];
 }
+
+export interface SiteLookupDetails {
+  id: string;
+  province: string;
+  district: string;
+  siteArea: number;
+  landCategory: string;
+  zone: string;
+  districtPlan: boolean;
+  publicPricePerSqm: number;
+  publicPriceBase: string;
+  roads: string[];
+  planningRoadWidth: number;
+  restrictions: string[];
+  landscape: string;
+  buildingCoverageRatioAssumption: number;
+  farAssumption: number;
+  source: string;
+  confirmedAt: string;
+  warnings: string[];
+}
