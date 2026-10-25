@@ -41,6 +41,9 @@ export interface ProjectInput {
   lhOfficetelParkingRatio: number;
   specialParkingEnabled: boolean;
   specialParkingApproval: ParkingRelaxationStatus;
+  purchaseAgreementConfirmed: boolean;
+  specialParkingUseScopeConfirmed: boolean;
+  specialParkingLhConfirmed: boolean;
   lhParkingRatioVerified: boolean;
   mechanicalAllowed: boolean;
   mechanicalMaxRatio: number;
