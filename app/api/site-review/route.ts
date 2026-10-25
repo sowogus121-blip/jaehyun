@@ -341,7 +341,8 @@ async function searchOrdinance(query: string, oc: string, jurisdiction: string):
     const title = normalize(candidate["자치법규명"] ?? candidate["법령명한글"]);
     const office = normalize(candidate["지자체기관명"]);
     const stem=normalize(district);
-    const simple=title.startsWith(stem) ? title.slice(stem.length) : "";
+    const simple=title.startsWith(fullScope) ? title.slice(fullScope.length) :
+      title.startsWith(stem) ? title.slice(stem.length) : "";
     // Generic word-prefix search previously confused '남동구 건축물관리자의
     // 제설 조례' with the Building Ordinance, and '도시계획위원회 운영 조례'
     // with binding urban planning FAR standards. Only accept actual subjects.
