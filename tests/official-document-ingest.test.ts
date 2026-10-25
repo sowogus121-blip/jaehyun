@@ -44,6 +44,18 @@ describe("official planning and LH document ingestion", () => {
       "https://www.gangnam.go.kr/notice/12")).toEqual(["https://www.gangnam.go.kr/files/plan.pdf"]);
   });
 
+  it("rejects a district plan explicitly naming a different neighborhood", () => {
+    const rows = [
+      search("https://www.nabis.go.kr/notice/1", "의정부시 금오동 자동차정류장 지구단위계획 변경 고시", "의정부시 지구단위계획 결정 고시"),
+      search("https://www.nabis.go.kr/notice/2", "의정부시 가능동 주거지구 지구단위계획 결정 고시", "의정부시 지구단위계획 결정 고시"),
+      search("https://www.nabis.go.kr/notice/3", "의정부시 도시관리계획 지구단위계획 지침", "의정부시 지구단위계획 결정 고시"),
+    ];
+    const found = selectOfficialDocumentSources(rows, "경기도 의정부시", "경기도 의정부시 가능동 75-1");
+    expect(found).toHaveLength(2);
+    expect(found.some((item) => item.result.title.includes("금오동"))).toBe(false);
+    expect(found.some((item) => item.result.title.includes("가능동"))).toBe(true);
+  });
+
   it("automatically follows an official bulletin to HWPX, extracts candidates and never marks applicability verified", async () => {
     const hwpx = await hwpxDocument();
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
