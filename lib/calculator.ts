@@ -7,6 +7,7 @@ import type {
   ParkingResult,
   ProjectInput,
 } from "./types";
+import { screenParking03 } from "./lh-parking-screen";
 
 export const ALTERNATIVES: AlternativeDefinition[] = [
   { id: "A-1", name: "공동주택 · 신혼형 · 자주식", shortName: "공동주택 자주식", useType: "apartment", parkingMode: "self", exclusiveArea: 46, efficiency: 0.75 },
@@ -50,6 +51,9 @@ export const DEFAULT_INPUT: ProjectInput = {
   lhOfficetelParkingRatio: 0,
   specialParkingEnabled: false,
   specialParkingApproval: "not-reviewed",
+  purchaseAgreementConfirmed: false,
+  specialParkingUseScopeConfirmed: false,
+  specialParkingLhConfirmed: false,
   lhParkingRatioVerified: false,
   mechanicalAllowed: true,
   mechanicalMaxRatio: 70,
@@ -117,6 +121,9 @@ export function resetSiteDependentInput(current: ProjectInput, address: string):
     lhOfficetelParkingRatio: 0,
     specialParkingEnabled: false,
     specialParkingApproval: "not-reviewed",
+    purchaseAgreementConfirmed: false,
+    specialParkingUseScopeConfirmed: false,
+    specialParkingLhConfirmed: false,
     lhParkingRatioVerified: false,
   };
 }
@@ -158,7 +165,8 @@ export function isSpecialParkingEligible(input: ProjectInput, definition: Altern
 export function calculateParking(input: ProjectInput, definition: AlternativeDefinition, units: number): ParkingResult {
   const originalLegalRatio = definition.useType === "apartment" ? input.apartmentParkingRatio : input.officetelParkingRatio;
   const lhRatio = definition.useType === "apartment" ? input.lhApartmentParkingRatio : input.lhOfficetelParkingRatio;
-  const specialEligible = isSpecialParkingEligible(input, definition);
+  const screening = screenParking03(input, definition);
+  const specialEligible = screening.canShowConditional;
   const relaxationStatus = specialEligible ? input.specialParkingApproval : "not-reviewed";
   const originalLegalCount = ceil(units * originalLegalRatio);
   const lhCount = ceil(units * lhRatio);
@@ -167,7 +175,7 @@ export function calculateParking(input: ProjectInput, definition: AlternativeDef
   const verifiedLhCount = input.lhParkingRatioVerified ? lhCount : 0;
   const fallbackCount = Math.max(originalLegalCount, verifiedLhCount);
   const conditionalCount = relaxedCount === null ? null : Math.max(relaxedCount, verifiedLhCount);
-  const specialApplied = relaxationStatus === "approved" && conditionalCount !== null;
+  const specialApplied = screening.canApply && conditionalCount !== null;
   const finalCount = specialApplied ? conditionalCount : fallbackCount;
   const legalRatio = specialApplied && relaxedRatio !== null ? relaxedRatio : originalLegalRatio;
   const legalCount = specialApplied && relaxedCount !== null ? relaxedCount : originalLegalCount;
@@ -274,6 +282,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   if (context.planningEvidence !== "verified") conditionalReasons.push("건폐율·용적률·높이 확정 근거 미확보");
   if (input.maxFloors <= 0 || input.maxHeight <= 0) conditionalReasons.push("최고층수 또는 최고높이 미확인 · 확보한 제한값만으로 개략 산정");
   if (parking.originalLegalRatio <= 0) conditionalReasons.push("법정 주차계수 미확인");
+  if (input.specialParkingEnabled && definition.exclusiveArea < 30 && input.businessMode === "purchase" && !parking.specialApplied) conditionalReasons.push("0.3대 특례 승인·약정·주택 해당성·LH 기준 중 미확인 항목 있음");
 
   const eligibility = blockingReasons.length > 0
     ? "ineligible" as const
