@@ -4,6 +4,7 @@ import type { AlternativeResult, ProjectInput, SiteReviewResult } from "../../..
 import type { ReviewedRule } from "../../../../lib/rule-application";
 import type { SiteLookupDetails } from "../../../../lib/types";
 import { buildLegalReviewReport } from "../../../../lib/legal-review-report";
+import { assessParcelAssembly } from "../../../../lib/parcel-assembly";
 
 export const runtime = "nodejs";
 
@@ -78,6 +79,40 @@ export async function POST(request: NextRequest) {
   legalSheet.views = [{ state: "frozen", ySplit: 3 }];
   legalSheet.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
   for (const column of [2, 3, 4, 5]) legalSheet.getColumn(column).alignment = { wrapText: true, vertical: "middle" };
+
+  const assembly=assessParcelAssembly(body.reviewData??null);
+  if(assembly?.isMultiple){
+    const sheet=workbook.addWorksheet("합필 규모검토");
+    sheet.addRow(["LH Plan Lab | 합필 예정지 통합 규모검토"]);
+    sheet.mergeCells("A1:F1");
+    sheet.getRow(1).font={bold:true,size:16,color:{argb:"FF224C63"}};
+    sheet.getRow(1).height=31;
+    sheet.addRow(["합필 대상 필지수",assembly.parcelCount,"면적 합계",assembly.totalArea??"확인 필요","적용 상태",assembly.status]);
+    sheet.addRow(["대상","주소·지번","대지면적(㎡)","용도지역","건폐율 / 용적률 (조례 일반)","PNU / 출처 / 조회오류"]);
+    styleHeader(sheet.getRow(3));
+    assembly.parcels.forEach(p=>{
+      const row=sheet.addRow([p.number===1?"대표 필지":"추가 필지 "+(p.number-1),p.address,p.area??"미확정",p.zone??"미확정",
+        p.bcr!==null&&p.far!==null?p.bcr+"% / "+p.far+"%":"확인 필요",
+        [p.pnu,p.source,...p.errors].filter(Boolean).join(" · ")]);
+      row.height=36;
+    });
+    sheet.addRow(["통합 검토 합계","대상 합산값",assembly.totalArea??"미확정","",assembly.ordinary?
+      assembly.ordinary.bcr+"% / "+assembly.ordinary.far+"% (일반기준)":assembly.weightedCandidate?
+        assembly.weightedCandidate.bcr+"% / "+assembly.weightedCandidate.far+"% (가중 참고값)": "법적 기준 미확정","실제 합필·법정 건축가능성과 별개"]);
+    if(assembly.weightedCandidate){
+      sheet.addRow(["혼합 용도지역","가중 수치 (참고)",assembly.weightedCandidate.farArea,
+        "가장 작은 구역 "+assembly.weightedCandidate.smallestZoneArea+"㎡",
+        assembly.weightedCandidate.eligibleForStatutoryThreshold?"330㎡ 일반 면적요건 가능성":"330㎡ 일반기준 적용 가능성 낮음",
+        "국토계획법 제84조·시행령 제94조 조건부"]);
+    }
+    sheet.addRow([]);
+    sheet.addRow(["합필 검토 유의사항"]);
+    assembly.notes.forEach(n=>sheet.addRow(["검토 필요",n]));
+    sheet.columns=[{width:20},{width:44},{width:22},{width:35},{width:38},{width:72}];
+    sheet.views=[{state:"frozen",ySplit:3}];
+    sheet.pageSetup={paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0};
+    sheet.eachRow(row=>{row.alignment={vertical:"middle",wrapText:true};});
+  }
 
   const inputs = workbook.addWorksheet("입력값");
   inputs.addRow(["항목", "값", "단위·상태"]);

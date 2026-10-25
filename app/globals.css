@@ -446,3 +446,64 @@ a.law-reference-item:hover { background: #f2f7fa; border-color: #b4cbd8; }
 .lh-evidence-preview > div p { border-bottom: 1px solid #e1edef; padding: 9px 0; margin: 0; font-size: 11px; }
 .lh-evidence-preview > div b { margin-right: 9px; color: #305f73; }
 .lh-evidence-preview small { display: block; font-size: 10px; color: #91613d; padding: 8px 0 2px; }
+
+
+/* Merged-parcel architectural feasibility; evidence first, zoning assumptions plainly qualified. */
+.assemble-choice {display:flex;align-items:center;justify-content:space-between;gap:16px;margin:10px 0 14px;padding:13px 16px;border:1px solid #cfe0e6;background:#f4f9fa;}
+.assemble-choice>div {flex:1;}
+.assemble-choice .button {white-space:nowrap;}
+.assembly-entry {border:1px solid #d8e7e9;background:#f8fbfc;padding:15px 18px;margin:0 0 16px;}
+.assembly-entry textarea {width:100%;font-size:13px;line-height:1.65;resize:vertical;}
+.assembly-entry-footer {margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:15px;}
+.assembly-entry-footer span {color:#658291;font-size:11px;line-height:1.55;}
+.parcel-assembly-card {border:1px solid #cfdee6;border-top:3px solid #317b87;background:#fff;margin:0 0 19px;box-shadow:var(--shadow);overflow:hidden;}
+.parcel-assembly-title {display:flex;align-items:center;justify-content:space-between;gap:15px;padding:20px 23px 15px;}
+.parcel-assembly-title h3 {margin:5px 0 5px;color:#244d61;font-size:18px;}
+.parcel-assembly-title p {margin:0;color:#658090;font-size:11px;}
+.assembly-status {padding:7px 10px;font-size:11px;font-weight:750;border-radius:3px;white-space:nowrap;}
+.assembly-status.same {color:#306d5c;background:#e9f5ef;}
+.assembly-status.mixed {color:#a27033;background:#fff3df;}
+.assembly-status.issue {color:#a04742;background:#ffefed;}
+.parcel-assembly-metrics {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:#f2f7f9;border-top:1px solid #e2ecf0;border-bottom:1px solid #e2ecf0;}
+.parcel-assembly-metrics div {padding:13px 19px;min-width:0;border-right:1px solid #dfebef;display:flex;flex-direction:column;gap:6px;}
+.parcel-assembly-metrics div:last-child {border-right:0;}
+.parcel-assembly-metrics small {font-size:10px;color:#76909e;}
+.parcel-assembly-metrics strong {font-size:19px;line-height:1.5;color:#244d64;overflow-wrap:anywhere;}
+.parcel-table-wrap {overflow-x:auto;}
+.parcel-table {width:100%;min-width:780px;border-collapse:collapse;table-layout:fixed;}
+.parcel-table thead th {background:#e8f0f3;color:#436377;font-weight:750;text-align:left;border-bottom:1px solid #d4e2e8;padding:11px;font-size:11px;}
+.parcel-table thead th:nth-child(1){width:12%;}
+.parcel-table thead th:nth-child(2){width:28%;}
+.parcel-table thead th:nth-child(3){width:12%;}
+.parcel-table thead th:nth-child(4){width:18%;}
+.parcel-table thead th:nth-child(5){width:14%;}
+.parcel-table td {padding:12px 11px;border-bottom:1px solid #e7edf1;font-size:11px;color:#385b70;vertical-align:top;overflow-wrap:anywhere;}
+.parcel-table td b {font-weight:750;color:#25485d;}
+.parcel-table td small {display:block;margin-top:5px;color:#889ca6;font-size:9px;}
+.parcel-table td small.parcel-error {color:#a85c3d;}
+.parcel-weighted-panel {display:flex;gap:15px;align-items:center;justify-content:space-between;background:#fbf7ee;border-top:1px solid #f0e2d0;padding:16px 22px;}
+.parcel-weighted-panel b {font-size:12px;color:#775934;}
+.parcel-weighted-panel p {margin:7px 0;font-size:13px;color:#5f5140;font-weight:700;}
+.parcel-weighted-panel small {font-size:10px;color:#967e62;line-height:1.55;}
+.parcel-weighted-panel button {white-space:nowrap;}
+.parcel-legal-details {padding:15px 22px 18px;border-top:1px solid #e5ecf0;background:#fafcfd;}
+.parcel-legal-details summary {cursor:pointer;color:#507084;font-size:12px;font-weight:750;}
+.parcel-legal-details ul {padding-left:20px;margin:12px 0;color:#6c8191;font-size:11px;line-height:1.75;}
+.parcel-legal-details a {color:#397a91;font-size:11px;font-weight:700;}
+.assembly-massing-note {display:flex;justify-content:space-between;align-items:center;gap:13px;flex-wrap:wrap;background:#eef5f7;border:1px solid #d2e3e9;padding:13px 18px;margin:0 0 18px;color:#375f75;}
+.assembly-massing-note b {font-size:12px;}
+.assembly-massing-note span {font-size:11px;flex:1;}
+.assembly-massing-note button {font:inherit;font-size:11px;color:#29748d;background:transparent;border:0;text-decoration:underline;cursor:pointer;}
+@media(max-width:950px){
+ .parcel-assembly-metrics{grid-template-columns:repeat(2,minmax(0,1fr));}
+ .parcel-weighted-panel,.parcel-assembly-title,.assembly-entry-footer {flex-wrap:wrap;align-items:flex-start;}
+}
+@media(max-width:600px){
+ .assemble-choice{align-items:stretch;flex-direction:column;}
+ .parcel-assembly-title{padding:17px 14px;}
+ .parcel-assembly-metrics div{padding:12px;}
+ .parcel-assembly-metrics strong{font-size:15px;}
+ .parcel-weighted-panel{padding:14px;}
+ .parcel-legal-details{padding:13px;}
+}
+@media print{.assemble-choice,.assembly-entry{display:none}.parcel-assembly-card{box-shadow:none;break-inside:avoid}.parcel-table{min-width:0}.parcel-table td,.parcel-table th{font-size:8px;padding:5px}}

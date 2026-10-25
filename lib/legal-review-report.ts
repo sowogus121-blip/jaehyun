@@ -54,6 +54,15 @@ function zoneRatio(article: Article | null, zone: string): number | null {
   return value > 0 && value <= 2000 ? value : null;
 }
 
+/** Extract general district ordinance maxima for a single, exactly named zone. Parcel applicability remains conditional. */
+export function getOrdinanceZoneStandards(review: SiteReviewResult, zone: string): {bcr:number;far:number} | null {
+  const bcrArticle=findArticle(review,"도시계획 조례",["용도지역안에서의 건폐율","용도지역 안에서의 건폐율"]);
+  const farArticle=findArticle(review,"도시계획 조례",["용도지역안에서의 용적률","용도지역 안에서의 용적률"]);
+  const bcr=zoneRatio(bcrArticle,zone);
+  const far=zoneRatio(farArticle,zone);
+  return bcr===null||far===null?null:{bcr,far};
+}
+
 /** One report per site; a sourced clause must never be mistaken for parcel-level approval. */
 export function buildLegalReviewReport(
   input: ProjectInput,
@@ -63,7 +72,8 @@ export function buildLegalReviewReport(
 ): LegalReviewReport {
   const rows: LegalReviewRow[] = [];
   const place = review?.location?.parcelAddress || review?.location?.address || input.address || "주소 미입력";
-  const siteArea = review?.parcel?.area || lookup?.siteArea || (input.siteArea > 0 ? input.siteArea : null);
+  const siteArea = review?.parcels && review.parcels.length > 1 && !review.parcel?.area
+    ? null : review?.parcel?.area || lookup?.siteArea || (input.siteArea > 0 ? input.siteArea : null);
   const landUse = review?.landUse.filter((item) => item.category === "용도지역") ?? [];
   const zones = [...new Set(landUse.map((item) => item.name))];
   const zone = review?.mixedUseZones ? zones.join(" / ") + " (혼합)" : zones[0] || lookup?.zone || (input.zone !== "미확인" ? input.zone : "미확인");

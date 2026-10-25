@@ -4,6 +4,7 @@ import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
+import { normalizeAssemblyAddresses } from "../../../lib/parcel-assembly";
 import { extractOrdinanceArticles, type OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
 
 type LawRecord = {
@@ -392,9 +393,7 @@ export async function POST(request: NextRequest) {
   };
 
   const parcels: ParcelReview[] = [{ inputAddress: address, location, parcel, landUse, errors: [] }];
-  const additionalAddresses = [...new Set((body?.parcelAddresses ?? []).map((item) => item.trim()).filter(Boolean))]
-    .filter((item) => item !== address)
-    .slice(0, 9);
+  const additionalAddresses = normalizeAssemblyAddresses(address, body?.parcelAddresses ?? []);
   const additionalReviews = await Promise.all(additionalAddresses.map(async (parcelAddress): Promise<ParcelReview> => {
     const parcelPreset = findSitePreset(parcelAddress);
     let additionalLandUse: ParcelReview["landUse"] = parcelPreset ? [{
@@ -435,9 +434,22 @@ export async function POST(request: NextRequest) {
   parcels.push(...additionalReviews);
   if (additionalReviews.length) {
     landUse = parcels.flatMap((item) => item.landUse).filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+    const seenPnus = new Set<string>();
+    let duplicatePnu = false;
+    for (const item of parcels) {
+      const pnu = item.parcel?.pnu;
+      if (pnu) {
+        if (seenPnus.has(pnu)) { duplicatePnu = true; item.errors.push("이미 포함된 동일 PNU 필지"); }
+        seenPnus.add(pnu);
+      }
+    }
+    const mainMunicipality = localGovernmentFromAddress(preset?.address ?? address);
+    const mixedJurisdiction = parcels.some(item => item.location && localGovernmentFromAddress(item.location.parcelAddress ?? item.location.address) !== mainMunicipality);
+    if (duplicatePnu) errors.push("합필 대상 필지 중 동일 PNU가 중복되므로 면적을 합산할 수 없습니다.");
+    if (mixedJurisdiction) errors.push("서로 다른 시·군·구 필지가 포함되어 관할 지자체·LH 인수기준을 일괄 적용할 수 없습니다.");
     const failedParcels = additionalReviews.filter((item) => item.errors.length);
     if (failedParcels.length) errors.push(`복수 필지 ${failedParcels.length}개 일부 조회 실패`);
-    if (parcels.every((item) => item.parcel?.area)) {
+    if (!duplicatePnu && !mixedJurisdiction && parcels.every((item) => item.parcel?.area && item.parcel.area > 0 && item.errors.length === 0)) {
       parcel = {
         area: parcels.reduce((sum, item) => sum + (item.parcel?.area ?? 0), 0),
         landCategory: [...new Set(parcels.map((item) => item.parcel?.landCategory).filter(Boolean))].join(" · ") || null,
@@ -445,6 +457,9 @@ export async function POST(request: NextRequest) {
         source: "복수 필지 개별 조회 합계",
         approximate: parcels.some((item) => item.parcel?.approximate),
       };
+    } else {
+      // Never leak the primary parcel area into a supposedly combined feasibility study.
+      parcel = null;
     }
   }
 
