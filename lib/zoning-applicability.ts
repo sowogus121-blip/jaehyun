@@ -18,7 +18,7 @@ export interface ZoningCandidate {
   needsDistrictPlanReview: boolean;
 }
 
-const ZONE_LABEL = /(?:제[123]종(?:전용|일반)주거지역|준주거지역|중심상업지역|일반상업지역|근린상업지역|유통상업지역|전용공업지역|일반공업지역|준공업지역|보전녹지지역|생산녹지지역|자연녹지지역)/g;
+const ZONE_LABEL = /(?:제[123]종(?:전용|일반)주거지역|준주거지역|중심상업지역|일반상업지역|근린상업지역|유통상업지역|전용공업지역|일반공업지역|준공업지역|보전녹지지역|생산녹지지역|자연녹지지역)/;
 
 function normalize(text: string) {
   return text.replace(/\s+/g, "");
@@ -30,7 +30,6 @@ export function suggestZoningRules(review: SiteReviewResult | null): ZoningCandi
     .filter((entry) => entry.category === "용도지역")
     .map((entry) => normalize(entry.name))
     .filter((name) => ZONE_LABEL.test(name)))];
-  ZONE_LABEL.lastIndex = 0;
   if (zones.length !== 1) return [];
   const zone = zones[0];
   const rows = review.ordinanceArticleCandidates ?? [];
