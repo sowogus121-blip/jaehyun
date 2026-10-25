@@ -438,3 +438,11 @@ a.law-reference-item:hover { background: #f2f7fa; border-color: #b4cbd8; }
   .efficiency-field { grid-template-columns: minmax(95px,1fr) 1fr auto; column-gap: 7px; padding: 12px 9px; }
   .efficiency-number input { width: 49px; }
 }
+
+
+.lh-evidence-preview { margin: 10px 0; border: 1px solid #d5e7e8; background: #f9fdfd; padding: 9px 12px; max-width: 860px; }
+.lh-evidence-preview summary { cursor: pointer; font-size: 12px; font-weight: 700; color: #326c76; }
+.lh-evidence-preview > div { max-height: 300px; overflow-y: auto; }
+.lh-evidence-preview > div p { border-bottom: 1px solid #e1edef; padding: 9px 0; margin: 0; font-size: 11px; }
+.lh-evidence-preview > div b { margin-right: 9px; color: #305f73; }
+.lh-evidence-preview small { display: block; font-size: 10px; color: #91613d; padding: 8px 0 2px; }
