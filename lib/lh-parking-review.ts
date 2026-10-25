@@ -61,7 +61,7 @@ export function getLhParkingReview(notice:LhNotice|null,input:ProjectInput):LhPa
       group("parking03-scope","0.3대 특례","세대당 0.3대 완화 대상",
         "전용 30㎡ 미만의 청년형 또는 고령자형",
         ["청년형: GTX 포함 도시철도역 출구 또는 대학교 교문 직선 500m 이내","고령자형: 공고상 입지 제한 없음","매입약정·공공주택 특별법 시행령 제37조제4항·허가권자 적용 확인"],"p.9",
-        !purchase || newlywed?"not-applicable":"conditional"),
+        !purchase || (input.lhSupplyType!=="undecided"&&!youth&&input.lhSupplyType!=="senior")?"not-applicable":"conditional"),
       group("parking03-community","0.3대 특례","0.3대 완화 시 추가 협의사항",
         "공공기여 방안 추가 제시 및 LH 협의",
         ["추가 공공기여의 구체적 범위·면적 협의","0.3대 특례 자동 승인 아님"],"p.9","design-guidance"),
