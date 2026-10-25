@@ -172,6 +172,7 @@ function ComparisonTable({ results, input }: { results: AlternativeResult[]; inp
     ["추정 높이", (r) => val(r.estimatedHeight, "m")],
     ["부대복리시설", (r) => val(r.amenityArea, "㎡")],
     ["조경면적", () => input.landscapeRatio > 0 && ready ? f(input.siteArea * input.landscapeRatio / 100) + "㎡ (가정)" : "의무율 미확인"],
+    ["LH 주차 가정 (미확정)", (r) => { const ratio = r.definition.useType === "apartment" ? input.lhApartmentParkingRatio : input.lhOfficetelParkingRatio; return ratio > 0 && ready ? Math.ceil(r.unitCount * ratio) + "대 (LH 기준 검증 전)" : "가정 미입력"; }],
     ["원 법정 / LH 요구", (r) => park(r, r.parking.originalLegalCount) + " / LH 인수기준 별도확인"],
     ["최종 계획주차", (r) => <b>{park(r, r.parking.finalCount)}</b>],
     ["주차 구성", (r) => !ready || !parkingKnown(r) ? "미산정" : `자주 ${r.parking.selfCount} · 기계 ${r.parking.mechanicalCount}`],
@@ -380,6 +381,7 @@ export default function Home() {
           baseFar: current.baseFar > 0 ? current.baseFar : automaticOrdinance.far,
           relaxedFar: current.relaxedFar > 0 ? current.relaxedFar : Math.round(automaticOrdinance.far * 1.2 * 100) / 100,
           maxFloors: current.maxFloors > 0 || current.maxHeight > 0 ? current.maxFloors : 10,
+          ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { mechanicalMaxRatio: Math.min(current.mechanicalMaxRatio, review.lhNotice.rules.mechanicalMaxPercent) } : {}),
         } : {}),
         ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { businessMode: "purchase" as const, regionalOffice: "경기북부지역본부" } : {}),
         ...(review.districtPlan !== null ? { districtPlan: review.districtPlan } : {}),
@@ -867,7 +869,7 @@ export default function Home() {
               <NumberField label="자주식 면적계수" value={input.selfParkingAreaPerCar} onChange={(v) => update("selfParkingAreaPerCar", v)} suffix="㎡/대" hint="계획 가정값" />
               <NumberField label="기계식 설비계수" value={input.mechanicalAreaPerCar} onChange={(v) => update("mechanicalAreaPerCar", v)} suffix="㎡/대" hint="형식별 재검토" />
               <Field label="0.3대 특례 승인상태" hint="승인 전에는 기본 주차대수를 적용"><select value={input.specialParkingApproval} onChange={(e) => update("specialParkingApproval", e.target.value as ProjectInput["specialParkingApproval"])}><option value="not-reviewed">미검토</option><option value="conditional">조건부 검토</option><option value="approved">공식 승인 확인</option><option value="rejected">적용 불가 확인</option></select></Field>
-            </div><div className="toggle-stack">
+            </div><div className="lh-parking-usage-hint">입력한 주차계수는 즉시 계산해. <b>법정계수</b>는 기본 주차대수로, <b>LH계수</b>는 공고·입지 검증 전까지 별도 가정 대수로 표시해. 법적 자동 확정은 하지 않아.</div><div className="toggle-stack">
               <Toggle checked={input.purchaseAgreementConfirmed} onChange={(v) => update("purchaseAgreementConfirmed", v)} label="공공주택사업자 매도약정 체결 원본 확인" note="예정 또는 신청 상태는 해당하지 않음"/>
               <Toggle checked={input.specialParkingUseScopeConfirmed} onChange={(v) => update("specialParkingUseScopeConfirmed", v)} label="오피스텔 등 해당 용도의 특례 대상 인정 확인" note="관할 허가권자/LH의 실제 적용범위 확인"/>
               <Toggle checked={input.specialParkingLhConfirmed} onChange={(v) => update("specialParkingLhConfirmed", v)} label="최신 LH 지역본부 공고 및 추가요건 확인" note="입지·공급유형 및 지역별 조건 포함"/>
