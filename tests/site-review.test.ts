@@ -110,4 +110,36 @@ describe("site review API", () => {
     expect(data.ruleFindings).toEqual([]);
     expect(data.status).toBe("partial");
   });
+
+  it("retrieves matching municipality ordinance articles but does not certify applicability", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("lawService.do")) {
+        return new Response(JSON.stringify({
+          자치법규: { 조문: [{ 조문번호: "10", 조제목: "건폐율", 조내용: "건폐율은 관계 법령에 따라 정한다." }] },
+        }));
+      }
+      const query = url.searchParams.get("query") ?? "건축 조례";
+      if (url.searchParams.get("target") === "ordin") {
+        const subject = query.includes("주차장") ? "주차장" : query.includes("도시계획") ? "도시계획" :
+          query.includes("경관") ? "경관" : "건축";
+        return new Response(JSON.stringify({ OrdinSearch: { resultCode: "00", ordin: [
+          { 자치법규명: `서울특별시 서초구 ${subject} 조례`, 지자체기관명: "서초구", 자치법규ID: "1234" },
+          { 자치법규명: `서울특별시 강남구 ${subject} 조례`, 지자체기관명: "강남구", 자치법규ID: "5678", 자치법규상세링크: "/ordin" },
+        ] } }));
+      }
+      return new Response(JSON.stringify({ LawSearch: { resultCode: "00", law: [
+        { 법령명한글: query, 시행일자: "20260101", 법령상세링크: "/law" },
+      ] } }));
+    }));
+
+    const response = await POST(request({ "x-law-api-oc": "test-oc" }, "서울특별시 강남구 테헤란로 1"));
+    const data = await response.json();
+    expect(data.ordinances).toHaveLength(4);
+    expect(data.ordinances.every((ordinance: { name: string }) => ordinance.name.includes("강남구"))).toBe(true);
+    expect(data.ordinanceArticleCandidates.length).toBeGreaterThan(0);
+    expect(data.ordinanceArticleCandidates.every((candidate: { verified: boolean }) => candidate.verified === false)).toBe(true);
+    expect(data.ruleFindings).toEqual([]);
+    expect(data.applicationAssessmentComplete).toBe(false);
+  });
 });
