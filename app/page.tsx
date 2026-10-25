@@ -5,6 +5,7 @@ import { ALTERNATIVES, DEFAULT_INPUT, calculateAll, resetSiteDependentInput } fr
 import { calculateReviewCompleteness, deriveCalculationContext } from "@/lib/regulatory-assessment";
 import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRuleForEditedField } from "@/lib/rule-application";
 import { screenParking03 } from "@/lib/lh-parking-screen";
+import { getLhParkingReview, type LhParkingReview } from "@/lib/lh-parking-review";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
@@ -279,6 +280,47 @@ function DecisionDashboardCard({dashboard,onShowLaw,onShowMassing,onShowLh}:{
   </section>;
 }
 
+
+function LhParkingAudit({analysis,input,results,ready,onLhTab}:{
+  analysis:LhParkingReview;input:ProjectInput;results:AlternativeResult[];
+  ready:boolean;onLhTab?:()=>void;
+}) {
+  const groups=["기계식 주차","0.3대 특례","기본 주차","설계·운영"] as const;
+  const youth=results.find(r=>r.definition.id==="B-1");
+  const preview=ready&&analysis.verifiedOriginal&&youth?Math.ceil(youth.unitCount*0.3):null;
+  return <section className="lh-parking-audit" aria-label="LH 공고 주차 조건 상세 검토">
+    <div className="lh-parking-audit-head"><div><span className="eyebrow">LH PARKING / MECHANICAL / RELAXATION</span>
+      <h3>LH 공고 주차·기계식·0.3대 특례 분석</h3>
+      <p>{analysis.noticeTitle??"해당 지역 LH 공식 공고 미확인"}</p></div>
+      <span className="lh-parking-audit-state">{analysis.verifiedOriginal?"공고 원문 "+analysis.clauses.length+"개 조건 확인":
+        analysis.noticeTitle?"PDF 문구 "+analysis.clauses.length+"개 · 검증 전":"공고 확인 필요"}</span></div>
+    {analysis.verifiedOriginal&&<div className="lh-parking-highlights">
+      <div><small>기계식 주차 한도</small><strong>50% 이하</strong><span>역 출구 500m · 허용 주택유형 조건부</span></div>
+      <div><small>150세대 미만</small><strong>20대 미만 우대</strong><span>무조건 금지선 아님</span></div>
+      <div><small>청년·고령자형</small><strong>0.3대/호</strong><span>전용 30㎡ 미만 · 입지·약정·협의 조건부</span></div>
+      <div><small>0.3대 + 기계식</small><strong>설치 지양</strong><span>원문은 금지가 아닌 지양</span></div></div>}
+    {analysis.clauses.length>0?<div className="lh-parking-clause-groups">{groups.map(category=>{
+      const clauses=analysis.clauses.filter(c=>c.category===category);
+      if(!clauses.length)return null;
+      return <div key={category} className="lh-parking-group"><div className="lh-parking-group-label"><b>{category}</b><small>{clauses.length}건</small></div>
+        {clauses.map(item=><details className="lh-parking-clause" key={item.id}>
+          <summary><span><b>{item.title}</b><small>{item.detail}</small></span>
+            <em>{item.status==="extracted-unverified"?"미검증 원문후보":item.applicability==="not-applicable"?"현 입력조건 제외":item.applicability==="design-guidance"?"LH 설계·운영":"조건부 검토"}</em>
+          </summary>
+          <div><p>{item.status==="source-verified"?"공고 조항 확인 · 현 대지 적용성 별도":"원문 자동추출 · 적용조건 대조 전"}{item.sourcePage?" · "+item.sourcePage:""}</p>
+            <ul>{item.conditions.map((condition,index)=><li key={index}>{condition}</li>)}</ul>
+            {item.sourceUrl&&<a target="_blank" rel="noopener noreferrer" href={item.sourceUrl}>LH 공식 공고문 PDF ↗</a>}</div>
+        </details>)}</div>;
+    })}</div>:<div className="lh-parking-no-source"><b>원문 주차 조항 분석 미완료</b><p>다른 지역의 50%·0.3대 기준을 임의로 적용하지 않았어. 최신 공고·가이드라인을 확인해야 해.</p></div>}
+    {analysis.verifiedOriginal&&<div className="lh-parking-preview"><div><b>청년형 25㎡ · 0.3대 특례 가정</b>
+      <p>{preview!==null?"B-1 "+youth?.unitCount+"호실일 때 특례 적용 가정: 최소 "+preview+"대":"규모 산정 후 조건부 주차대수를 표시해."}</p>
+      <small>공공주택법령·LH 매입약정·입지·공공기여 확인 전이므로 기본 법정주차대수를 자동 대체하지 않아.</small></div>
+      {onLhTab&&<button type="button" className="button ghost" onClick={onLhTab}>특례 조건 입력</button>}</div>}
+    <div className="lh-parking-audit-footer"><span>LH 매입 인수조건과 건축허가 주차기준은 별개이며 공고 조항 확인이 적용 승인이라는 뜻은 아니야.</span>
+      {analysis.sourceUrl&&<a href={analysis.sourceUrl} target="_blank" rel="noopener noreferrer">공고 원문 ↗</a>}</div>
+  </section>;
+}
+
 function ComparisonTable({ results, input }: { results: AlternativeResult[]; input: ProjectInput }) {
   const check = getMassingReadiness(input);
   const ready = check.canEstimateUnits;
@@ -378,6 +420,7 @@ export default function Home() {
   const preliminaryLimits = getPreliminaryOrdinanceInputs(legalReport.rows);
   const lhNotice = reviewData?.lhNotice ?? null;
   const lhRules = lhNotice?.rules ?? null;
+  const lhParkingAudit=useMemo(()=>getLhParkingReview(lhNotice,input),[lhNotice,input]);
   const exampleRelaxedFar = preliminaryLimits ? Math.round(preliminaryLimits.far * 1.2 * 100) / 100 : null;
   const readiness = getMassingReadiness(input);
   const formattedReviewDate = new Date().toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -757,6 +800,7 @@ export default function Home() {
 
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
           {reviewData && <DecisionDashboardCard dashboard={decisionDashboard} onShowLaw={()=>setActiveTab(1)} onShowMassing={()=>setActiveTab(3)} onShowLh={()=>setActiveTab(2)} />}
+          {reviewData && <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} onLhTab={()=>setActiveTab(2)} />}
           <div className="summary-strip">
             <Metric label="대지면적" value={input.siteArea > 0 ? f(input.siteArea) : "—"} suffix="㎡" sub="사용자 입력" />
             <Metric label="적용 용적률" value={appliedFar > 0 ? appliedFar : "—"} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
@@ -1058,6 +1102,7 @@ export default function Home() {
 
         {activeTab === 2 && <>
           <SectionHeader eyebrow="03 · LH GUIDELINE" title="LH 기준 및 특례 검토" description="LH 직접건설과 민간 신축매입약정 기준을 혼용하지 않고 사업방식별로 판단합니다." />
+          <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} />
           <div className="notice navy"><Icon name="lh" /><div><b>{input.businessMode === "purchase" ? "민간 신축매입약정 검토 모드" : input.businessMode === "direct" ? "LH 직접건설 검토 모드" : "사업방식 미정 · 특례 확정 적용 보류"}</b><span>지역본부: {input.regionalOffice} · 최신 공고문 및 설계·시공 가이드라인 원문 연결 필요</span></div></div>
           {lhNotice && <section className="lh-rule-sheet">
             <div><strong>{lhNotice.title}</strong><span>공식 지역본부 공고 · {lhNotice.publishedAt} · <a href={lhNotice.url} target="_blank" rel="noopener noreferrer">원문 ↗</a></span></div>
