@@ -667,7 +667,7 @@ export default function Home() {
                 <span>최대 {MAX_EXTRA_PARCELS}개까지 계속 추가 가능</span></div>
               <details className="assembly-bulk-entry"><summary>여러 지번 한꺼번에 붙여넣기 / 편집</summary>
                 <textarea aria-label="합필 필지 일괄 입력" rows={5} value={input.parcelList}
-                  onChange={event=>update("parcelList",splitAssemblyAddresses(event.target.value).join("\n"))}
+                  onChange={event=>update("parcelList",event.target.value)}
                   placeholder={"가능동 72-5\n75-2\n가능동 70-1"} />
                 <small>줄바꿈, 쉼표(,), 더하기(+)로 구분 가능. 같은 시·군·구 이외 필지는 전체 주소를 입력해 줘.</small>
               </details>
