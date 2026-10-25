@@ -71,6 +71,16 @@ describe("LH Plan Lab calculation engine", () => {
     expect(getEvidenceStatus(false, true)).toBe("user");
   });
 
+  it("uses an available floor limit without treating unknown height as zero", () => {
+    const provisional = calculateAlternative({ ...EXAMPLE_INPUT, maxHeight: 0, maxFloors: 12 }, ALTERNATIVES[0]);
+    expect(provisional.unitCount).toBeGreaterThan(0);
+    expect(provisional.legalMaxFloors).toBe(12);
+    expect(provisional.eligibility).not.toBe("eligible");
+    expect(provisional.conditionalReasons.some((reason) => reason.includes("최고층수 또는 최고높이"))).toBe(true);
+    const noLimits = calculateAlternative({ ...EXAMPLE_INPUT, maxHeight: 0, maxFloors: 0 }, ALTERNATIVES[0]);
+    expect(noLimits.unitCount).toBe(0);
+  });
+
   it("starts a new project without carrying over a demo site's legal values", () => {
     expect(DEFAULT_INPUT.address).toBe("");
     expect(DEFAULT_INPUT.siteArea).toBe(0);
