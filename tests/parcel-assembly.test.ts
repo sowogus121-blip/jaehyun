@@ -46,7 +46,7 @@ describe("hypothetical merged-lot feasibility",()=>{
     expect(result?.weightedCandidate?.smallestZoneArea).toBe(200);
     expect(result?.weightedCandidate?.farArea).toBe(4267.5);
     expect(result?.canPreviewWeighted).toBe(true);
-    expect(result?.notes.some(n=>n.includes("인허가")||n.includes("적용"))).toBe(true);
+    expect(result?.notes.some(n=>n.includes("가중평균")||n.includes("법적"))).toBe(true);
   });
   it("does not offer national Article 84 weighted shortcut when minor zone exceeds 330sqm",()=>{
     const result=assessParcelAssembly(study([
