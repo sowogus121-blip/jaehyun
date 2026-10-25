@@ -231,8 +231,12 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const maxBuildableArea = Math.min(input.siteArea * input.buildingCoverageRatio / 100, buildableSite);
   const plannedBuildingArea = maxBuildableArea * input.floorPlateRatio / 100;
   const floorHeight = definition.useType === "apartment" ? input.apartmentFloorHeight : input.officetelFloorHeight;
-  const heightFloors = input.maxHeight > 1.2 ? Math.floor((input.maxHeight - 1.2) / floorHeight) : 0;
-  const legalMaxFloors = input.maxFloors > 0 && heightFloors > 0 ? Math.min(input.maxFloors, heightFloors) : 0;
+  // Unknown height is not a legal zero-height restriction. Calculate from
+  // the known constraint, while keeping the missing constraint conditional.
+  const heightFloors = input.maxHeight > 1.2 ? Math.floor((input.maxHeight - 1.2) / floorHeight) : null;
+  const legalMaxFloors = input.maxFloors > 0
+    ? (heightFloors === null ? input.maxFloors : Math.min(input.maxFloors, heightFloors))
+    : (heightFloors ?? 0);
   const farLimitArea = input.siteArea * appliedFar / 100;
   const envelopeArea = plannedBuildingArea * legalMaxFloors;
   const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER);
@@ -268,6 +272,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
     else if (context.mechanicalParkingEligibility !== "eligible") conditionalReasons.push("기계식주차 법적 허용·LH 인수기준 미확인");
   }
   if (context.planningEvidence !== "verified") conditionalReasons.push("건폐율·용적률·높이 확정 근거 미확보");
+  if (input.maxFloors <= 0 || input.maxHeight <= 0) conditionalReasons.push("최고층수 또는 최고높이 미확인 · 확보한 제한값만으로 개략 산정");
   if (parking.originalLegalRatio <= 0) conditionalReasons.push("법정 주차계수 미확인");
 
   const eligibility = blockingReasons.length > 0
