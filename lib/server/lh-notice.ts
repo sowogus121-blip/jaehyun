@@ -152,8 +152,11 @@ async function extractUnverifiedLhPdfClauses(pdfUrl:string):Promise<NonNullable<
   if(bytes[0]!==37||bytes[1]!==80||bytes[2]!==68||bytes[3]!==70)return [];
   const doc=new File([bytes],"latest-lh-regional-notice.pdf",{type:"application/pdf"});
   const analysis=await parseUploadedDocument(doc);
-  return analysis.candidates.filter(c=>/매입약정|전용|주차|기계식|청년|신혼|의무|완화|커뮤니티|용적률|건폐율/.test(c.quote))
-    .slice(0,14).map(c=>({topic:c.topic,quote:c.quote,value:c.value,unit:c.unit,verified:false as const}));
+  // Parking and mechanical standards occur late in many 2026 PDFs. Never
+  // truncate to the first 14 generic clauses (mostly type/size conditions).
+  const ranked=analysis.candidates.filter(c=>/매입약정|전용|주차|기계식|청년|신혼|의무|완화|커뮤니티|용적률|건폐율|주택/.test(c.quote));
+  ranked.sort((a,b)=>Number(/주차|기계식|0[.]3|승강기|카리프트|역세권/.test(b.quote))-Number(/주차|기계식|0[.]3|승강기|카리프트|역세권/.test(a.quote)));
+  return ranked.slice(0,55).map(c=>({topic:c.topic,quote:c.quote,value:c.value,unit:c.unit,verified:false as const}));
 }
 
 export async function findLatestLhPurchaseNotice(district:string,regionContext=""):Promise<LhNotice|null> {
