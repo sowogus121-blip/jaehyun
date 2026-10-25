@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
   styleHeader(inputs.getRow(1));
   const inputRows: Array<[string, string | number | boolean, string]> = [
     ["사업명", body.input.projectName, "사용자 입력"],
+    ["공동주택 전용률", body.input.apartmentEfficiency ?? 75, "% · 기본 75% / 사용자 변경 가능"],
+    ["오피스텔 전용률", body.input.officetelEfficiency ?? 45, "% · 기본 45% / 사용자 변경 가능"],
     ["주소", body.input.address, "대상지"],
     ["대지면적", body.input.siteArea, "㎡"],
     ["건폐율 상한", body.input.buildingCoverageRatio, "%"],
