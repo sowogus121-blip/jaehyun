@@ -136,6 +136,37 @@ describe("site review API", () => {
     expect(data.status).toBe("partial");
   });
 
+  it("queries enacted municipal ordinance names without the province prefix", async () => {
+    const searched: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const query = url.searchParams.get("query") || "";
+      if (url.searchParams.get("target") === "ordin") {
+        searched.push(query);
+        if (query.startsWith("경기도 ")) {
+          return new Response(JSON.stringify({ OrdinSearch: { resultCode: "00", ordin: [] } }));
+        }
+        return new Response(JSON.stringify({ OrdinSearch: { resultCode: "00", ordin: [{
+          자치법규명: query, 지자체기관명: "경기도 의정부시",
+          자치법규ID: "10001", 자치법규상세링크: "/ordin",
+        }] } }));
+      }
+      if (url.pathname.includes("lawService")) {
+        return new Response(JSON.stringify({ 자치법규: { 조문: [] } }));
+      }
+      return new Response(JSON.stringify({ LawSearch: { resultCode: "00", law: [] } }));
+    }));
+    const response = await POST(request({ "x-law-api-oc": "test-oc" }));
+    const data = await response.json();
+    expect(searched).toContain("의정부시 도시계획 조례");
+    expect(searched).toContain("의정부시 주차장 설치 및 관리 조례");
+    expect(searched.every((query) => !query.startsWith("경기도 "))).toBe(true);
+    expect(data.ordinances).toHaveLength(4);
+    expect(data.ordinances.every((v: { localGovernment: string }) =>
+      v.localGovernment === "경기도 의정부시")).toBe(true);
+    expect(data.applicationAssessmentComplete).toBe(false);
+  });
+
   it("retrieves matching municipality ordinance articles but does not certify applicability", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));
@@ -149,8 +180,8 @@ describe("site review API", () => {
         const subject = query.includes("주차장") ? "주차장" : query.includes("도시계획") ? "도시계획" :
           query.includes("경관") ? "경관" : "건축";
         return new Response(JSON.stringify({ OrdinSearch: { resultCode: "00", ordin: [
-          { 자치법규명: `서울특별시 서초구 ${subject} 조례`, 지자체기관명: "서초구", 자치법규ID: "1234" },
-          { 자치법규명: `서울특별시 강남구 ${subject} 조례`, 지자체기관명: "강남구", 자치법규ID: "5678", 자치법규상세링크: "/ordin" },
+          { 자치법규명: `서초구 ${subject} 조례`, 지자체기관명: "서울특별시 서초구", 자치법규ID: "1234" },
+          { 자치법규명: `강남구 ${subject} 조례`, 지자체기관명: "서울특별시 강남구", 자치법규ID: "5678", 자치법규상세링크: "/ordin" },
         ] } }));
       }
       return new Response(JSON.stringify({ LawSearch: { resultCode: "00", law: [
