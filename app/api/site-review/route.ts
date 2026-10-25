@@ -151,8 +151,18 @@ async function geocode(address: string, key: string, domain: string) {
     try {
       const data = await fetchJson(`https://api.vworld.kr/req/search?${params.toString()}`);
       assertVWorldResponse(data);
-      const item = data?.response?.result?.items?.[0];
-      if (!item?.point?.x || !item?.point?.y) continue;
+      const items = (data?.response?.result?.items ?? []) as Array<{point?:{x?:number|string;y?:number|string};address?:{road?:string;parcel?:string};title?:string}>;
+      // A postcode/parcel query can return a nearby address as its first VWorld hit.
+      // Never infer geometry and FAR for a *different cadastral lot*.
+      const lotNumber = address.match(/(?:동(?:\d+가)?|가|읍|면|리)\s+(\d+(?:-\d+)?)$/)?.[1];
+      const item = lotNumber
+        ? items.find(candidate => candidate.address?.parcel?.match(/(\d+(?:-\d+)?)$/)?.[1] === lotNumber &&
+            candidate.point?.x && candidate.point?.y)
+        : items.find(candidate => candidate.point?.x && candidate.point?.y);
+      if (!item?.point?.x || !item?.point?.y) {
+        if (lotNumber && items.length) lastError = new Error(`VWorld 조회 결과에 요청 지번 ${lotNumber}이 없습니다. 인접 필지가 대신 조회되어 면적·법규 합산을 차단했습니다.`);
+        continue;
+      }
       return {
         address: item.address?.road || item.address?.parcel || item.title,
         parcelAddress: item.address?.parcel || null,
@@ -340,6 +350,15 @@ async function fetchOrdinanceArticleCandidates(ordinance: OrdinanceRecord, oc: s
   return extractOrdinanceArticles(data, ordinance.name, ordinance.link);
 }
 
+function lawGovernmentFromAddress(address: string) {
+  const parts = localGovernmentFromAddress(address).split(/\s+/).filter(Boolean);
+  // Ordinances are normally enacted by Changwon-si, Suwon-si etc.,
+  // not their Seongsan-gu / Yeongtong-gu subdistricts.
+  if (parts.length >= 3 && parts[1]?.endsWith("시") && parts[2]?.endsWith("구"))
+    return parts.slice(0,2).join(" ");
+  return parts.join(" ");
+}
+
 function localGovernmentFromAddress(address: string) {
   const parts = address.split(/\s+/).filter(Boolean);
   if (parts[0]?.includes("세종")) return parts[0];
@@ -477,7 +496,7 @@ export async function POST(request: NextRequest) {
   const mixedUseZones = zoneNames.length > 1;
   const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
   const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
-  const localGovernment = localGovernmentFromAddress(preset?.address ?? address);
+  const localGovernment = lawGovernmentFromAddress(preset?.address ?? address);
   const districtForLh = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? "";
   const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh, localGovernment)
     .then((notice) => ({ notice, error: null as string | null }))
