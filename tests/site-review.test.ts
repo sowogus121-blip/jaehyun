@@ -65,6 +65,32 @@ describe("site review API", () => {
     expect(d.errors.join(" ")).toContain("인접 필지가 대신 조회");
   });
 
+  it("queries governing metro AND borough ordinances for Busan Seo-gu without cross-district contamination", async()=>{
+    vi.stubGlobal("fetch",vi.fn(async (input: string | URL | Request)=>{
+      const url=new URL(String(input));
+      if(url.pathname.includes("/req/search"))return new Response(JSON.stringify({response:{status:"OK",result:{items:[
+        {address:{parcel:"부산광역시 서구 동대신동1가 10-1"},point:{x:"129.02",y:"35.12"}}
+      ]}}}));
+      if(url.pathname.includes("/req/data"))return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[]}}}}));
+      if(url.pathname.includes("/lawSearch") && url.searchParams.get("target")==="ordin"){
+        const query=url.searchParams.get("query")??"";
+        return new Response(JSON.stringify({OrdinSearch:{resultCode:"00",ordin:[
+          {자치법규명:query,지자체기관명:query.startsWith("부산광역시 서구")?"부산광역시 서구":"부산광역시",자치법규상세링크:"/ordinInfoP.do?ordinSeq=1234"},
+          {자치법규명:"대구광역시 서구 도시계획 조례",지자체기관명:"대구광역시 서구",자치법규상세링크:"/ordinInfoP.do?ordinSeq=8888"}
+        ]}}));
+      }
+      if(url.pathname.includes("/lawSearch"))return new Response(JSON.stringify({LawSearch:{resultCode:"00",law:[]}}));
+      return new Response(JSON.stringify({resultCode:"00"}));
+    }));
+    const res=await POST(request({"x-law-api-oc":"unit-test","x-vworld-api-key":"test-key"},"부산광역시 서구 동대신동1가 10-1"));
+    const data=await res.json();
+    const names=(data.ordinances||[]).map((r:{name:string})=>r.name);
+    expect(names).toContain("부산광역시 도시계획 조례");
+    expect(names).toContain("부산광역시 주차장 설치 및 관리 조례");
+    expect(names).toContain("부산광역시 서구 건축 조례");
+    expect(names).not.toContain("대구광역시 서구 도시계획 조례");
+  });
+
   it("requests a parcel address category and returns VWorld coordinates", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
