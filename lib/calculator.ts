@@ -162,7 +162,7 @@ export function isSpecialParkingEligible(input: ProjectInput, definition: Altern
   return definition.useType === "officetel" && definition.exclusiveArea < 30 && input.businessMode === "purchase" && input.specialParkingEnabled;
 }
 
-export function calculateParking(input: ProjectInput, definition: AlternativeDefinition, units: number): ParkingResult {
+export function calculateParking(input: ProjectInput, definition: AlternativeDefinition, units: number, context: CalculationContext = DEFAULT_CALCULATION_CONTEXT): ParkingResult {
   const originalLegalRatio = definition.useType === "apartment" ? input.apartmentParkingRatio : input.officetelParkingRatio;
   const lhRatio = definition.useType === "apartment" ? input.lhApartmentParkingRatio : input.lhOfficetelParkingRatio;
   const screening = screenParking03(input, definition);
@@ -180,7 +180,8 @@ export function calculateParking(input: ProjectInput, definition: AlternativeDef
   const legalRatio = specialApplied && relaxedRatio !== null ? relaxedRatio : originalLegalRatio;
   const legalCount = specialApplied && relaxedCount !== null ? relaxedCount : originalLegalCount;
   const appliedRatio = units > 0 ? finalCount / units : 0;
-  const mechanicalUsable = definition.parkingMode === "mechanical" && input.mechanicalAllowed;
+  const mechanicalUsable = definition.parkingMode === "mechanical" && input.mechanicalAllowed &&
+    !(context.lhPurchaseMechanicalRestrictedToOfficetelOrUrban && definition.useType === "apartment");
   const accessibleCount = finalCount > 0 ? Math.max(1, ceil(finalCount * 0.03)) : 0;
   const evCount = finalCount > 0 ? Math.max(1, ceil(finalCount * 0.05)) : 0;
   const mechanicalCount = mechanicalUsable
@@ -259,7 +260,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const farCountedArea = grossResidentialArea + amenityArea + equipmentArea;
   const recommendedFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / plannedBuildingArea)) : 0;
   const estimatedHeight = recommendedFloors > 0 ? 1.2 + recommendedFloors * floorHeight : 0;
-  const parking = calculateParking(input, definition, unitCount);
+  const parking = calculateParking(input, definition, unitCount, context);
   const belowGroundArea = farCountedArea > 0 ? parking.area + Math.max(60, farCountedArea * 0.025) : 0;
   const totalFloorArea = farCountedArea + belowGroundArea;
   const physicalMaxFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(envelopeArea / plannedBuildingArea)) : 0;
@@ -276,6 +277,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   else if (lhEligibility === "unknown") conditionalReasons.push("LH 사업·매입 가능 여부 미확인");
   else if (lhEligibility === "conditional") conditionalReasons.push("LH 사업·매입 조건부");
   if (definition.parkingMode === "mechanical") {
+    if (context.lhPurchaseMechanicalRestrictedToOfficetelOrUrban && definition.useType === "apartment") blockingReasons.push("LH 현행 경기북부 4차 공고: 기계식은 주거용 오피스텔·도시형생활주택 요건이며 일반 공동주택 A-2는 대상이 아님");
     if (context.mechanicalParkingEligibility === "ineligible") blockingReasons.push("기계식주차 적용 불가");
     else if (context.mechanicalParkingEligibility !== "eligible") conditionalReasons.push("기계식주차 법적 허용·LH 인수기준 미확인");
   }
