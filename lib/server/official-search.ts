@@ -45,7 +45,7 @@ function isOfficialUrl(value: string) {
 function buildQueries(context: SearchContext) {
   const local = context.localGovernment || context.address;
   return [
-    `${local} ${context.address} 지구단위계획 결정 고시 시행지침`,
+    `${context.address.startsWith(local) ? context.address : `${local} ${context.address}`} 지구단위계획 결정 고시 시행지침`,
     `${local} 건축조례 주차장조례 도시계획조례 별표`,
     `${local} 공공주택 용적률 완화 역세권 인센티브 고시`,
     `LH ${context.regionalOffice || local} ${context.businessMode === "purchase" ? "신축매입약정" : "공공임대주택"} 공고 설계지침`,
