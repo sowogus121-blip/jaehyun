@@ -65,7 +65,7 @@ export function buildDecisionDashboard(
   const inputIsUserDefined=Boolean(input.buildingCoverageRatio>0 && input.baseFar>0);
   const bcr=input.buildingCoverageRatio>0?input.buildingCoverageRatio:ordinary?.bcr??0;
   const far=input.baseFar>0?input.baseFar:ordinary?.far??0;
-  const floors=input.maxFloors>0?input.maxFloors:input.maxHeight>0?0:10;
+  const floors=input.maxFloors>0?input.maxFloors:input.maxHeight>0?Math.max(1,Math.floor((input.maxHeight-1.2)/3.3)):10;
   const applicableBase=area!==null && area>0 && bcr>0 && far>0 && floors>0;
   const blockers:string[]=[];
   if(!review)blockers.push("주소를 입력하고 공식자료 통합검토를 실행해 줘.");
@@ -92,7 +92,7 @@ export function buildDecisionDashboard(
   }
   const assumptions=[
     "건폐율·용적률은 확인된 조례 일반기준 또는 사용자가 입력한 가정이며, 지구단위·완화 상한 적용확정 전",
-    input.maxFloors>0?"층수는 사용자 계획 가정":input.maxHeight>0?"최고높이 입력값으로만 층수 환산":"지상 10층 가정 · 허가 가능한 최고층수 아님",
+    input.maxFloors>0?"층수는 사용자 계획 가정":input.maxHeight>0?"사용자 최고높이를 층고 3.3m로 환산한 시험 층수":"지상 10층 가정 · 허가 가능한 최고층수 아님",
     "대지형상·접도·건축선·일조·코어·피난·소방의 상세 건축배치 미반영",
     "주차계수가 없는 경우 주차대수는 '미산정'이며 0대 허용을 의미하지 않음",
   ];
@@ -102,7 +102,7 @@ export function buildDecisionDashboard(
       ...input,siteArea:area!,buildingCoverageRatio:bcr,baseFar:far,
       relaxedFar:input.useRelaxedFar?input.relaxedFar:0,
       useRelaxedFar:input.useRelaxedFar&&input.relaxedFar>0,
-      maxFloors:input.maxFloors>0?input.maxFloors:input.maxHeight>0?0:10,
+      maxFloors:input.maxFloors>0?input.maxFloors:input.maxHeight>0?floors:10,
     };
     estimates=calculateAll(trial,deriveCalculationContext(review,trial));
   }
