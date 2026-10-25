@@ -7,6 +7,7 @@ import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRule
 import { screenParking03 } from "@/lib/lh-parking-screen";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
+import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
@@ -191,6 +192,7 @@ export default function Home() {
   const [reviewRuleValue, setReviewRuleValue] = useState("");
   const [lookupDetails, setLookupDetails] = useState<SiteLookupDetails | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [scenarioFloors, setScenarioFloors] = useState(10);
   const [apiPanelMessage, setApiPanelMessage] = useState("서버에 등록된 API 키로 통합 법규검토를 실행할 수 있습니다. 아래 입력은 로컬 진단용입니다.");
   const uploadRef = useRef<HTMLInputElement>(null);
   const projectImportRef = useRef<HTMLInputElement>(null);
@@ -220,6 +222,9 @@ export default function Home() {
   const activeRules = activeReviewedRules(input, reviewedRules);
   const autoZoningCandidates = suggestZoningRules(reviewData);
   const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules), [input, reviewData, lookupDetails, activeRules]);
+  const preliminaryLimits = getPreliminaryOrdinanceInputs(legalReport.rows);
+  const readiness = getMassingReadiness(input);
+  const formattedReviewDate = new Date().toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
   const parking03 = screenParking03(input, ALTERNATIVES[2]);
   const selectedSource = reviewCandidateIndex === null ? null : reviewData?.ordinanceArticleCandidates?.[reviewCandidateIndex] ?? null;
   const results = useMemo(() => calculateAll(input, calculationContext), [input, calculationContext]);
@@ -248,6 +253,10 @@ export default function Home() {
   }, [input, documents, reviewData, reviewedRules, lookupDetails]);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeTab]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(""), 4200);
     return () => window.clearTimeout(timer);
@@ -263,6 +272,27 @@ export default function Home() {
     }));
     setReviewedRules((current) =>
       key === "parcelList" || key === "multipleParcels" ? [] : removeRuleForEditedField(current, key));
+  };
+
+  const startPreliminaryScenario = () => {
+    if (!preliminaryLimits || !reviewData) {
+      setToast("관할 도시계획조례의 해당 용도지역 건폐율·용적률 일반기준 원문부터 확인해 주세요.");
+      return;
+    }
+    if (!Number.isInteger(scenarioFloors) || scenarioFloors < 1 || scenarioFloors > 60) {
+      setToast("예비 계획 층수는 1~60층 범위에서 입력해 주세요.");
+      return;
+    }
+    setInput((current) => ({
+      ...current,
+      buildingCoverageRatio: preliminaryLimits.bcr,
+      baseFar: preliminaryLimits.far,
+      useRelaxedFar: false,
+      maxFloors: scenarioFloors,
+    }));
+    setReviewedRules((current) => current.filter((rule) => !["buildingCoverageRatio", "baseFar", "maxFloors"].includes(rule.field)));
+    setToast("조례 일반기준과 가정 층수로 예비 규모를 계산했어. 주차계수·높이·LH 적합성은 미확정이야.");
+    setActiveTab(3);
   };
 
   const applyReviewedFinding = () => {
@@ -371,9 +401,7 @@ export default function Home() {
           zone: `${details.zone} (공식문서 확인)`,
           districtPlan: details.districtPlan,
           roadWidth: details.planningRoadWidth,
-          buildingCoverageRatio: details.buildingCoverageRatioAssumption,
-          baseFar: details.farAssumption,
-          relaxedFar: details.farAssumption,
+          // Preset assumptions are context only; never silently apply to calculations.
           useRelaxedFar: false,
         } : {}),
       }));
@@ -589,6 +617,17 @@ export default function Home() {
                 <button type="button" className="button dark" onClick={exportExcel}>엑셀 내려받기</button>
               </div>
             </div>
+            <div className="preliminary-shortcut">
+              <div>
+                <b>건축개요까지 빠르게 확인하기</b>
+                <span>{preliminaryLimits
+                  ? "관할 조례 일반기준 건폐율 " + preliminaryLimits.bcr + "% · 용적률 " + preliminaryLimits.far + "%를 예비 가정으로 사용"
+                  : "대상 용도지역의 조례 수치가 확인되면 개략 규모를 계산할 수 있어."}</span>
+                <small>최고층수는 직접 가정하는 값이며 지구단위계획·일조·주차·LH 인수 조건을 확정하지 않아.</small>
+              </div>
+              <label>가정 층수 <input type="number" aria-label="예비 계획 층수" min="1" max="60" step="1" value={scenarioFloors} onChange={(e) => setScenarioFloors(Number(e.target.value) || 0)} />층</label>
+              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData} onClick={startPreliminaryScenario}>조건부 4개안 계산 <Icon name="chevron" size={15}/></button>
+            </div>
             <div className="law-report-stats">
               <div><span>대상지</span><strong>{input.address || "주소 입력 필요"}</strong><small>검토 대상</small></div>
               <div><span>대지면적</span><strong>{legalReport.area ? f(legalReport.area) + "㎡" : "미확인"}</strong><small>지적 자료 기준</small></div>
@@ -645,7 +684,8 @@ export default function Home() {
           </section>
           <div className="review-overview"><div><span className="overview-icon navy"><Icon name="database" /></span><span><b>{12 + (reviewData?.laws.length ?? 0) + (reviewData?.ordinances?.length ?? 0) + (reviewData?.landUse.length ?? 0)}</b><small>검토 항목</small></span></div><div><span className="overview-icon green"><Icon name="check" /></span><span><b>{(reviewData?.laws.length ?? 0) + (reviewData?.ordinances?.length ?? 0) + (reviewData?.landUse.length ?? 0) + (reviewData?.location ? 1 : 0) + (reviewData?.parcel ? 1 : 0)}</b><small>공식자료 위치 확인</small></span></div><div><span className="overview-icon blue"><Icon name="save" /></span><span><b>{reviewCompleteness}%</b><small>근거 기반 완성도</small></span></div><div><span className="overview-icon orange"><Icon name="alert" /></span><span><b>{reviewData?.unresolved.length ?? 8}</b><small>확인 필요</small></span></div></div>
           {!reviewData ? <div className="notice danger"><Icon name="alert" /><div><b>공식자료 조사가 아직 실행되지 않았습니다.</b><span>대상지 입력 화면에서 ‘전국 통합 자동검토’를 실행해 주세요.</span></div></div> : <div className={`notice ${reviewData.applicationAssessmentComplete ? "success" : "amber"}`}><Icon name={reviewData.applicationAssessmentComplete ? "check" : "alert"} /><div><b>{reviewData.applicationAssessmentComplete ? "조항 근거를 포함한 적용판정을 완료했습니다." : "공식자료 위치는 확인했지만 조항·별표 적용판정은 아직 완료되지 않았습니다."}</b><span>확인시각 {new Date(reviewData.checkedAt).toLocaleString("ko-KR")} · 법령 검색 성공과 대상지 적용판정을 구분합니다.</span></div></div>}
-          {reviewData && <section className="card official-results-card">
+          {reviewData && <details className="card official-results-card raw-evidence-details">
+            <summary className="raw-evidence-summary"><b>원문 검색자료·개별 조항 상세 열기</b><span>국가법령 {reviewData.laws.length}건 · 조례 {reviewData.ordinances.length}건 · 관련 조항 {reviewData.ordinanceArticleCandidates?.length ?? 0}건 · 상세검색은 필요할 때만</span></summary>
             <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식자료 확인 결과</h3><p>VWorld·국가법령정보센터 응답과 업로드 공식문서 확인값을 함께 표시합니다.</p></div><button className="button ghost" disabled={isReviewing} onClick={runSiteReview}>다시 조회</button></div>
             {reviewData.location && <div className="verified-location"><Badge status="verified" /><span><b>{reviewData.location.address}</b><small>{reviewData.location.parcelAddress || "지번주소 없음"} · 좌표 {reviewData.location.x}, {reviewData.location.y}</small></span></div>}
             {reviewData.parcel && <div className="official-group"><h4>필지 자동조회</h4><div className="official-row"><Badge status="verified" /><b>{reviewData.parcel.area ? `${f(reviewData.parcel.area)}㎡` : "면적 미확보"}</b><span>{reviewData.parcel.landCategory ? `지목 ${reviewData.parcel.landCategory} · ` : ""}{reviewData.parcel.source}{reviewData.parcel.pnu ? ` · PNU ${reviewData.parcel.pnu}` : ""}</span><code>{reviewData.parcel.approximate ? "도형 개략" : "공식값"}</code></div></div>}
@@ -743,13 +783,14 @@ export default function Home() {
             {(reviewData.webSearch?.results?.length ?? 0) > 0 && <div className="official-group"><h4>공식 웹 후속검색 · 원문 후보</h4>{reviewData.webSearch.results.map((result) => <a className="official-row" href={result.url} target="_blank" rel="noreferrer" key={result.url}><Badge status="review" /><b>{result.title}</b><span>{result.sourceDomain} · 본문 분석 전</span><em>원문 ↗</em></a>)}</div>}
             {(reviewData.missing.length > 0 || reviewData.errors.length > 0) && <div className="api-errors">{reviewData.missing.map((name) => <span key={name}><Icon name="alert" size={13} /> {name} 연결 필요</span>)}{reviewData.errors.map((error) => <span key={error}><Icon name="alert" size={13} /> {error}</span>)}</div>}
             <div className="unresolved-list"><h4>별도 원문 확인사항</h4>{reviewData.unresolved.map((item) => <span key={item}>{item}</span>)}</div>
-          </section>}
-          <div className="reg-grid">{regulationGroups.map((group) => <section className="card regulation-card" key={group.title}><div className="reg-title"><span><Icon name={group.icon} /></span><div><h3>{group.title}</h3><p>{group.summary}</p></div></div><div className="reg-items">{group.items.map((item) => <details key={item.name}><summary><span>{item.name}</span><span className="reg-value">{item.value}</span><Badge status={item.status} /><Icon name="chevron" size={15} /></summary><div className="reg-detail"><b>적용 근거 / 확인사항</b><p>{item.source}</p><span>{reviewData ? `조회시각 ${new Date(reviewData.checkedAt).toLocaleString("ko-KR")}` : "공식자료 조회 전"} · 자동 확정 아님</span></div></details>)}</div></section>)}</div>
+          </details>}
+          <details className="supplementary-details"><summary>세부 법규·완화 시나리오 설정 펼치기 <span>기본 검토표에 표시된 항목의 상세 확인</span></summary><div className="supplementary-body"><div className="reg-grid">{regulationGroups.map((group) => <section className="card regulation-card" key={group.title}><div className="reg-title"><span><Icon name={group.icon} /></span><div><h3>{group.title}</h3><p>{group.summary}</p></div></div><div className="reg-items">{group.items.map((item) => <details key={item.name}><summary><span>{item.name}</span><span className="reg-value">{item.value}</span><Badge status={item.status} /><Icon name="chevron" size={15} /></summary><div className="reg-detail"><b>적용 근거 / 확인사항</b><p>{item.source}</p><span>{reviewData ? `조회시각 ${new Date(reviewData.checkedAt).toLocaleString("ko-KR")}` : "공식자료 조회 전"} · 자동 확정 아님</span></div></details>)}</div></section>)}</div>
           <section className="card relaxation-card">
             <div className="card-title"><div className="title-icon orange"><Icon name="scale" /></div><div><h3>용적률 완화 시나리오</h3><p>완화제도 존재만으로 자동 적용하지 않으며, 요건 확인 전 조건부 분석으로 분리합니다.</p></div><Toggle checked={input.useRelaxedFar} onChange={(v) => update("useRelaxedFar", v)} label="완화안 반영" /></div>
             <div className="scenario-grid"><div><span>기본 적용안</span><b>{input.baseFar}%</b><small>사용자 입력 · 법적 근거 확인 필요</small></div><span className="scenario-arrow">→</span><div className="highlight"><span>완화 검토안</span><b>{input.relaxedFar}%</b><small>조건부 · 관할청/LH 협의 필요</small></div><div className="scenario-impact"><span>최대 연면적 차이</span><b>+{f(input.siteArea * (input.relaxedFar - input.baseFar) / 100)}㎡</b><small>단순 용적률 한도 비교</small></div></div>
             <div className="policy-table"><div className="policy-head"><span>제도명</span><span>법적 근거</span><span>적용 요건</span><span>대상지 판단</span></div>{["공공임대주택 용적률 완화", "신축매입약정 인센티브", "역세권 공공주택 제도"].map((name) => <div key={name}><b>{name}</b><span>원문 자료 미확보</span><span>지역·사업방식·공공기여 확인</span><Badge status="unknown" /></div>)}</div>
           </section>
+          </div></details>
         </>}
 
         {activeTab === 2 && <>
@@ -798,7 +839,7 @@ export default function Home() {
         {activeTab === 4 && <>
           <SectionHeader eyebrow="05 · EXECUTIVE SUMMARY" title="건축개요 및 종합비교" description="발주처 보고용 핵심 지표와 산출근거를 한 화면에서 확인하고 출력합니다." action={<div className="report-actions"><button className="button ghost" onClick={exportProject}><Icon name="database" size={16} /> 프로젝트</button><button className="button ghost" onClick={exportExcel}><Icon name="download" size={16} /> Excel</button><button className="button dark" onClick={() => window.print()}><Icon name="report" size={16} /> PDF 인쇄</button></div>} />
           {recommendation ? <section className="recommend-card"><div className="recommend-badge"><Icon name="check" /><span>법규 적합 대안 추천</span></div><div><span className="alt-label inverse">{recommendation.definition.id}</span><div><h2>{recommendation.definition.name}</h2><p>필수 법규·LH 조건을 충족한 대안 중 보조 사업성 지표가 가장 높습니다.</p></div></div><div className="recommend-metrics"><span><small>계획 수량</small><b>{recommendation.unitCount}{recommendation.definition.useType === "apartment" ? "세대" : "호"}</b></span><span><small>계획 용적률</small><b>{recommendation.plannedFar}%</b></span><span><small>지하 부담</small><b>B{recommendation.parking.basementFloors}</b></span><span><small>보조 사업성 지표</small><b>{recommendation.score}</b></span></div></section> : <section className="recommend-card recommendation-hold"><div className="recommend-badge"><Icon name="alert" /><span>추천 보류</span></div><div><span className="alt-label inverse">?</span><div><h2>법규 적합성이 확인된 대안이 없습니다.</h2><p>허용용도, 건폐율·용적률, 주차기준 및 LH 매입 가능성 근거를 확보하기 전에는 점수만으로 대안을 추천하지 않습니다.</p></div></div><div className="recommend-metrics"><span><small>적합</small><b>{results.filter((result) => result.eligibility === "eligible").length}개</b></span><span><small>조건부</small><b>{results.filter((result) => result.eligibility === "conditional").length}개</b></span><span><small>판정불가</small><b>{results.filter((result) => result.eligibility === "unknown").length}개</b></span><span><small>부적합</small><b>{results.filter((result) => result.eligibility === "ineligible").length}개</b></span></div></section>}
-          <section className="card comparison-card"><div className="card-title"><div className="title-icon"><Icon name="report" /></div><div><h3>4개 계획안 건축개요</h3><p>{input.projectName} · {input.address}</p></div><span className="report-date">검토일 2026.10.24</span></div><ComparisonTable results={results} input={input} /></section>
+          <section className="card comparison-card"><div className="card-title"><div className="title-icon"><Icon name="report" /></div><div><h3>4개 계획안 건축개요</h3><p>{input.projectName} · {input.address}</p></div><span className="report-date">검토일 {formattedReviewDate}</span></div><ComparisonTable results={results} input={input} /></section>
           <div className="pros-grid">{results.map((result) => <section className="card pros-card" key={result.definition.id}><div><span className="alt-label">{result.definition.id}</span><h3>{result.definition.shortName}</h3></div><h4>주요 장점</h4><ul><li>계획 수량 {result.unitCount}{result.definition.useType === "apartment" ? "세대" : "호"} 확보</li><li>{result.definition.parkingMode === "mechanical" ? `자주식 대비 주차면적 절감 가능` : "운영·유지관리 안정성 우수"}</li><li>입력 용적률 한도 내 계획</li></ul><h4>위험 및 협의</h4><ul className="risks"><li>{result.definition.useType === "officetel" ? "LH 오피스텔 매입 가능조건 확인" : "주택건설기준 및 부대시설 확인"}</li><li>{result.definition.parkingMode === "mechanical" ? "기계식 인수·비율·형식 협의" : "지하층 및 공사비 부담 검토"}</li></ul></section>)}</div>
           <section className="card audit-card"><div className="card-title"><div className="title-icon orange"><Icon name="alert" /></div><div><h3>보고서 전제 및 제한사항</h3><p>법적 확정값과 계획 추정값을 명확히 구분합니다.</p></div></div><div className="audit-grid"><div><Badge status="user" /><p>대지면적, 건폐율, 용적률, 높이, 주차계수는 현재 사용자 입력값입니다.</p></div><div><Badge status="unknown" /><p>지구단위계획, 조례, 일조·인동거리, LH 최신 공고 원문이 연결되지 않았습니다.</p></div><div><Badge status="review" /><p>추천 결과는 사업성 비교이며 적법성·매입확약·인허가 가능성을 보증하지 않습니다.</p></div></div></section>
         </>}
