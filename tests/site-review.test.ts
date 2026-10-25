@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "../app/api/site-review/route";
 
-function request(headers: Record<string, string> = {}, address = "경기도 의정부시 가능동 75-1") {
+function request(headers: Record<string, string> = {}, address = "경기도 의정부시 가능동 75-1", parcelAddresses: string[] = []) {
   return new NextRequest("http://127.0.0.1:3000/api/site-review", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify({ address }),
+    body: JSON.stringify({ address, parcelAddresses }),
   });
 }
 
@@ -80,5 +80,34 @@ describe("site review API", () => {
     expect(data.landUse).toContainEqual(expect.objectContaining({ name: "제3종일반주거지역" }));
     expect(data.parcel).toEqual(expect.objectContaining({ area: 1000, landCategory: "대" }));
     expect(data.planningStandards).toEqual(expect.objectContaining({ buildingCoverageRatio: 50, far: 300 }));
+  });
+
+  it("keeps multiple parcels separate and aggregates only their confirmed areas", async () => {
+    const response = await POST(request({}, "경기도 의정부시 가능동 75-1", ["경기도 의정부시 가능동 72-5"]));
+    const data = await response.json();
+
+    expect(data.parcels).toHaveLength(2);
+    expect(data.parcel.area).toBe(2095);
+    expect(data.mixedUseZones).toBe(false);
+    expect(data.parcels.map((item: { parcel: { area: number } }) => item.parcel.area)).toEqual([1467, 628]);
+  });
+
+  it("separates source discovery from target-site application assessment", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const query = url.searchParams.get("query") || "법규";
+      if (url.searchParams.get("target") === "ordin") {
+        return new Response(JSON.stringify({ OrdinSearch: { resultCode: "00", ordin: [{ 자치법규명: query, 시행일자: "20260101", 자치법규상세링크: "/ordin" }] } }));
+      }
+      return new Response(JSON.stringify({ LawSearch: { resultCode: "00", law: [{ 법령명한글: query, 시행일자: "20260101", 법령상세링크: "/law" }] } }));
+    }));
+
+    const response = await POST(request({ "x-law-api-oc": "test-oc" }));
+    const data = await response.json();
+
+    expect(data.laws[0]).toEqual(expect.objectContaining({ retrievalStatus: "metadata-only", applicationStatus: "not-assessed" }));
+    expect(data.applicationAssessmentComplete).toBe(false);
+    expect(data.ruleFindings).toEqual([]);
+    expect(data.status).toBe("partial");
   });
 });

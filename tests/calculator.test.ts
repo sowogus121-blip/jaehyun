@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   ALTERNATIVES,
   DEFAULT_INPUT,
+  EXAMPLE_INPUT,
   calculateAll,
   calculateAlternative,
   calculateFacilities,
   getEvidenceStatus,
   getGrossAreaPerUnit,
   isSpecialParkingEligible,
+  resetSiteDependentInput,
 } from "../lib/calculator";
 
 describe("LH Plan Lab calculation engine", () => {
@@ -20,26 +22,26 @@ describe("LH Plan Lab calculation engine", () => {
   });
 
   it("calculates four alternatives independently", () => {
-    const results = calculateAll(DEFAULT_INPUT);
+    const results = calculateAll(EXAMPLE_INPUT);
     expect(results.map((result) => result.definition.id)).toEqual(["A-1", "A-2", "B-1", "B-2"]);
     expect(results).toHaveLength(4);
     expect(results[0]).not.toBe(results[1]);
   });
 
   it("respects FAR and building coverage limits", () => {
-    const result = calculateAlternative(DEFAULT_INPUT, ALTERNATIVES[0]);
+    const result = calculateAlternative(EXAMPLE_INPUT, ALTERNATIVES[0]);
     expect(result.farCountedArea).toBeLessThanOrEqual(result.farLimitArea);
-    expect(result.plannedBcr).toBeLessThanOrEqual(DEFAULT_INPUT.buildingCoverageRatio);
+    expect(result.plannedBcr).toBeLessThanOrEqual(EXAMPLE_INPUT.buildingCoverageRatio);
   });
 
   it("rounds parking demand upward", () => {
-    const input = { ...DEFAULT_INPUT, apartmentParkingRatio: 0.73, lhApartmentParkingRatio: 0 };
+    const input = { ...EXAMPLE_INPUT, apartmentParkingRatio: 0.73, lhApartmentParkingRatio: 0 };
     const result = calculateAlternative(input, ALTERNATIVES[0]);
     expect(result.parking.legalCount).toBe(Math.ceil(result.unitCount * 0.73));
   });
 
   it("applies 0.3 special only to eligible purchase officetel", () => {
-    const eligible = { ...DEFAULT_INPUT, businessMode: "purchase" as const, specialParkingEnabled: true };
+    const eligible = { ...EXAMPLE_INPUT, businessMode: "purchase" as const, specialParkingEnabled: true };
     expect(isSpecialParkingEligible(eligible, ALTERNATIVES[2])).toBe(true);
     expect(isSpecialParkingEligible(eligible, ALTERNATIVES[0])).toBe(false);
     expect(isSpecialParkingEligible({ ...eligible, businessMode: "undecided" }, ALTERNATIVES[2])).toBe(false);
@@ -52,13 +54,13 @@ describe("LH Plan Lab calculation engine", () => {
   });
 
   it("separates total floor area from FAR-counted area", () => {
-    const result = calculateAlternative(DEFAULT_INPUT, ALTERNATIVES[0]);
+    const result = calculateAlternative(EXAMPLE_INPUT, ALTERNATIVES[0]);
     expect(result.totalFloorArea).toBeGreaterThan(result.farCountedArea);
     expect(result.belowGroundArea).toBeGreaterThan(0);
   });
 
   it("warns and falls back when mechanical parking is unavailable", () => {
-    const result = calculateAlternative({ ...DEFAULT_INPUT, mechanicalAllowed: false }, ALTERNATIVES[1]);
+    const result = calculateAlternative({ ...EXAMPLE_INPUT, mechanicalAllowed: false }, ALTERNATIVES[1]);
     expect(result.parking.mechanicalCount).toBe(0);
     expect(result.parking.selfCount).toBe(result.parking.finalCount);
     expect(result.warnings.some((warning) => warning.includes("전량 자주식"))).toBe(true);
@@ -67,5 +69,60 @@ describe("LH Plan Lab calculation engine", () => {
   it("marks missing legal evidence as unknown", () => {
     expect(getEvidenceStatus(false)).toBe("unknown");
     expect(getEvidenceStatus(false, true)).toBe("user");
+  });
+
+  it("starts a new project without carrying over a demo site's legal values", () => {
+    expect(DEFAULT_INPUT.address).toBe("");
+    expect(DEFAULT_INPUT.siteArea).toBe(0);
+    expect(DEFAULT_INPUT.buildingCoverageRatio).toBe(0);
+    expect(DEFAULT_INPUT.baseFar).toBe(0);
+  });
+
+  it("clears site-dependent values when an address changes", () => {
+    const changed = resetSiteDependentInput(EXAMPLE_INPUT, "부산광역시 해운대구 새 주소 1");
+    expect(changed.address).toBe("부산광역시 해운대구 새 주소 1");
+    expect(changed.siteArea).toBe(0);
+    expect(changed.zone).toBe("미확인");
+    expect(changed.baseFar).toBe(0);
+    expect(changed.maxHeight).toBe(0);
+    expect(changed.officetelParkingRatio).toBe(0);
+  });
+
+  it("keeps an unapproved 0.3 parking relaxation separate from the fallback count", () => {
+    const input = {
+      ...EXAMPLE_INPUT,
+      businessMode: "purchase" as const,
+      specialParkingEnabled: true,
+      specialParkingApproval: "conditional" as const,
+      officetelParkingRatio: 0.5,
+      lhOfficetelParkingRatio: 0.5,
+      lhParkingRatioVerified: false,
+    };
+    const parking = calculateAlternative(input, ALTERNATIVES[2]).parking;
+    expect(parking.finalCount).toBe(parking.fallbackCount);
+    expect(parking.conditionalCount).toBeLessThan(parking.fallbackCount);
+    expect(parking.specialApplied).toBe(false);
+  });
+
+  it("does not let an unverified LH assumption cancel an approved relaxation", () => {
+    const input = {
+      ...EXAMPLE_INPUT,
+      businessMode: "purchase" as const,
+      specialParkingEnabled: true,
+      specialParkingApproval: "approved" as const,
+      officetelParkingRatio: 0.5,
+      lhOfficetelParkingRatio: 0.5,
+      lhParkingRatioVerified: false,
+    };
+    const parking = calculateAlternative(input, ALTERNATIVES[2]).parking;
+    expect(parking.finalCount).toBe(parking.relaxedCount);
+    expect(parking.finalCount).toBeLessThan(parking.lhCount);
+    expect(parking.specialApplied).toBe(true);
+  });
+
+  it("blocks score-only recommendation when legal applicability is unknown", () => {
+    const results = calculateAll(EXAMPLE_INPUT);
+    expect(results.every((result) => !result.recommendable)).toBe(true);
+    expect(results.every((result) => result.eligibility === "unknown")).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findSitePreset } from "../../../lib/site-presets";
 import { findZoningStandard } from "../../../lib/zoning-standards";
+import { searchOfficialSources } from "../../../lib/server/official-search";
 
 type LawRecord = {
   name: string;
@@ -8,7 +9,8 @@ type LawRecord = {
   enforcementDate: string | null;
   ministry: string | null;
   link: string;
-  status: "verified";
+  retrievalStatus: "metadata-only" | "full-text";
+  applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
 };
 
 type OrdinanceRecord = {
@@ -17,7 +19,16 @@ type OrdinanceRecord = {
   promulgationDate: string | null;
   enforcementDate: string | null;
   link: string;
-  status: "verified";
+  retrievalStatus: "metadata-only" | "full-text";
+  applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
+};
+
+type ParcelReview = {
+  inputAddress: string;
+  location: Awaited<ReturnType<typeof geocode>> | null;
+  parcel: Awaited<ReturnType<typeof getParcelInfo>>;
+  landUse: Array<{ category: string; name: string; code: string; source: string; status: "verified" }>;
+  errors: string[];
 };
 
 const LAW_QUERIES = [
@@ -244,7 +255,8 @@ async function searchLaw(query: string, oc: string): Promise<LawRecord | null> {
     enforcementDate: exact["시행일자"] ? String(exact["시행일자"]) : null,
     ministry: exact["소관부처명"] ? String(exact["소관부처명"]) : null,
     link: detail.startsWith("http") ? detail : `https://www.law.go.kr${detail}`,
-    status: "verified",
+    retrievalStatus: "metadata-only",
+    applicationStatus: "not-assessed",
   };
 }
 
@@ -267,7 +279,8 @@ async function searchOrdinance(query: string, oc: string): Promise<OrdinanceReco
     promulgationDate: row["공포일자"] ? String(row["공포일자"]) : null,
     enforcementDate: row["시행일자"] ? String(row["시행일자"]) : null,
     link: detail.startsWith("http") ? detail : `https://www.law.go.kr${detail}`,
-    status: "verified",
+    retrievalStatus: "metadata-only",
+    applicationStatus: "not-assessed",
   };
 }
 
@@ -278,7 +291,7 @@ function localGovernmentFromAddress(address: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null) as { address?: string } | null;
+  const body = await request.json().catch(() => null) as { address?: string; parcelAddresses?: string[]; businessMode?: string; regionalOffice?: string; lhSupplyType?: string } | null;
   const address = body?.address?.trim();
   if (!address) return NextResponse.json({ error: "검토할 주소가 필요합니다." }, { status: 400 });
 
@@ -323,13 +336,78 @@ export async function POST(request: NextRequest) {
     approximate: false,
   };
 
-  const planningStandards = findZoningStandard(landUse.filter((item) => item.category === "용도지역").map((item) => item.name));
+  const parcels: ParcelReview[] = [{ inputAddress: address, location, parcel, landUse, errors: [] }];
+  const additionalAddresses = [...new Set((body?.parcelAddresses ?? []).map((item) => item.trim()).filter(Boolean))]
+    .filter((item) => item !== address)
+    .slice(0, 9);
+  const additionalReviews = await Promise.all(additionalAddresses.map(async (parcelAddress): Promise<ParcelReview> => {
+    const parcelPreset = findSitePreset(parcelAddress);
+    let additionalLandUse: ParcelReview["landUse"] = parcelPreset ? [{
+      category: "용도지역",
+      name: parcelPreset.zone,
+      code: "OFFICIAL-DOCUMENT",
+      source: parcelPreset.source,
+      status: "verified",
+    }] : [];
+    let additionalParcel: ParcelReview["parcel"] = parcelPreset ? {
+      area: parcelPreset.siteArea,
+      landCategory: parcelPreset.landCategory,
+      pnu: null,
+      source: parcelPreset.source,
+      approximate: false,
+    } : null;
+    if (!vworldKey) return {
+      inputAddress: parcelAddress,
+      location: null,
+      parcel: additionalParcel,
+      landUse: additionalLandUse,
+      errors: parcelPreset ? [] : ["VWorld API 키가 없어 필지를 조회하지 못했습니다."],
+    };
+    try {
+      const additionalLocation = await geocode(parcelPreset?.address ?? parcelAddress, vworldKey, request.nextUrl.origin);
+      const [additionalUse, cadastral] = await Promise.all([
+        getLandUse(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
+        getParcelInfo(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
+      ]);
+      additionalLandUse = [...additionalLandUse, ...additionalUse.items].filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+      if (!parcelPreset && cadastral) additionalParcel = cadastral;
+      else if (additionalParcel && cadastral?.pnu) additionalParcel.pnu = cadastral.pnu;
+      return { inputAddress: parcelAddress, location: additionalLocation, parcel: additionalParcel, landUse: additionalLandUse, errors: additionalUse.errors };
+    } catch (error) {
+      return { inputAddress: parcelAddress, location: null, parcel: additionalParcel, landUse: additionalLandUse, errors: [error instanceof Error ? error.message : "필지 조회 실패"] };
+    }
+  }));
+  parcels.push(...additionalReviews);
+  if (additionalReviews.length) {
+    landUse = parcels.flatMap((item) => item.landUse).filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+    const failedParcels = additionalReviews.filter((item) => item.errors.length);
+    if (failedParcels.length) errors.push(`복수 필지 ${failedParcels.length}개 일부 조회 실패`);
+    if (parcels.every((item) => item.parcel?.area)) {
+      parcel = {
+        area: parcels.reduce((sum, item) => sum + (item.parcel?.area ?? 0), 0),
+        landCategory: [...new Set(parcels.map((item) => item.parcel?.landCategory).filter(Boolean))].join(" · ") || null,
+        pnu: null,
+        source: "복수 필지 개별 조회 합계",
+        approximate: parcels.some((item) => item.parcel?.approximate),
+      };
+    }
+  }
+
+  const zoneNames = [...new Set(landUse.filter((item) => item.category === "용도지역").map((item) => item.name))];
+  const mixedUseZones = zoneNames.length > 1;
+  const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
   const districtPlan = landUse.some((item) => item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
+  const localGovernment = localGovernmentFromAddress(preset?.address ?? address);
+  const webSearchPromise = searchOfficialSources({
+    address: preset?.address ?? address,
+    localGovernment,
+    businessMode: body?.businessMode,
+    regionalOffice: body?.regionalOffice,
+  });
 
   let laws: LawRecord[] = [];
   let ordinances: OrdinanceRecord[] = [];
   if (lawOc) {
-    const localGovernment = localGovernmentFromAddress(preset?.address ?? address);
     const ordinanceQueries = ["건축 조례", "주차장 조례", "도시계획 조례", "경관 조례"].map((name) => `${localGovernment} ${name}`);
     const [settled, ordinanceSettled] = await Promise.all([
       Promise.allSettled(LAW_QUERIES.map((query) => searchLaw(query, lawOc))),
@@ -351,21 +429,32 @@ export async function POST(request: NextRequest) {
       errors.push(`관할 자치법규 ${ordinanceFailures.length}개 조회 실패: ${[...new Set(ordinanceFailures)].join(" / ")}`);
     }
   }
+  const webSearch = await webSearchPromise;
+  if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
+  if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
 
   return NextResponse.json({
-    status: missing.length === 0 && errors.length === 0 ? "verified" : laws.length || landUse.length || location ? "partial" : "integration-required",
+    status: laws.length || ordinances.length || landUse.length || location ? "partial" : "integration-required",
+    reviewStage: "source-discovery",
+    sourceDiscoveryComplete: missing.length === 0 && errors.length === 0,
+    applicationAssessmentComplete: false,
     checkedAt: new Date().toISOString(),
     location,
     landUse,
     parcel,
     planningStandards,
     districtPlan,
+    mixedUseZones,
+    parcels,
     laws,
     ordinances,
+    ruleFindings: [],
+    webSearch,
     missing,
     errors,
     unresolved: [
       ordinances.length ? "관할 자치법규 세부 조문별 적용 여부" : "관할 지자체 건축·주차장 조례 원문",
+      ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
       "지구단위계획 결정도서 및 시행지침",
       "해당 연도 LH 지역본부 매입공고",
       "일조·인동거리·소방활동공간 배치 검토",

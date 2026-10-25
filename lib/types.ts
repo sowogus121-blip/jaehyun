@@ -2,16 +2,23 @@ export type BusinessMode = "direct" | "purchase" | "other" | "undecided";
 export type EvidenceStatus = "verified" | "user" | "unknown" | "review";
 export type ParkingMode = "self" | "mechanical";
 export type UseType = "apartment" | "officetel";
+export type LhSupplyType = "undecided" | "newlywed" | "youth" | "general" | "senior";
+export type ParkingRelaxationStatus = "not-reviewed" | "conditional" | "approved" | "rejected";
+export type AlternativeEligibilityStatus = "eligible" | "conditional" | "ineligible" | "unknown";
 
 export interface ProjectInput {
   projectName: string;
   address: string;
+  multipleParcels: boolean;
+  parcelList: string;
   province: string;
   district: string;
   zone: string;
   districtPlan: boolean;
   businessMode: BusinessMode;
+  lhSupplyType: LhSupplyType;
   regionalOffice: string;
+  userPlanNotes: string;
   siteArea: number;
   buildableSiteRatio: number;
   siteWidth: number;
@@ -33,6 +40,8 @@ export interface ProjectInput {
   lhApartmentParkingRatio: number;
   lhOfficetelParkingRatio: number;
   specialParkingEnabled: boolean;
+  specialParkingApproval: ParkingRelaxationStatus;
+  lhParkingRatioVerified: boolean;
   mechanicalAllowed: boolean;
   mechanicalMaxRatio: number;
   apartmentFloorHeight: number;
@@ -59,11 +68,18 @@ export interface FacilityResult {
 }
 
 export interface ParkingResult {
+  originalLegalRatio: number;
+  originalLegalCount: number;
   legalRatio: number;
   lhRatio: number;
+  lhRequirementVerified: boolean;
   appliedRatio: number;
   legalCount: number;
   lhCount: number;
+  relaxedRatio: number | null;
+  relaxedCount: number | null;
+  fallbackCount: number;
+  conditionalCount: number | null;
   finalCount: number;
   selfCount: number;
   mechanicalCount: number;
@@ -72,7 +88,16 @@ export interface ParkingResult {
   area: number;
   basementFloors: number;
   specialApplied: boolean;
+  specialEligible: boolean;
+  relaxationStatus: ParkingRelaxationStatus;
   status: EvidenceStatus;
+}
+
+export interface CalculationContext {
+  planningEvidence: EvidenceStatus;
+  usePermissions: Record<UseType, AlternativeEligibilityStatus>;
+  lhPurchaseEligibility: Record<UseType, AlternativeEligibilityStatus>;
+  mechanicalParkingEligibility: AlternativeEligibilityStatus;
 }
 
 export interface AlternativeResult {
@@ -105,6 +130,10 @@ export interface AlternativeResult {
   warnings: string[];
   formulas: string[];
   score: number;
+  eligibility: AlternativeEligibilityStatus;
+  recommendable: boolean;
+  blockingReasons: string[];
+  conditionalReasons: string[];
 }
 
 export interface UploadedDocument {
@@ -112,12 +141,30 @@ export interface UploadedDocument {
   name: string;
   size: number;
   category: string;
-  status: "ready" | "needs-integration";
+  status: "analyzing" | "analyzed" | "failed" | "needs-integration";
   uploadedAt: string;
+  analysis?: {
+    format: "pdf" | "hwpx" | "docx" | "xlsx" | "txt";
+    pageCount: number | null;
+    textLength: number;
+    preview: string;
+    candidates: Array<{
+      topic: string;
+      quote: string;
+      value: number | null;
+      unit: string | null;
+      verified: false;
+    }>;
+    warnings: string[];
+  };
+  error?: string;
 }
 
 export interface SiteReviewResult {
   status: "verified" | "partial" | "integration-required";
+  reviewStage: "source-discovery" | "content-analysis" | "application-assessment";
+  sourceDiscoveryComplete: boolean;
+  applicationAssessmentComplete: boolean;
   checkedAt: string;
   location: {
     address: string;
@@ -146,13 +193,39 @@ export interface SiteReviewResult {
     source: string;
   } | null;
   districtPlan: boolean | null;
+  mixedUseZones: boolean;
+  parcels: Array<{
+    inputAddress: string;
+    location: {
+      address: string;
+      parcelAddress: string | null;
+      x: string;
+      y: string;
+    } | null;
+    parcel: {
+      area: number | null;
+      landCategory: string | null;
+      pnu: string | null;
+      source: string;
+      approximate: boolean;
+    } | null;
+    landUse: Array<{
+      category: string;
+      name: string;
+      code: string;
+      source: string;
+      status: "verified";
+    }>;
+    errors: string[];
+  }>;
   laws: Array<{
     name: string;
     promulgationDate: string | null;
     enforcementDate: string | null;
     ministry: string | null;
     link: string;
-    status: "verified";
+    retrievalStatus: "metadata-only" | "full-text";
+    applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
   }>;
   ordinances: Array<{
     name: string;
@@ -160,8 +233,36 @@ export interface SiteReviewResult {
     promulgationDate: string | null;
     enforcementDate: string | null;
     link: string;
-    status: "verified";
+    retrievalStatus: "metadata-only" | "full-text";
+    applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
   }>;
+  ruleFindings: Array<{
+    id: string;
+    topic: string;
+    outcome: "applicable" | "not-applicable" | "conditional" | "unresolved";
+    value: number | string | null;
+    unit: string | null;
+    sourceTitle: string;
+    article: string | null;
+    sourceUrl: string;
+    effectiveDate: string | null;
+    conditions: string[];
+    verified: boolean;
+  }>;
+  webSearch: {
+    status: "completed" | "not-configured" | "failed";
+    provider: "Brave Search" | null;
+    searchedAt: string;
+    results: Array<{
+      title: string;
+      url: string;
+      description: string;
+      query: string;
+      sourceDomain: string;
+      official: true;
+    }>;
+    errors: string[];
+  };
   missing: string[];
   errors: string[];
   unresolved: string[];

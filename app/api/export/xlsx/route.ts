@@ -1,0 +1,114 @@
+import { NextRequest, NextResponse } from "next/server";
+import ExcelJS from "exceljs";
+import type { AlternativeResult, ProjectInput, SiteReviewResult } from "../../../../lib/types";
+
+export const runtime = "nodejs";
+
+type ExportBody = {
+  input?: ProjectInput;
+  results?: AlternativeResult[];
+  reviewData?: SiteReviewResult | null;
+};
+
+function styleHeader(row: ExcelJS.Row) {
+  row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF173A56" } };
+  row.alignment = { vertical: "middle", horizontal: "center" };
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => null) as ExportBody | null;
+  if (!body?.input || !Array.isArray(body.results) || body.results.length !== 4) {
+    return NextResponse.json({ error: "프로젝트 입력값과 4개 대안 결과가 필요합니다." }, { status: 400 });
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "LH Plan Lab";
+  workbook.created = new Date();
+  workbook.calcProperties.fullCalcOnLoad = true;
+
+  const inputs = workbook.addWorksheet("입력값");
+  inputs.addRow(["항목", "값", "단위·상태"]);
+  styleHeader(inputs.getRow(1));
+  const inputRows: Array<[string, string | number | boolean, string]> = [
+    ["사업명", body.input.projectName, "사용자 입력"],
+    ["주소", body.input.address, "대상지"],
+    ["대지면적", body.input.siteArea, "㎡"],
+    ["건폐율 상한", body.input.buildingCoverageRatio, "%"],
+    ["기본 용적률", body.input.baseFar, "%"],
+    ["완화 용적률", body.input.relaxedFar, "% · 조건부"],
+    ["최고층수", body.input.maxFloors, "층"],
+    ["최고높이", body.input.maxHeight, "m"],
+    ["공동주택 법정주차", body.input.apartmentParkingRatio, "대/세대"],
+    ["오피스텔 법정주차", body.input.officetelParkingRatio, "대/호"],
+    ["LH 주차계수 근거", body.input.lhParkingRatioVerified, body.input.lhParkingRatioVerified ? "확인" : "미확인"],
+    ["0.3대 특례 승인", body.input.specialParkingApproval, "승인상태"],
+  ];
+  inputRows.forEach((row) => inputs.addRow(row));
+  inputs.columns = [{ width: 24 }, { width: 48 }, { width: 22 }];
+  inputs.views = [{ state: "frozen", ySplit: 1 }];
+
+  const comparison = workbook.addWorksheet("4개 대안 비교");
+  comparison.addRow(["대안", "용도", "적합성", "계획수량", "계획건축면적(㎡)", "용적률산정면적(㎡)", "계획건폐율(%)", "계획용적률(%)", "원 법정주차", "0.3대 조건부", "최종주차", "지하층", "보조점수"]);
+  styleHeader(comparison.getRow(1));
+  body.results.forEach((result, index) => {
+    const rowNumber = index + 2;
+    comparison.addRow([
+      result.definition.id,
+      result.definition.useType === "apartment" ? "공동주택" : "오피스텔",
+      result.eligibility,
+      result.unitCount,
+      result.plannedBuildingArea,
+      result.farCountedArea,
+      { formula: `IFERROR(E${rowNumber}/'입력값'!B4*100,0)`, result: result.plannedBcr },
+      { formula: `IFERROR(F${rowNumber}/'입력값'!B4*100,0)`, result: result.plannedFar },
+      result.parking.originalLegalCount,
+      result.parking.conditionalCount ?? "-",
+      result.parking.finalCount,
+      result.parking.basementFloors,
+      result.score,
+    ]);
+  });
+  comparison.columns = [{ width: 10 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 18 }, { width: 20 }, { width: 17 }, { width: 17 }, { width: 15 }, { width: 15 }, { width: 13 }, { width: 10 }, { width: 12 }];
+  comparison.views = [{ state: "frozen", ySplit: 1 }];
+  comparison.autoFilter = { from: "A1", to: "M5" };
+
+  const formulas = workbook.addWorksheet("산식·제약조건");
+  formulas.addRow(["대안", "구분", "내용"]);
+  styleHeader(formulas.getRow(1));
+  body.results.forEach((result) => {
+    result.formulas.forEach((formula) => formulas.addRow([result.definition.id, "산식", formula]));
+    result.blockingReasons.forEach((reason) => formulas.addRow([result.definition.id, "부적합", reason]));
+    result.conditionalReasons.forEach((reason) => formulas.addRow([result.definition.id, "조건부", reason]));
+  });
+  formulas.columns = [{ width: 10 }, { width: 12 }, { width: 110 }];
+  formulas.getColumn(3).alignment = { wrapText: true, vertical: "top" };
+
+  const evidence = workbook.addWorksheet("법규 근거");
+  evidence.addRow(["유형", "자료명·항목", "상태", "시행일·코드", "출처 URL·기관"]);
+  styleHeader(evidence.getRow(1));
+  const review = body.reviewData;
+  review?.landUse.forEach((item) => evidence.addRow([item.category, item.name, "공간정보 확인", item.code, item.source]));
+  review?.laws.forEach((law) => evidence.addRow(["국가법령", law.name, law.applicationStatus, law.enforcementDate || "", law.link]));
+  review?.ordinances?.forEach((ordinance) => evidence.addRow(["자치법규", ordinance.name, ordinance.applicationStatus, ordinance.enforcementDate || "", ordinance.link]));
+  review?.ruleFindings?.forEach((finding) => evidence.addRow([finding.topic, String(finding.value ?? ""), finding.outcome, finding.article || finding.effectiveDate || "", finding.sourceUrl]));
+  review?.unresolved.forEach((item) => evidence.addRow(["미확정", item, "확인 필요", "", ""]));
+  evidence.columns = [{ width: 16 }, { width: 42 }, { width: 18 }, { width: 22 }, { width: 70 }];
+  evidence.getColumn(5).alignment = { wrapText: true, vertical: "top" };
+
+  workbook.eachSheet((sheet) => {
+    sheet.eachRow((row) => {
+      row.height = Math.max(row.height || 15, 18);
+      row.eachCell((cell) => { cell.border = { bottom: { style: "hair", color: { argb: "FFDDE5EA" } } }; });
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new NextResponse(Buffer.from(buffer), {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": "attachment; filename=LH-Plan-Lab.xlsx",
+      "Cache-Control": "no-store",
+    },
+  });
+}
