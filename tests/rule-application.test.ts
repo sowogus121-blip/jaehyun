@@ -25,7 +25,7 @@ describe("review-gated rule application", () => {
 
   it("updates separately reviewed apartment and officetel parking coefficients", () => {
     const parkingEvidence = { ...candidate, topic: "주차", excerpt: "주차기준 관련 별표 검토" };
-    const parkingReview = { ...review, ordinanceArticleCandidates: [{ ...parkingEvidence, verified: false }] };
+    const parkingReview: SiteReviewResult = { ...review, ordinanceArticleCandidates: [{ ...parkingEvidence, article: "제21조", verified: false as const }] };
     const apartment = confirmReviewedRule(input, parkingReview, "apartmentParkingRatio", 0.7, parkingEvidence, "2026-10-25");
     const officetel = confirmReviewedRule(input, parkingReview, "officetelParkingRatio", 0.4, parkingEvidence, "2026-10-25");
     const changed = applyReviewedRule(applyReviewedRule(input, apartment!), officetel!);
