@@ -262,3 +262,83 @@ a.law-reference-item:hover { background: #f2f7fa; border-color: #b4cbd8; }
   .law-report-table tr { break-inside: avoid; }
   .law-section-heading { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
+
+
+/* 2026 UX audit: readable working typography and task-first information hierarchy */
+.content { width: min(1650px, 100%); }
+.content .section-heading p, .content .card-title p { font-size: 12px; line-height: 1.6; }
+.content .field > span, .content .field input, .content .field select,
+.content .field textarea, .content .button { font-size: 12px; }
+.content .field small, .content .lookup-result-lines span, .content .lookup-warning,
+.content .notice, .content .notice span, .content .metric > span,
+.content .metric small, .content .review-progress b { font-size: 11px; }
+.content .card-title h3, .content .reg-title h3 { font-size: 15px; }
+.content .api-panel-message, .content .api-scope span, .content .review-progress small { font-size: 10px; }
+.workflow-hint { margin: -8px 0 19px; display: flex; flex-wrap: wrap; gap: 11px; align-items: center; padding: 14px 18px; color: #4c6a7c; background: #eaf2f5; border: 1px solid #d8e6ec; font-size: 12px; }
+.workflow-hint span { color: #a0b4c0; }
+.workflow-hint b:first-child { color: #276879; }
+.advanced-api-details { padding: 0; margin-bottom: 19px; border: 1px solid #d8e3e8; overflow: hidden; }
+.advanced-api-summary { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 23px; cursor: pointer; list-style: none; background: #f3f7f9; }
+.advanced-api-summary::-webkit-details-marker, .raw-evidence-summary::-webkit-details-marker,
+.supplementary-details > summary::-webkit-details-marker { display: none; }
+.advanced-api-summary > span { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 750; color: #33566b; flex-wrap: wrap; }
+.advanced-api-summary small { color: #7b929f; font-size: 11px; font-weight: 400; }
+.advanced-api-summary > b { color: #3a7c90; font-size: 11px; white-space: nowrap; }
+.advanced-api-details > .card-title, .advanced-api-details > .api-connect-grid,
+.advanced-api-details > .api-scope, .advanced-api-details > .api-panel-message,
+.advanced-api-details > .review-progress { margin-left: 24px; margin-right: 24px; }
+.advanced-api-details > .card-title { margin-top: 19px; }
+.advanced-api-details > .review-progress { margin-bottom: 24px; }
+.raw-evidence-details { padding: 0; margin-top: 17px; border: 1px solid #dbe6ea; }
+.raw-evidence-summary { min-height: 75px; cursor: pointer; list-style: none; padding: 20px 24px; display: flex; align-items: flex-start; justify-content: center; flex-direction: column; gap: 7px; background: #f6f9fb; }
+.raw-evidence-summary b { color: #36596e; font-size: 14px; }
+.raw-evidence-summary span { color: #6b8796; font-size: 11px; }
+.raw-evidence-details[open] .raw-evidence-summary { border-bottom: 1px solid #dde8ec; }
+.raw-evidence-details > .card-title, .raw-evidence-details > .official-group,
+.raw-evidence-details > .api-errors, .raw-evidence-details > .verified-location,
+.raw-evidence-details > .unresolved-list { margin-left: 22px; margin-right: 22px; }
+.raw-evidence-details > .card-title { margin-top: 20px; }
+.raw-evidence-details > .unresolved-list { margin-bottom: 22px; }
+.supplementary-details { margin: 15px 0; border: 1px solid #dbe5eb; background: white; }
+.supplementary-details > summary { padding: 18px 22px; display: flex; justify-content: space-between; gap: 12px; list-style: none; font-size: 13px; color: #426178; font-weight: 750; cursor: pointer; }
+.supplementary-details > summary span { font-size: 11px; font-weight: 400; color: #8798a4; }
+.supplementary-body { padding: 0 18px 18px; }
+.supplementary-details .reg-grid { margin-top: 15px; }
+.preliminary-shortcut { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 17px 22px; background: #ecf4f5; border-top: 1px solid #d8e5e8; border-bottom: 1px solid #d8e5e8; }
+.preliminary-shortcut > div { flex: 1; min-width: 230px; display: flex; flex-direction: column; gap: 5px; }
+.preliminary-shortcut b { font-size: 14px; color: #1d4b61; }
+.preliminary-shortcut span { font-size: 12px; color: #386b78; }
+.preliminary-shortcut small { font-size: 10px; color: #748f9b; line-height: 1.45; }
+.preliminary-shortcut label { display: flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 11px; font-weight: 750; }
+.preliminary-shortcut input { width: 62px; padding: 7px; border: 1px solid #c6d7df; border-radius: 4px; font-size: 13px; }
+.preliminary-shortcut button { min-height: 39px; }
+.law-report-table tbody td, .law-report-table .law-value, .law-report-table tbody th { font-size: 12px; line-height: 1.6; }
+.law-report-table .law-note, .law-report-table .law-source-link, .law-report-table .law-excerpt summary { font-size: 11px; }
+.law-report-table thead th { font-size: 12px; }
+.law-report-table .law-section-heading td { font-size: 13px; }
+.law-report-table tbody tr:not(.law-section-heading) > * { padding: 13px 14px; }
+.law-reference-item b, .law-calculation-grid small { font-size: 11px; }
+.law-reference-item small, .law-calculation-panel > div > p { font-size: 11px; }
+.law-report-heading p { font-size: 12px; }
+.law-report-stats span, .law-report-stats small { font-size: 11px; }
+.law-status-legend { font-size: 11px; }
+.massing-unready { margin-bottom: 18px; padding: 18px 19px; display: flex; align-items: center; gap: 15px; border: 1px solid #f1dbc2; border-left: 4px solid #c7813d; background: #fff8f0; color: #895929; }
+.massing-unready.info { border-color: #d7e5eb; border-left-color: #3b859e; background: #eef6f9; color: #345f76; }
+.massing-unready > div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.massing-unready strong { font-size: 14px; }
+.massing-unready span { font-size: 12px; line-height: 1.6; }
+.massing-unready .button { white-space: nowrap; }
+.parking-unverified { font-size: 12px; color: #788b97; line-height: 1.65; margin: 14px 0; }
+.content .comparison-table th, .content .comparison-table td { font-size: 11px; line-height: 1.55; }
+.content .comparison-table tbody th { font-weight: 750; }
+@media(max-width:850px) {
+ .workflow-hint { gap: 6px 9px; }
+ .preliminary-shortcut { align-items: stretch; }
+ .preliminary-shortcut button { width: 100%; }
+ .massing-unready { flex-wrap: wrap; }
+ .massing-unready .button { flex: 1 0 100%; }
+ .supplementary-details > summary { flex-direction: column; }
+}
+@media print {
+ .advanced-api-details, .raw-evidence-details, .supplementary-details, .workflow-hint, .preliminary-shortcut, .massing-unready { display: none !important; }
+}
