@@ -26,7 +26,7 @@ describe("one-click decision dashboard",()=>{
   expect(snap.estimates).toHaveLength(4);
   expect(snap.estimates[0].unitCount).toBeGreaterThan(0);
   expect(snap.applied?.floors).toBe(10);
-  expect(snap.assumptions.join(" ")).toContain("10층 가정");
+  expect(snap.assumptions.join(" ")).toContain("10층 초기 자동 가정");
   expect(snap.blockers.join(" ")).toContain("10층은 초기 자동 가정값");
   expect(snap.blockers.join(" ")).toContain("허용용도");
   expect(snap.blockers.join(" ")).toContain("정북일조");
