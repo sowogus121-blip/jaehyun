@@ -8,6 +8,7 @@ import { screenParking03 } from "@/lib/lh-parking-screen";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
+import { buildDecisionDashboard, type DecisionDashboard } from "@/lib/decision-dashboard";
 import { assessParcelAssembly, normalizeAssemblyAddresses, splitAssemblyAddresses, MAX_EXTRA_PARCELS, type AssemblyStudy } from "@/lib/parcel-assembly";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
@@ -224,6 +225,60 @@ function ParcelAssemblyCard({ study, onWeightedPreview }: { study: AssemblyStudy
   </section>;
 }
 
+
+function DecisionDashboardCard({dashboard,onShowLaw,onShowMassing,onShowLh}:{
+  dashboard:DecisionDashboard;
+  onShowLaw:()=>void; onShowMassing:()=>void; onShowLh:()=>void;
+}) {
+  const fmt=(n:number)=>n.toLocaleString("ko-KR",{maximumFractionDigits:1});
+  return <section id="decision-dashboard" className="decision-dashboard" aria-label="주소별 자동 법규 및 규모검토 결과">
+    <div className="decision-dashboard-header">
+      <div><span className="eyebrow">ONE-CLICK FEASIBILITY SNAPSHOT</span><h3>주소별 법규·규모검토 한눈에 보기</h3>
+        <p>법규 일반값, 임시계획 가정, 인허가 적용확정을 구분해 보여줘.</p></div>
+      <span className="decision-verdict">{dashboard.canEstimate?"개략 규모계산 가능 · 적법성 미확정":"검토조건 미확보 · 수량 계산 보류"}</span>
+    </div>
+    <div className="decision-dashboard-metrics">
+      <div><small>조회 대지면적</small><strong>{dashboard.area!==null?fmt(dashboard.area)+"㎡":"면적 확인 필요"}</strong><span>{dashboard.isMerged?"전체 필지 합계":"지적·VWorld 확인"}</span></div>
+      <div><small>조례 일반 건폐율</small><strong>{dashboard.ordinary?dashboard.ordinary.bcr+"%":"미확인"}</strong><span>결정도서·특별규정 검증 전</span></div>
+      <div><small>조례 일반 용적률</small><strong>{dashboard.ordinary?dashboard.ordinary.far+"%":"미확인"}</strong><span>지구단위 허용·상한과 구분</span></div>
+      <div><small>LH 지역 공고</small><strong>{dashboard.lhTitle?"공고 후보 확보":"미확인"}</strong><span>{dashboard.lhTitle?"해당 유형 인수 적합성 미판정":"관할 최신 공고 확인 필요"}</span></div>
+    </div>
+    <div className="decision-dashboard-body">
+      <div className="decision-dashboard-left">
+        <div className="decision-subheading"><b>공동주택 / 오피스텔 개략 규모</b><small>법적 승인 전 참고용 · 면적·조례 일반값과 가정 층수 적용</small></div>
+        {dashboard.canEstimate ? <div className="decision-alternatives">
+          {dashboard.estimates.map(r=><div className="decision-alternative" key={r.definition.id}>
+            <div className="decision-alt-head"><b>{r.definition.id} · {r.definition.useType==="apartment"?"신혼형 공동주택":"청년형 오피스텔"}</b><span>{r.definition.parkingMode==="self"?"자주식":"기계식"}</span></div>
+            <div><strong>{fmt(r.unitCount)}<small>{r.definition.useType==="apartment"?"세대":"호실"}</small></strong>
+              <span>전용 {r.definition.exclusiveArea}㎡ · 전용률 {Math.round(r.definition.efficiency*100)}%</span></div>
+            <p>{r.parking.originalLegalRatio>0?"주차 계획 "+r.parking.finalCount+"대 · 가정계수 "+r.parking.originalLegalRatio+"대":"주차대수 미산정 · 법정계수 확인 필요"}</p>
+            <small>{r.blockingReasons.length?"사업요건상 제한: "+r.blockingReasons[0]:"용도·LH 매입·피난·일조 적용 미확정"}</small>
+          </div>)}</div>
+          : <div className="decision-no-estimate"><b>추정 세대수를 임의로 표시하지 않았어.</b><p>면적과 관할 조례 또는 합필 적용조건이 확인되면 4개 대안을 계산해 보여줄게.</p></div>}
+        <div className="decision-assumptions"><b>현재 시나리오에 사용된 가정</b>
+          <p>대지 {dashboard.area!==null?fmt(dashboard.area)+"㎡":"미확인"} · 건폐율 {dashboard.applied?.bcr??"미확인"}% · 용적률 {dashboard.applied?.far??"미확인"}% · {dashboard.applied?.floors?dashboard.applied.floors+"층 가정":"최고높이/층수 입력 확인"}</p>
+          <details><summary>반영되지 않은 법적·설계 조건 보기</summary><ul>{dashboard.assumptions.map(v=><li key={v}>{v}</li>)}</ul></details></div>
+      </div>
+      <div className="decision-dashboard-right">
+        <div className="decision-subheading"><b>왜 확정할 수 없는가?</b><small>확인할 순서대로 표시</small></div>
+        <div className="decision-blocker-list">{dashboard.blockers.length?dashboard.blockers.slice(0,7).map((v,i)=><div key={i}><span>{i+1}</span><p>{v}</p></div>)
+          : <div><span><Icon name="check" size={14}/></span><p>자동조사에서 주요 누락사항을 발견하지 못했어. 그래도 실제 건축 인허가 적합성은 확정되지 않았어.</p></div>}</div>
+        <div className="decision-links">
+          <button className="button primary" type="button" onClick={onShowLaw}>항목별 법규표 자세히 보기</button>
+          <button className="button ghost" type="button" onClick={onShowMassing}>4개 대안 규모검토</button>
+          <button className="button ghost" type="button" onClick={onShowLh}>LH 공고·주차·커뮤니티</button>
+        </div>
+      </div>
+    </div>
+    <details className="decision-regulations"><summary>법규별 빠른 판정표 ({dashboard.checks.length}개 항목) <span>법령 원문·미확정 사유 펼치기</span></summary>
+      <div className="decision-checks">{dashboard.checks.map(item=><div className="decision-check" key={item.id}>
+        <b>{item.label}</b><span className={"legal-flag legal-flag-"+item.status}>{item.status==="source"?"조문 일반값":item.status==="conditional"?"조건부":item.status==="user"?"가정 입력":"미확인"}</span>
+        <p>{item.result}</p><small>{item.why}</small>
+        {item.url&&<a href={item.url} target="_blank" rel="noopener noreferrer">공식 조문 ↗</a>}</div>)}</div></details>
+    <p className="decision-dashboard-disclaimer">※ 이 결과는 예비 사업성·규모검토야. 원문 발견 ≠ 대지별 적용확정이며, 실제 층수·일조·주차·LH 인수 가능 여부는 인허가·심사 검증 전이야.</p>
+  </section>;
+}
+
 function ComparisonTable({ results, input }: { results: AlternativeResult[]; input: ProjectInput }) {
   const check = getMassingReadiness(input);
   const ready = check.canEstimateUnits;
@@ -303,6 +358,7 @@ export default function Home() {
   const activeRules = activeReviewedRules(input, reviewedRules);
   const autoZoningCandidates = suggestZoningRules(reviewData);
   const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules), [input, reviewData, lookupDetails, activeRules]);
+  const decisionDashboard = useMemo(() => buildDecisionDashboard(input, reviewData, legalReport), [input, reviewData, legalReport]);
   const assembly = useMemo(() => assessParcelAssembly(reviewData), [reviewData]);
   const assemblyEntryRows = input.parcelList.split(/\r?\n/);
   const normalizedExtras = normalizeAssemblyAddresses(input.address, assemblyEntryRows);
@@ -501,7 +557,10 @@ export default function Home() {
       }));
       setToast(`공식자료 ${data.laws.length + (data.ordinances?.length ?? 0) + data.landUse.length + (data.webSearch?.results?.length ?? 0) + (data.location ? 1 : 0)}건을 확인했습니다.`);
       setApiPanelMessage(`조회 완료 · 좌표 ${data.location ? 1 : 0}건 · 토지이용 ${data.landUse.length}건 · 법령 ${data.laws.length}건 · 자치법규 ${data.ordinances?.length ?? 0}건 · 웹 원문후보 ${data.webSearch?.results?.length ?? 0}건 · 공식 첨부 분석 ${data.officialDocuments?.documents.filter((document: { status: string }) => document.status === "analyzed").length ?? 0}건${data.errors.length ? ` · 오류 ${data.errors.length}건` : ""}`);
-      if (navigateToReview) setActiveTab(1);
+      if (navigateToReview) {
+        setActiveTab(0);
+        window.setTimeout(() => document.getElementById("decision-dashboard")?.scrollIntoView({behavior:"smooth",block:"start"}), 180);
+      }
       return review;
     } catch (error) {
       const message = error instanceof Error ? error.message : "통합 법규검토에 실패했습니다.";
@@ -697,6 +756,7 @@ export default function Home() {
           </section>
 
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
+          {reviewData && <DecisionDashboardCard dashboard={decisionDashboard} onShowLaw={()=>setActiveTab(1)} onShowMassing={()=>setActiveTab(3)} onShowLh={()=>setActiveTab(2)} />}
           <div className="summary-strip">
             <Metric label="대지면적" value={input.siteArea > 0 ? f(input.siteArea) : "—"} suffix="㎡" sub="사용자 입력" />
             <Metric label="적용 용적률" value={appliedFar > 0 ? appliedFar : "—"} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
