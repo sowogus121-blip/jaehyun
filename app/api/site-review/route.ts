@@ -59,10 +59,12 @@ const LAND_USE_LAYERS = [
   { code: "LT_C_UQ114", category: "용도지역", label: "자연환경보전지역" },
   { code: "LT_C_UQ121", category: "용도지구", label: "경관지구" },
   { code: "LT_C_UQ123", category: "용도지구", label: "고도지구" },
-  { code: "LT_C_UQ126", category: "용도지구", label: "방화지구" },
-  { code: "LT_C_UQ141", category: "용도구역", label: "개발제한구역" },
+  { code: "LT_C_UQ124", category: "용도지구", label: "방화지구" },
+  { code: "LT_C_UQ126", category: "용도지구", label: "보호지구" },
+  { code: "LT_C_UD801", category: "용도구역", label: "개발제한구역" },
   { code: "LT_C_UQ162", category: "용도구역", label: "도시자연공원구역" },
-  { code: "LT_C_UQ171", category: "도시계획", label: "지구단위계획구역" },
+  { code: "LT_C_UPISUQ161", category: "도시계획", label: "지구단위계획구역" },
+  { code: "LT_C_UPISUQ171", category: "도시계획", label: "개발행위허가제한지역" },
 ];
 
 function getHeaderOrEnv(request: NextRequest, header: string, envName: string) {
@@ -448,7 +450,7 @@ export async function POST(request: NextRequest) {
   const zoneNames = [...new Set(landUse.filter((item) => item.category === "용도지역").map((item) => item.name))];
   const mixedUseZones = zoneNames.length > 1;
   const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
-  const districtPlan = landUse.some((item) => item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
+  const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
   const localGovernment = localGovernmentFromAddress(preset?.address ?? address);
   const webSearchPromise = searchOfficialSources({
     address: preset?.address ?? address,
