@@ -8,6 +8,7 @@ import { screenParking03 } from "@/lib/lh-parking-screen";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
+import { assessParcelAssembly, normalizeAssemblyAddresses } from "@/lib/parcel-assembly";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
@@ -263,6 +264,7 @@ export default function Home() {
   const activeRules = activeReviewedRules(input, reviewedRules);
   const autoZoningCandidates = suggestZoningRules(reviewData);
   const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules), [input, reviewData, lookupDetails, activeRules]);
+  const assembly = useMemo(() => assessParcelAssembly(reviewData), [reviewData]);
   const preliminaryLimits = getPreliminaryOrdinanceInputs(legalReport.rows);
   const lhNotice = reviewData?.lhNotice ?? null;
   const lhRules = lhNotice?.rules ?? null;
@@ -308,8 +310,11 @@ export default function Home() {
   }, [toast]);
 
   const update = <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => {
+    const changedParcelSet = key === "parcelList" || key === "multipleParcels";
+    if (changedParcelSet) { setReviewData(null); setLookupDetails(null); }
     setInput((current) => ({
       ...current, [key]: value,
+      ...(changedParcelSet ? {siteArea:0,buildingCoverageRatio:0,baseFar:0,relaxedFar:0,useRelaxedFar:false} : {}),
       ...(key === "businessMode" || key === "lhSupplyType" ? {
         specialParkingApproval: "not-reviewed" as const,
         purchaseAgreementConfirmed: false, specialParkingUseScopeConfirmed: false, specialParkingLhConfirmed: false,
@@ -378,7 +383,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           address,
-          parcelAddresses: input.multipleParcels ? input.parcelList.split(/\r?\n/).map((item) => item.trim()).filter(Boolean).slice(0, 9) : [],
+          parcelAddresses: input.multipleParcels ? normalizeAssemblyAddresses(address,input.parcelList.split(/\r?\n/)) : [],
           businessMode: input.businessMode,
           regionalOffice: input.regionalOffice,
           lhSupplyType: input.lhSupplyType,
@@ -401,14 +406,17 @@ export default function Home() {
       const resolvedAddress = review.location?.parcelAddress || review.location?.address || address;
       const addressParts = resolvedAddress.split(/\s+/);
       setReviewData(review);
-      const automaticOrdinance = getPreliminaryOrdinanceInputs(buildLegalReviewReport({ ...input, address: resolvedAddress }, review, null).rows);
+      const merged = assessParcelAssembly(review);
+      const automaticOrdinance = merged?.isMultiple
+        ? merged.status === "ready" ? merged.ordinary : null
+        : getPreliminaryOrdinanceInputs(buildLegalReviewReport({ ...input, address: resolvedAddress }, review, null).rows);
       setInput((current) => ({
         ...current,
         address: resolvedAddress,
         ...(addressParts[0] ? { province: addressParts[0] } : {}),
         ...(addressParts[1] ? { district: addressParts[1] } : {}),
         ...(zoneValue ? { zone: zoneValue } : {}),
-        ...(review.parcel?.area ? { siteArea: review.parcel.area } : {}),
+        ...(merged?.isMultiple ? {siteArea: merged.totalArea ?? 0,buildingCoverageRatio:automaticOrdinance?.bcr??0,baseFar:automaticOrdinance?.far??0,relaxedFar:automaticOrdinance?Math.round(automaticOrdinance.far*1.2*100)/100:0,useRelaxedFar:false} : review.parcel?.area ? { siteArea: review.parcel.area } : {}),
         ...(automaticOrdinance ? {
           buildingCoverageRatio: current.buildingCoverageRatio > 0 ? current.buildingCoverageRatio : automaticOrdinance.bcr,
           baseFar: current.baseFar > 0 ? current.baseFar : automaticOrdinance.far,
@@ -571,8 +579,8 @@ export default function Home() {
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
-            <Toggle checked={input.multipleParcels} onChange={(value) => { update("multipleParcels", value); if (!value) update("parcelList", ""); }} label="복수 필지 통합검토" note="각 필지의 좌표·면적·용도지역을 분리 조회하며 최대 10필지" />
-            {input.multipleParcels && <Field label="추가 필지 목록" hint="한 줄에 한 주소 또는 지번 · 대표 주소는 위에 입력"><textarea value={input.parcelList} onChange={(e) => update("parcelList", e.target.value)} rows={4} placeholder={"경기도 의정부시 가능동 72-5\n경기도 의정부시 가능동 75-1"} /></Field>}
+            <div className="assemble-choice"><Toggle checked={input.multipleParcels} onChange={(value) => { update("multipleParcels", value); if (!value) update("parcelList", ""); }} label="여러 대지를 합필해서 규모검토" note="대표 필지 + 추가 필지 최대 9개 · 합필은 가정이며 실제 인접·지적·소유 요건 별도 확인" />{!input.multipleParcels && <button type="button" className="button ghost" onClick={() => update("multipleParcels", true)}>+ 합필할 필지 추가</button>}</div>
+            {input.multipleParcels && <div className="assembly-entry"><Field label="합필할 필지 추가 (한 줄당 1개)" hint="대표 주소와 같은 시·군·구라면 ‘가능동 72-5’ 또는 ‘72-5’처럼 입력해도 돼. 타 지역 주소는 전체 주소를 입력해 줘."><textarea value={input.parcelList} onChange={(e) => update("parcelList", e.target.value)} rows={3} placeholder={"가능동 72-5\n가능동 75-2\n경기도 의정부시 가능동 70-1"} /></Field><div className="assembly-entry-footer"><span>대표 필지 1개 + 추가 {normalizeAssemblyAddresses(input.address,input.parcelList.split(/\r?\n/)).length}개 · 합필 대상은 전체 한 번에 조회</span><button type="button" className="button primary" onClick={lookupAddress} disabled={isReviewing||!input.parcelList.trim()}>합필 통합검토 실행</button></div></div>}
             {lookupDetails && <div className="lookup-result-card">
               <div className="lookup-result-head"><Badge status="verified" /><b>{input.address}</b><span>{lookupDetails.source} · {lookupDetails.confirmedAt} 확인</span></div>
               <div className="lookup-result-grid"><span><small>대지면적</small><b>{lookupDetails.siteArea.toLocaleString()}㎡</b></span><span><small>지목</small><b>{lookupDetails.landCategory}</b></span><span><small>용도지역</small><b>{lookupDetails.zone}</b></span><span><small>개별공시지가</small><b>{lookupDetails.publicPricePerSqm.toLocaleString()}원/㎡</b></span></div>
