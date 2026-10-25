@@ -342,3 +342,62 @@ a.law-reference-item:hover { background: #f2f7fa; border-color: #b4cbd8; }
 @media print {
  .advanced-api-details, .raw-evidence-details, .supplementary-details, .workflow-hint, .preliminary-shortcut, .massing-unready { display: none !important; }
 }
+
+
+/* Address-first LH applicability and numeric relaxation comparison */
+.site-decision-summary {margin:0 0 18px;background:white;border:1px solid #d5e2e8;border-top:3px solid #276c79;box-shadow:var(--shadow);padding:21px 23px;}
+.site-decision-title {display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px;}
+.site-decision-title span {color:#40838e;font-weight:800;font-size:11px;}
+.site-decision-title h3 {margin:5px 0 6px;font-size:19px;color:#244557;}
+.site-decision-title p {margin:0;font-size:12px;color:#697f8c;line-height:1.5;}
+.site-decision-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+.site-decision-tile {min-width:0;border:1px solid #e0e9ed;padding:15px 13px;background:#fbfdfe;display:flex;flex-direction:column;gap:10px;}
+.site-decision-tile>div {display:flex;flex-direction:column;align-items:flex-start;gap:7px;}
+.site-decision-tile>div>span:first-child {font-size:12px;color:#466479;font-weight:750;}
+.site-decision-tile strong {font-size:24px;color:#1e485f;letter-spacing:-.03em;}
+.site-decision-tile p {margin:0;font-size:12px;font-weight:700;color:#397462;}
+.site-decision-tile small {font-size:11px;line-height:1.6;color:#647d89;}
+.site-pill {display:inline-block;border-radius:3px;padding:4px 7px;font-size:10px;font-weight:750;}
+.site-pill.tentative {background:#edf4f8;color:#356a83;}
+.site-pill.problem {background:#fbecea;color:#a64d42;}
+.site-decision-foot {padding:12px 1px 0;color:#8b6140;font-size:11px;line-height:1.5;}
+.lh-latest-banner {background:#edf6f5;border:1px solid #cee3e0;padding:20px 22px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;gap:20px;}
+.lh-latest-banner h3 {font-size:16px;color:#215b61;margin:9px 0;}
+.lh-latest-banner p {font-size:12px;line-height:1.5;color:#5e7b83;margin:6px 0;}
+.lh-latest-links {display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;min-width:220px;}
+.lh-latest-links a {font-size:12px;font-weight:750;background:white;border:1px solid #b9d4d4;padding:9px 12px;color:#2d6976;text-decoration:none;}
+.lh-rule-sheet {border:1px solid #d6e4e9;background:white;padding:20px 23px;margin-bottom:18px;}
+.lh-rule-sheet>div:first-child {display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px;}
+.lh-rule-sheet>div:first-child strong {font-size:15px;color:#234b5e;}
+.lh-rule-sheet>div:first-child span {font-size:11px;color:#688692;}
+.lh-rule-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;}
+.lh-rule-grid article {background:#f5f9fb;border:1px solid #e2ecf0;padding:14px;display:flex;flex-direction:column;gap:7px;}
+.lh-rule-grid span {color:#5a7988;font-size:11px;font-weight:700;}
+.lh-rule-grid b {color:#235367;font-size:18px;}
+.lh-rule-grid small {color:#758e9b;font-size:11px;line-height:1.6;}
+.far-compare-strip {padding:15px 24px;display:flex;align-items:center;justify-content:space-between;gap:15px;background:#f7fafb;border-bottom:1px solid #e2eaee;}
+.far-compare-strip>div:not(.far-compare-arrow) {display:flex;flex-direction:column;gap:4px;}
+.far-compare-strip span {font-size:11px;color:#7b8b95;}
+.far-compare-strip b {font-size:23px;color:#234c65;}
+.far-compare-strip small {font-size:10px;color:#ad7141;}
+.far-compare-arrow {font-size:22px;color:#b1c5ce;}
+.parking-inline-settings {padding:15px 24px;background:#fff;display:flex;align-items:center;gap:16px;border-bottom:1px solid #e3e9eb;}
+.parking-inline-settings>div {flex:1;display:flex;flex-direction:column;gap:5px;}
+.parking-inline-settings b {font-size:13px;color:#2d5068;}
+.parking-inline-settings small {font-size:11px;color:#7b909d;line-height:1.55;}
+.parking-inline-settings label {font-size:11px;color:#5a7282;display:flex;align-items:center;gap:7px;white-space:nowrap;}
+.parking-inline-settings input {width:82px;border:1px solid #cedde4;border-radius:4px;padding:8px;color:#2d5367;font-size:13px;}
+@media(max-width:1260px){
+ .site-decision-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+ .lh-rule-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:850px){
+ .site-decision-title,.lh-latest-banner,.lh-rule-sheet>div:first-child {align-items:flex-start;flex-direction:column;}
+ .site-decision-grid,.lh-rule-grid {grid-template-columns:1fr;}
+ .lh-latest-links {justify-content:flex-start;min-width:0;}
+ .far-compare-strip {flex-wrap:wrap;}
+ .parking-inline-settings {align-items:flex-start;flex-wrap:wrap;}
+ .parking-inline-settings>div {flex:1 0 100%;}
+ .parking-inline-settings label {flex:1 0 40%;}
+}
+@media print{.parking-inline-settings button,.site-decision-title button,.lh-latest-links a{display:none}}
