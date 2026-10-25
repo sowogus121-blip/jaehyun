@@ -72,7 +72,8 @@ export function buildLegalReviewReport(
 ): LegalReviewReport {
   const rows: LegalReviewRow[] = [];
   const place = review?.location?.parcelAddress || review?.location?.address || input.address || "주소 미입력";
-  const siteArea = review?.parcel?.area || lookup?.siteArea || (input.siteArea > 0 ? input.siteArea : null);
+  const siteArea = review?.parcels && review.parcels.length > 1 && !review.parcel?.area
+    ? null : review?.parcel?.area || lookup?.siteArea || (input.siteArea > 0 ? input.siteArea : null);
   const landUse = review?.landUse.filter((item) => item.category === "용도지역") ?? [];
   const zones = [...new Set(landUse.map((item) => item.name))];
   const zone = review?.mixedUseZones ? zones.join(" / ") + " (혼합)" : zones[0] || lookup?.zone || (input.zone !== "미확인" ? input.zone : "미확인");
