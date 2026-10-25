@@ -581,6 +581,17 @@ export default function Home() {
               <p>{reviewData.planningStandards.source} · 관할 도시계획조례와 지구단위계획에서 정한 실제 적용값을 확인해야 합니다. 이 일반 상한만으로 규모계산을 자동 확정하지 않습니다.</p>
             </div>}
             {reviewData.laws.length > 0 && <div className="official-group"><h4>현행 국가법령 · 메타데이터 확인</h4>{reviewData.laws.map((law) => <a className="official-row" href={law.link} target="_blank" rel="noreferrer" key={law.name}><Badge status="review" /><b>{law.name}</b><span>{law.ministry || "소관부처 확인"} · 시행 {law.enforcementDate || "일자 미확보"} · 적용판정 전</span><em>원문 ↗</em></a>)}</div>}
+            {(reviewData.nationalArticleCandidates?.length ?? 0) > 0 && <div className="official-group">
+              <h4>국가법령 조항 자동발췌 ({reviewData.nationalArticleCandidates?.length ?? 0}건)</h4>
+              <p>공공주택 특별법 시행령 및 주택건설기준규정 원문 발췌입니다. 법령 원문 검색 성공만으로 개별 LH 매입사업 적용이 확정되는 것은 아닙니다.</p>
+              {reviewData.nationalArticleCandidates?.filter((item) => item.topic === "주차").slice(0, 8).map((item, index) =>
+                <details className="reg-detail" key={item.sourceTitle + item.article + index}>
+                  <summary><Badge status="review"/> {item.sourceTitle} · {item.article}</summary>
+                  <p>{item.excerpt}</p>
+                  <a href={item.sourceUrl} target="_blank" rel="noreferrer">법령 원문 ↗</a>
+                </details>
+              )}
+            </div>}
             {(reviewData.ordinances?.length ?? 0) > 0 && <div className="official-group"><h4>관할 자치법규 · 메타데이터 확인</h4>{reviewData.ordinances.map((ordinance) => <a className="official-row" href={ordinance.link} target="_blank" rel="noreferrer" key={ordinance.name}><Badge status="review" /><b>{ordinance.name}</b><span>{ordinance.localGovernment || "관할기관 확인"} · 시행 {ordinance.enforcementDate || "일자 미확보"} · 조문 분석 전</span><em>원문 ↗</em></a>)}</div>}
             {autoZoningCandidates.length > 0 && <div className="official-group">
               <h4>대상 용도지역 ↔ 조례 수치 자동 대조 ({autoZoningCandidates.length}건)</h4>
