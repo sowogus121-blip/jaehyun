@@ -8,7 +8,7 @@ import { screenParking03 } from "@/lib/lh-parking-screen";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
-import { assessParcelAssembly, normalizeAssemblyAddresses, type AssemblyStudy } from "@/lib/parcel-assembly";
+import { assessParcelAssembly, normalizeAssemblyAddresses, splitAssemblyAddresses, MAX_EXTRA_PARCELS, type AssemblyStudy } from "@/lib/parcel-assembly";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
@@ -304,6 +304,21 @@ export default function Home() {
   const autoZoningCandidates = suggestZoningRules(reviewData);
   const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules), [input, reviewData, lookupDetails, activeRules]);
   const assembly = useMemo(() => assessParcelAssembly(reviewData), [reviewData]);
+  const assemblyEntryRows = input.parcelList.split(/\r?\n/);
+  const normalizedExtras = normalizeAssemblyAddresses(input.address, assemblyEntryRows);
+  const tooManyExtras = normalizedExtras.length > MAX_EXTRA_PARCELS;
+  const updateAssemblyRow = (index: number, value: string) => {
+    const updated = [...assemblyEntryRows]; updated[index] = value;
+    update("parcelList", updated.join("\n"));
+  };
+  const appendAssemblyRow = () => {
+    if (assemblyEntryRows.length >= MAX_EXTRA_PARCELS) return;
+    update("parcelList", assemblyEntryRows.concat("").join("\n"));
+  };
+  const removeAssemblyRow = (index: number) => {
+    const updated = assemblyEntryRows.filter((_, i) => i !== index);
+    update("parcelList", updated.join("\n"));
+  };
   const preliminaryLimits = getPreliminaryOrdinanceInputs(legalReport.rows);
   const lhNotice = reviewData?.lhNotice ?? null;
   const lhRules = lhNotice?.rules ?? null;
@@ -419,6 +434,7 @@ export default function Home() {
   };
 
   const requestSiteReview = async (address: string, navigateToReview = true) => {
+    if (input.multipleParcels && (normalizedExtras.length === 0 || tooManyExtras)) return setToast(`합필할 추가 필지는 1~${MAX_EXTRA_PARCELS}개로 입력해 줘.`);
     const activeVworldKey = vworldKey.trim();
     const activeLawOc = lawOc.trim();
     setVworldKey(activeVworldKey);
@@ -436,7 +452,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           address,
-          parcelAddresses: input.multipleParcels ? normalizeAssemblyAddresses(address,input.parcelList.split(/\r?\n/)) : [],
+          parcelAddresses: input.multipleParcels ? normalizeAssemblyAddresses(address,assemblyEntryRows) : [],
           businessMode: input.businessMode,
           regionalOffice: input.regionalOffice,
           lhSupplyType: input.lhSupplyType,
@@ -498,6 +514,7 @@ export default function Home() {
 
   const lookupAddress = async () => {
     const activeVworldKey = vworldKey.trim();
+    if (input.multipleParcels && (normalizedExtras.length === 0 || tooManyExtras)) return setToast(`합필은 추가 필지 1~${MAX_EXTRA_PARCELS}개를 입력해 줘.`);
     if (!input.address.trim()) return setToast("주소를 먼저 입력해 주세요.");
     setToast("주소·좌표·토지이용 정보를 조회하고 있습니다…");
     try {
@@ -632,8 +649,33 @@ export default function Home() {
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
-            <div className="assemble-choice"><Toggle checked={input.multipleParcels} onChange={(value) => { update("multipleParcels", value); if (!value) update("parcelList", ""); }} label="여러 대지를 합필해서 규모검토" note="대표 필지 + 추가 필지 최대 9개 · 합필은 가정이며 실제 인접·지적·소유 요건 별도 확인" />{!input.multipleParcels && <button type="button" className="button ghost" onClick={() => update("multipleParcels", true)}>+ 합필할 필지 추가</button>}</div>
-            {input.multipleParcels && <div className="assembly-entry"><Field label="합필할 필지 추가 (한 줄당 1개)" hint="대표 주소와 같은 시·군·구라면 ‘가능동 72-5’ 또는 ‘72-5’처럼 입력해도 돼. 타 지역 주소는 전체 주소를 입력해 줘."><textarea value={input.parcelList} onChange={(e) => update("parcelList", e.target.value)} rows={3} placeholder={"가능동 72-5\n가능동 75-2\n경기도 의정부시 가능동 70-1"} /></Field><div className="assembly-entry-footer"><span>대표 필지 1개 + 추가 {normalizeAssemblyAddresses(input.address,input.parcelList.split(/\r?\n/)).length}개 · 합필 대상은 전체 한 번에 조회</span><button type="button" className="button primary" onClick={lookupAddress} disabled={isReviewing||!input.parcelList.trim()}>합필 통합검토 실행</button></div></div>}
+            <div className="assemble-choice"><Toggle checked={input.multipleParcels} onChange={(value) => { update("multipleParcels", value); if (!value) update("parcelList", ""); }} label="여러 대지를 합필해서 규모검토" note={`대표 필지 + 추가 필지 최대 ${MAX_EXTRA_PARCELS}개 · 실제 인접·지적·소유 요건은 별도 확인`} />{!input.multipleParcels && <button type="button" className="button ghost" onClick={() => update("multipleParcels", true)}>+ 합필할 필지 추가</button>}</div>
+            {input.multipleParcels && <div className="assembly-entry">
+              <div className="assembly-entry-intro"><div><b>합필 대상 필지 추가</b><p>대표 주소를 기준으로 최대 {MAX_EXTRA_PARCELS}개 추가할 수 있어. 같은 동은 지번만 입력해도 돼.</p></div><span>대표 1 + 추가 {normalizedExtras.length} = {normalizedExtras.length + 1}필지</span></div>
+              <div className="assembly-parcel-rows">{assemblyEntryRows.map((entry,index)=>
+                <div className="assembly-parcel-row" key={index}>
+                  <label htmlFor={"extra-parcel-"+index}>추가 {index+1}</label>
+                  <input id={"extra-parcel-"+index} aria-label={"합필 추가 필지 "+(index+1)} value={entry}
+                    placeholder={index===0?"가능동 72-5":index===1?"75-2":"지번 또는 전체 주소"}
+                    onChange={event=>updateAssemblyRow(index,event.target.value)} />
+                  <button type="button" className="assembly-remove" onClick={()=>removeAssemblyRow(index)}
+                    aria-label={"추가 필지 "+(index+1)+" 삭제"} title="이 필지 삭제">×</button>
+                </div>)}</div>
+              <div className="assembly-entry-toolbar"><button type="button" className="button ghost" onClick={appendAssemblyRow}
+                disabled={assemblyEntryRows.length>=MAX_EXTRA_PARCELS}>+ 필지 추가</button>
+                <button type="button" className="button ghost" onClick={()=>update("parcelList","")}>추가 필지 초기화</button>
+                <span>최대 {MAX_EXTRA_PARCELS}개까지 계속 추가 가능</span></div>
+              <details className="assembly-bulk-entry"><summary>여러 지번 한꺼번에 붙여넣기 / 편집</summary>
+                <textarea aria-label="합필 필지 일괄 입력" rows={5} value={input.parcelList}
+                  onChange={event=>update("parcelList",splitAssemblyAddresses(event.target.value).join("\n"))}
+                  placeholder={"가능동 72-5\n75-2\n가능동 70-1"} />
+                <small>줄바꿈, 쉼표(,), 더하기(+)로 구분 가능. 같은 시·군·구 이외 필지는 전체 주소를 입력해 줘.</small>
+              </details>
+              {tooManyExtras && <p className="assembly-input-error">추가 필지가 {normalizedExtras.length}개야. 대표 필지 포함 최대 {MAX_EXTRA_PARCELS+1}필지만 지원해. 먼저 초과분을 삭제해 줘.</p>}
+              <div className="assembly-entry-footer"><span>같은 주소 중복은 자동 제외해. 실측·경계 확인 전에는 가상 합필로 표시해.</span>
+                <button type="button" className="button primary" onClick={lookupAddress}
+                  disabled={isReviewing || normalizedExtras.length===0 || tooManyExtras}>추가 {normalizedExtras.length}필지 통합검토</button></div>
+            </div>}
             {lookupDetails && <div className="lookup-result-card">
               <div className="lookup-result-head"><Badge status="verified" /><b>{input.multipleParcels ? "대표 필지 · " : ""}{input.address}</b><span>{lookupDetails.source} · {lookupDetails.confirmedAt} 확인 {input.multipleParcels ? "· 아래 합필 합계와 별도" : ""}</span></div>
               <div className="lookup-result-grid"><span><small>대지면적</small><b>{lookupDetails.siteArea.toLocaleString()}㎡</b></span><span><small>지목</small><b>{lookupDetails.landCategory}</b></span><span><small>용도지역</small><b>{lookupDetails.zone}</b></span><span><small>개별공시지가</small><b>{lookupDetails.publicPricePerSqm.toLocaleString()}원/㎡</b></span></div>
@@ -642,7 +684,7 @@ export default function Home() {
             </div>}
             {!lookupDetails && reviewData && (reviewData.location || reviewData.landUse.length > 0) && <div className="lookup-result-card">
               <div className="lookup-result-head"><Badge status={reviewData.location ? "verified" : "review"} /><b>{input.multipleParcels ? "합필 대표 필지 · " : ""}{input.address}</b><span>VWorld 통합조회 · {new Date(reviewData.checkedAt).toLocaleString("ko-KR")}</span></div>
-              <div className="lookup-result-grid"><span><small>대지면적</small><b>{reviewData.parcel?.area ? `${f(reviewData.parcel.area)}㎡${reviewData.parcel.approximate ? " (개략)" : ""}` : "미확보"}</b></span><span><small>지목</small><b>{reviewData.parcel?.landCategory || "미확보"}</b></span><span><small>용도지역</small><b>{reviewData.mixedUseZones ? "혼합 · 필지별 확인" : reviewData.landUse.find((item) => item.category === "용도지역")?.name || "미확보"}</b></span><span><small>좌표</small><b>{reviewData.location ? `${reviewData.location.x}, ${reviewData.location.y}` : "미확보"}</b></span></div>
+              <div className="lookup-result-grid"><span><small>{input.multipleParcels ? "합필 면적 합계" : "대지면적"}</small><b>{reviewData.parcel?.area ? `${f(reviewData.parcel.area)}㎡${reviewData.parcel.approximate ? " (개략)" : ""}` : "미확보"}</b></span><span><small>지목</small><b>{reviewData.parcel?.landCategory || "미확보"}</b></span><span><small>용도지역</small><b>{reviewData.mixedUseZones ? "혼합 · 필지별 확인" : reviewData.landUse.find((item) => item.category === "용도지역")?.name || "미확보"}</b></span><span><small>좌표</small><b>{reviewData.location ? `${reviewData.location.x}, ${reviewData.location.y}` : "미확보"}</b></span></div>
               {reviewData.landUse.length > 0 && <div className="lookup-result-lines"><span><Icon name="law" size={14} /><b>토지이용</b>{reviewData.landUse.map((item) => item.name).join(" · ")}</span></div>}
               {reviewData.errors.map((error) => <div className="lookup-warning" key={error}><Icon name="alert" size={13} />{error}</div>)}
             </div>}
