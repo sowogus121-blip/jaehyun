@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import type { AlternativeResult, ProjectInput, SiteReviewResult } from "../../../../lib/types";
+import type { ReviewedRule } from "../../../../lib/rule-application";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,7 @@ type ExportBody = {
   input?: ProjectInput;
   results?: AlternativeResult[];
   reviewData?: SiteReviewResult | null;
+  reviewedRules?: ReviewedRule[];
 };
 
 function styleHeader(row: ExcelJS.Row) {
@@ -93,6 +95,10 @@ export async function POST(request: NextRequest) {
   review?.ordinances?.forEach((ordinance) => evidence.addRow(["자치법규", ordinance.name, ordinance.applicationStatus, ordinance.enforcementDate || "", ordinance.link]));
   review?.ruleFindings?.forEach((finding) => evidence.addRow([finding.topic, String(finding.value ?? ""), finding.outcome, finding.article || finding.effectiveDate || "", finding.sourceUrl]));
   review?.unresolved.forEach((item) => evidence.addRow(["미확정", item, "확인 필요", "", ""]));
+  body.reviewedRules?.forEach((rule) => evidence.addRow([
+    "계산에 적용된 입력", rule.field, "검토자 확인 · 법규 자동확정 아님",
+    String(rule.value) + " · " + rule.reviewedAt, rule.sourceTitle + " / " + rule.sourceUrl,
+  ]));
   evidence.columns = [{ width: 16 }, { width: 42 }, { width: 18 }, { width: 22 }, { width: 70 }];
   evidence.getColumn(5).alignment = { wrapText: true, vertical: "top" };
 
