@@ -279,7 +279,7 @@ async function fetchNationalLawArticleCandidates(law: LawRecord, oc: string): Pr
   return extractOrdinanceArticles(data, law.name, law.link);
 }
 
-async function searchOrdinance(query: string, oc: string): Promise<OrdinanceRecord | null> {
+async function searchOrdinance(query: string, oc: string, jurisdiction: string): Promise<OrdinanceRecord | null> {
   const params = new URLSearchParams({ OC: oc, target: "ordin", type: "JSON", query, display: "10" });
   const data = await fetchJson(`https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`);
   const root = data?.OrdinSearch ?? data?.LawSearch;
@@ -292,16 +292,23 @@ async function searchOrdinance(query: string, oc: string): Promise<OrdinanceReco
   // Do not use the API's first hit: a different municipality's ordinance
   // can otherwise be presented as the ordinance governing this address.
   const normalize = (value: unknown) => String(value ?? "").replace(/\s+/g, "");
-  const scope = query.split(/\s+/).slice(0, -2).join("");
+  const district = jurisdiction.split(/\s+/).filter(Boolean).at(-1) ?? jurisdiction;
+  const fullScope = normalize(jurisdiction);
   const subject = query.includes("주차장") ? "주차장" : query.includes("도시계획") ? "도시계획" :
     query.includes("경관") ? "경관" : "건축";
-  const row = rows.find((candidate: Record<string, unknown>) => {
+  // The Law Information API indexes the local law by '의정부시 ...', not
+  // '경기도 의정부시 ...'. Match the municipality + subject in the title,
+  // and the entire governing agency when the API supplies it.
+  const matches = rows.filter((candidate: Record<string, unknown>) => {
     const title = normalize(candidate["자치법규명"] ?? candidate["법령명한글"]);
     const office = normalize(candidate["지자체기관명"]);
-    // Scope by jurisdiction AND subject; do not use an unrelated first search hit.
-    return (title.startsWith(scope) || office === scope || (office.length > 0 && scope.endsWith(office))) &&
-      title.includes(subject) && title.includes("조례");
-  }) as Record<string, unknown> | undefined;
+    return title.startsWith(normalize(district + subject)) &&
+      title.includes("조례") && !title.includes("시행규칙") &&
+      (!office || office === fullScope || office.endsWith(normalize(district)));
+  }) as Record<string, unknown>[];
+  const row = matches.find((candidate) =>
+    normalize(candidate["자치법규명"] ?? candidate["법령명한글"]) === normalize(query)
+  ) ?? matches[0];
   if (!row) return null;
   const detail = String(row["자치법규상세링크"] ?? row["법령상세링크"] ?? "");
   return {
@@ -453,10 +460,18 @@ export async function POST(request: NextRequest) {
   let laws: LawRecord[] = [];
   let ordinances: OrdinanceRecord[] = [];
   if (lawOc) {
-    const ordinanceQueries = ["건축 조례", "주차장 조례", "도시계획 조례", "경관 조례"].map((name) => `${localGovernment} ${name}`);
+    const district = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? localGovernment;
+    // Search by enacted ordinance title. Adding the province to 'query'
+    // yields zero results on the real official API for e.g. 의정부시.
+    const ordinanceQueries = [
+      `${district} 건축 조례`,
+      `${district} 주차장 설치 및 관리 조례`,
+      `${district} 도시계획 조례`,
+      `${district} 경관 조례`,
+    ];
     const [settled, ordinanceSettled] = await Promise.all([
       Promise.allSettled(LAW_QUERIES.map((query) => searchLaw(query, lawOc))),
-      Promise.allSettled(ordinanceQueries.map((query) => searchOrdinance(query, lawOc))),
+      Promise.allSettled(ordinanceQueries.map((query) => searchOrdinance(query, lawOc, localGovernment))),
     ]);
     laws = settled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
     const failures = settled.flatMap((result) => result.status === "rejected"
