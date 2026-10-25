@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findSitePreset } from "../../../lib/site-presets";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
+import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
 import { extractOrdinanceArticles, type OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
 
 type LawRecord = {
@@ -497,6 +498,7 @@ export async function POST(request: NextRequest) {
     ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   }
   const webSearch = await webSearchPromise;
+  const officialDocuments = await collectOfficialDocuments(webSearch.results, localGovernment);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
 
@@ -519,13 +521,18 @@ export async function POST(request: NextRequest) {
     nationalArticleCandidates,
     ruleFindings: [],
     webSearch,
+    officialDocuments,
     missing,
     errors,
     unresolved: [
       ordinances.length ? "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요" : "관할 지자체 건축·주차장 조례 원문",
       ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
-      "지구단위계획 결정도서 및 시행지침",
-      "해당 연도 LH 지역본부 매입공고",
+      officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
+        ? "지구단위계획 관련 문서를 추출했지만 해당 필지·획지별 결정도서와 변경고시 검증 필요"
+        : "지구단위계획 결정도서 및 시행지침 원문 확보 필요",
+      officialDocuments.documents.some((item) => item.kind === "lh-notice" && item.status === "analyzed")
+        ? "LH 관련 문서를 추출했지만 해당 지역본부·공급유형·공고 연도와 인수기준 대조 필요"
+        : "해당 연도 LH 지역본부 매입공고 원문 확보 필요",
       "일조·인동거리·소방활동공간 배치 검토",
     ],
   });
