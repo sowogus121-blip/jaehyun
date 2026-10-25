@@ -513,7 +513,7 @@ export async function POST(request: NextRequest) {
     ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   }
   const webSearch = await webSearchPromise;
-  const officialDocuments = await collectOfficialDocuments(webSearch.results, localGovernment);
+  const officialDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
 
