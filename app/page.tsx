@@ -67,10 +67,10 @@ function buildRegulationGroups(input: ProjectInput, reviewData: SiteReviewResult
     {
       title: "도시계획 및 토지이용",
       icon: "site",
-      summary: reviewData ? "VWorld 조회값과 계획기준 자동반영" : "주소 조회 전 입력값 검토",
+      summary: reviewData ? "용도지역 확인 · 지자체 조례 및 지구단위계획 별도 적용판정" : "주소 조회 전 입력값 검토",
       items: [
         { name: "용도지역", value: zone, status: zoneVerified ? "verified" : "user", source: zoneItem?.source || lookupDetails?.source || "사용자 입력값" },
-        { name: "건폐율 / 용적률", value: `${input.buildingCoverageRatio}% / ${input.baseFar}%`, status: planning ? "review" : "user", source: urbanOrdinance ? `${planning?.source || "자동 계획값"} · ${urbanOrdinance.name} 원문 연결` : planning?.source || "사용자 계획값 · 관할 조례 대조 필요" },
+        { name: "건폐율 / 용적률", value: `${input.buildingCoverageRatio}% / ${input.baseFar}%`, status: "user", source: urbanOrdinance ? `계산값은 사용자 입력 · ${urbanOrdinance.name} 조항 대조 필요 · ${planning?.source || "일반상한 참고"}` : "계산값은 사용자 입력 · 국가·지자체 계획기준 대조 필요" },
         { name: "지구단위계획", value: reviewData?.districtPlan === true ? "VWorld 구역 검출" : reviewData?.districtPlan === false ? "VWorld에서 미검출" : input.districtPlan ? "대상 입력" : "미확인", status: reviewData?.districtPlan === true ? "verified" : "review", source: reviewData ? "VWorld 지구단위계획구역 레이어 조회 · 결정도서 별도 확인" : "결정도서·시행지침 자료 미확보" },
         { name: "건축선·공공보행통로", value: "결정도서 확인 필요", status: "unknown", source: "일반 공간 API만으로 세부 결정선은 확정할 수 없음" },
       ],
@@ -565,6 +565,11 @@ export default function Home() {
             {reviewData.parcel && <div className="official-group"><h4>필지 자동조회</h4><div className="official-row"><Badge status="verified" /><b>{reviewData.parcel.area ? `${f(reviewData.parcel.area)}㎡` : "면적 미확보"}</b><span>{reviewData.parcel.landCategory ? `지목 ${reviewData.parcel.landCategory} · ` : ""}{reviewData.parcel.source}{reviewData.parcel.pnu ? ` · PNU ${reviewData.parcel.pnu}` : ""}</span><code>{reviewData.parcel.approximate ? "도형 개략" : "공식값"}</code></div></div>}
             {(reviewData.parcels?.length ?? 0) > 1 && <div className="official-group"><h4>복수 필지별 조사 결과</h4>{reviewData.parcels.map((item) => <div className="official-row" key={item.inputAddress}><Badge status={item.errors.length ? "review" : "verified"} /><b>{item.location?.parcelAddress || item.inputAddress}</b><span>{item.parcel?.area ? `${f(item.parcel.area)}㎡` : "면적 미확보"} · {item.landUse.filter((use) => use.category === "용도지역").map((use) => use.name).join(" / ") || "용도지역 미확보"}</span><code>{item.errors.length ? "일부 실패" : "조회"}</code></div>)}</div>}
             {reviewData.landUse.length > 0 && <div className="official-group"><h4>토지이용 · 용도지역</h4>{reviewData.landUse.map((item) => <div className="official-row" key={`${item.code}-${item.name}`}><Badge status="verified" /><b>{item.name}</b><span>{item.source}</span><code>{item.code}</code></div>)}</div>}
+            {reviewData.planningStandards && <div className="official-group">
+              <h4>전국 공통 용도지역 참고 상한 (계산 미반영)</h4>
+              <p>{reviewData.planningStandards.zone}: 건폐율 {reviewData.planningStandards.buildingCoverageRatio}% · 용적률 {reviewData.planningStandards.far}%</p>
+              <p>{reviewData.planningStandards.source} · 관할 도시계획조례와 지구단위계획에서 정한 실제 적용값을 확인해야 합니다. 이 일반 상한만으로 규모계산을 자동 확정하지 않습니다.</p>
+            </div>}
             {reviewData.laws.length > 0 && <div className="official-group"><h4>현행 국가법령 · 메타데이터 확인</h4>{reviewData.laws.map((law) => <a className="official-row" href={law.link} target="_blank" rel="noreferrer" key={law.name}><Badge status="review" /><b>{law.name}</b><span>{law.ministry || "소관부처 확인"} · 시행 {law.enforcementDate || "일자 미확보"} · 적용판정 전</span><em>원문 ↗</em></a>)}</div>}
             {(reviewData.ordinances?.length ?? 0) > 0 && <div className="official-group"><h4>관할 자치법규 · 메타데이터 확인</h4>{reviewData.ordinances.map((ordinance) => <a className="official-row" href={ordinance.link} target="_blank" rel="noreferrer" key={ordinance.name}><Badge status="review" /><b>{ordinance.name}</b><span>{ordinance.localGovernment || "관할기관 확인"} · 시행 {ordinance.enforcementDate || "일자 미확보"} · 조문 분석 전</span><em>원문 ↗</em></a>)}</div>}
             {(reviewData.ordinanceArticleCandidates?.length ?? 0) > 0 && <div className="official-group">
