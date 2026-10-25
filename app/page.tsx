@@ -190,7 +190,7 @@ export default function Home() {
   const [reviewRuleValue, setReviewRuleValue] = useState("");
   const [lookupDetails, setLookupDetails] = useState<SiteLookupDetails | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
-  const [apiPanelMessage, setApiPanelMessage] = useState("두 값을 입력한 뒤 통합 법규검토를 실행하세요.");
+  const [apiPanelMessage, setApiPanelMessage] = useState("서버에 등록된 API 키로 통합 법규검토를 실행할 수 있습니다. 아래 입력은 로컬 진단용입니다.");
   const uploadRef = useRef<HTMLInputElement>(null);
   const projectImportRef = useRef<HTMLInputElement>(null);
 
@@ -288,7 +288,7 @@ export default function Home() {
     setVworldKey(activeVworldKey);
     setLawOc(activeLawOc);
     setIsReviewing(true);
-    setApiPanelMessage(`입력 확인 완료 · VWorld ${activeVworldKey ? "사용" : "미사용"} · 법령 API ${activeLawOc ? "사용" : "미사용"} · 공식자료 조회 중…`);
+    setApiPanelMessage("Vercel 서버 환경변수를 우선 사용합니다. 공식자료를 조회하는 중…");
     setToast("공식 API에서 대상지와 현행 법령을 조회하고 있습니다…");
     try {
       const response = await fetch("/api/site-review", {
@@ -306,8 +306,16 @@ export default function Home() {
           lhSupplyType: input.lhSupplyType,
         }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "통합검토 요청에 실패했습니다.");
+      const raw = await response.text();
+      let data: SiteReviewResult & { error?: string };
+      try {
+        data = JSON.parse(raw) as SiteReviewResult & { error?: string };
+      } catch {
+        throw new Error(response.status === 504
+          ? "서버의 통합검토 시간이 초과되었습니다. 잠시 후 다시 실행해 주세요. (HTTP 504)"
+          : `서버에서 정상 JSON 응답을 받지 못했습니다. (HTTP ${response.status}, 응답 ${raw.length}자) 서버 로그를 확인해 주세요.`);
+      }
+      if (!response.ok) throw new Error(data.error ?? `통합검토 요청에 실패했습니다. (HTTP ${response.status})`);
       const review = data as SiteReviewResult;
       const zoneItem = review.landUse.find((item) => item.category === "용도지역");
       const zoneNames = [...new Set(review.landUse.filter((item) => item.category === "용도지역").map((item) => item.name))];
@@ -495,7 +503,7 @@ export default function Home() {
           </section>
 
           <section className="card api-connect-card">
-            <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>운영 시 .env.local 서버 환경변수를 사용합니다. 아래 입력은 현재 화면에서만 임시 사용하며 저장하지 않습니다.</p></div><span className={`connection-pill ${vworldKey.trim() || lawOc.trim() ? "connected" : ""}`}><i />{vworldKey.trim() || lawOc.trim() ? "임시 입력됨" : "서버 설정 우선"}</span></div>
+            <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>Vercel에 등록한 서버 API 키가 자동 사용됩니다. 아래 입력은 로컬 진단용으로, 비워둬도 정상입니다.</p></div><span className={`connection-pill ${vworldKey.trim() || lawOc.trim() ? "connected" : ""}`}><i />{vworldKey.trim() || lawOc.trim() ? "임시 입력됨" : "서버 자동연결"}</span></div>
             <div className="api-connect-grid">
               <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input id="vworld-api-key" className="secret-input" type="text" autoComplete="off" value={vworldKey} onChange={(e) => updateVworldKey(e.currentTarget.value)} placeholder="VWorld에서 발급받은 Key" /></Field>
               <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input id="law-api-oc" className="secret-input" type="text" autoComplete="off" value={lawOc} onChange={(e) => updateLawOc(e.currentTarget.value)} placeholder="공동활용 신청 시 등록한 OC" /></Field>
