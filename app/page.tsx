@@ -230,9 +230,9 @@ export default function Home() {
     { label: "주소·필지 확인", done: Boolean(reviewData?.location && reviewData?.parcel), partial: Boolean(reviewData?.location || reviewData?.parcel) },
     { label: "토지이용정보 조사", done: Boolean(reviewData?.landUse.length), partial: false },
     { label: "국가법령·지자체 조례 검색", done: Boolean(reviewData?.laws.length && reviewData?.ordinances?.length), partial: Boolean(reviewData?.laws.length || reviewData?.ordinances?.length) },
-    { label: "지구단위계획·고시 조사", done: Boolean(reviewData?.ruleFindings?.some((finding) => finding.topic === "지구단위계획" && finding.verified)), partial: Boolean(reviewData?.districtPlan !== null || reviewData?.webSearch?.results?.length) },
+    { label: "지구단위계획·고시 조사", done: Boolean(reviewData?.ruleFindings?.some((finding) => finding.topic === "지구단위계획" && finding.verified)), partial: Boolean(reviewData?.districtPlan !== null || reviewData?.officialDocuments?.documents.some((document) => document.kind === "district-plan" && document.status === "analyzed") || reviewData?.webSearch?.results?.length) },
     { label: "완화제도·특례 탐색", done: Boolean(reviewData?.ruleFindings?.some((finding) => finding.topic.includes("완화") && finding.verified)), partial: false },
-    { label: "LH 공고·설계지침 검토", done: Boolean(reviewData?.ruleFindings?.some((finding) => finding.topic.includes("LH") && finding.verified)), partial: Boolean(reviewData?.webSearch?.results?.some((result) => result.sourceDomain.includes("lh.or.kr"))) },
+    { label: "LH 공고·설계지침 검토", done: Boolean(reviewData?.ruleFindings?.some((finding) => finding.topic.includes("LH") && finding.verified)), partial: Boolean(reviewData?.officialDocuments?.documents.some((document) => document.kind === "lh-notice" && document.status === "analyzed") || reviewData?.webSearch?.results?.some((result) => result.sourceDomain.includes("lh.or.kr"))) },
     { label: "법규 적용 및 규모계산", done: Boolean(reviewData?.applicationAssessmentComplete), partial: Boolean(reviewData) },
     { label: "최종 결과 생성", done: Boolean(recommendation), partial: Boolean(reviewData) },
   ];
@@ -328,7 +328,7 @@ export default function Home() {
 
       }));
       setToast(`공식자료 ${data.laws.length + (data.ordinances?.length ?? 0) + data.landUse.length + (data.webSearch?.results?.length ?? 0) + (data.location ? 1 : 0)}건을 확인했습니다.`);
-      setApiPanelMessage(`조회 완료 · 좌표 ${data.location ? 1 : 0}건 · 토지이용 ${data.landUse.length}건 · 법령 ${data.laws.length}건 · 자치법규 ${data.ordinances?.length ?? 0}건 · 웹 원문후보 ${data.webSearch?.results?.length ?? 0}건${data.errors.length ? ` · 오류 ${data.errors.length}건` : ""}`);
+      setApiPanelMessage(`조회 완료 · 좌표 ${data.location ? 1 : 0}건 · 토지이용 ${data.landUse.length}건 · 법령 ${data.laws.length}건 · 자치법규 ${data.ordinances?.length ?? 0}건 · 웹 원문후보 ${data.webSearch?.results?.length ?? 0}건 · 공식 첨부 분석 ${data.officialDocuments?.documents.filter((document: { status: string }) => document.status === "analyzed").length ?? 0}건${data.errors.length ? ` · 오류 ${data.errors.length}건` : ""}`);
       if (navigateToReview) setActiveTab(1);
       return review;
     } catch (error) {
@@ -648,6 +648,21 @@ export default function Home() {
                 <a href={rule.sourceUrl} target="_blank" rel="noreferrer">원문 ↗</a>
                 <button type="button" onClick={() => setReviewedRules((current) => current.filter((item) => item.field !== rule.field))}>근거 연결 해제</button>
               </div>)}
+            </div>}
+            {(reviewData.officialDocuments?.documents.length ?? 0) > 0 && <div className="official-group">
+              <h4>공식 첨부문서 자동분석 · 지구단위계획 / LH 공고</h4>
+              <p>공식 홈페이지에서 발견한 PDF·HWPX·XLSX 첨부자료만 읽었습니다. 검색 결과가 해당 필지 또는 해당 연도 LH 사업의 유효한 최종 도서인지는 검증 전이며, 추출 수치는 계산에 자동 적용하지 않습니다.</p>
+              {reviewData.officialDocuments?.documents.map((document, index) => <details className="reg-detail" key={document.sourceUrl + index}>
+                <summary><Badge status={document.status === "analyzed" ? "review" : "unknown"} /> {document.kind === "district-plan" ? "지구단위계획" : "LH 공고·지침"} · {document.title} ({document.status === "analyzed" ? "본문 추출" : document.status === "failed" ? "추출 실패" : "원문 링크만 확인"})</summary>
+                <a href={document.sourceUrl} target="_blank" rel="noreferrer">공식 원문 열기 ↗</a>
+                {document.landingPage && <p>원 게시글: <a href={document.landingPage} target="_blank" rel="noreferrer">공고·고시 페이지 ↗</a></p>}
+                <p>{document.format?.toUpperCase() || "확장자 미확보"} · 본문 {document.textLength.toLocaleString("ko-KR")}자 · 관련 후보 {document.candidates.length}건 · 적용 검증 전</p>
+                {document.preview && <p>{document.preview}</p>}
+                {document.candidates.slice(0, 12).map((candidate, candidateIndex) => <p key={candidateIndex}>
+                  <b>{candidate.topic} {candidate.value === null ? "" : String(candidate.value) + (candidate.unit || "")} · 미검증</b> — {candidate.quote}
+                </p>)}
+                {document.warnings.map((warning, warningIndex) => <p key={warningIndex}>확인사항: {warning}</p>)}
+              </details>)}
             </div>}
             {(reviewData.webSearch?.results?.length ?? 0) > 0 && <div className="official-group"><h4>공식 웹 후속검색 · 원문 후보</h4>{reviewData.webSearch.results.map((result) => <a className="official-row" href={result.url} target="_blank" rel="noreferrer" key={result.url}><Badge status="review" /><b>{result.title}</b><span>{result.sourceDomain} · 본문 분석 전</span><em>원문 ↗</em></a>)}</div>}
             {(reviewData.missing.length > 0 || reviewData.errors.length > 0) && <div className="api-errors">{reviewData.missing.map((name) => <span key={name}><Icon name="alert" size={13} /> {name} 연결 필요</span>)}{reviewData.errors.map((error) => <span key={error}><Icon name="alert" size={13} /> {error}</span>)}</div>}

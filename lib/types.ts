@@ -282,6 +282,33 @@ export interface SiteReviewResult {
     }>;
     errors: string[];
   };
+  officialDocuments?: {
+    checkedAt: string;
+    totalCandidates: number;
+    analysisComplete: false;
+    errors: string[];
+    documents: Array<{
+      kind: "district-plan" | "lh-notice";
+      title: string;
+      sourceUrl: string;
+      landingPage: string | null;
+      status: "analyzed" | "link-only" | "failed";
+      format: "pdf" | "hwpx" | "xlsx" | null;
+      textLength: number;
+      pageCount: number | null;
+      preview: string;
+      candidates: Array<{
+        topic: string;
+        quote: string;
+        value: number | null;
+        unit: string | null;
+        verified: false;
+      }>;
+      warnings: string[];
+      siteMatchVerified: false;
+      applicable: false;
+    }>;
+  };
   missing: string[];
   errors: string[];
   unresolved: string[];
