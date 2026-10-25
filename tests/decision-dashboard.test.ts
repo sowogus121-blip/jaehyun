@@ -27,8 +27,15 @@ describe("one-click decision dashboard",()=>{
   expect(snap.estimates[0].unitCount).toBeGreaterThan(0);
   expect(snap.applied?.floors).toBe(10);
   expect(snap.assumptions.join(" ")).toContain("10층 가정");
+  expect(snap.blockers.join(" ")).toContain("허용용도");
+  expect(snap.blockers.join(" ")).toContain("정북일조");
   expect(snap.blockers.join(" ")).toContain("법정 주차계수");
   expect(snap.checks.find(c=>c.id==="sun")?.status).toBe("conditional");
+ });
+ it("labels the original application's automatically set 10 floors as unverified",()=>{
+  const snap=buildDecisionDashboard({...DEFAULT_INPUT,maxFloors:10},makeReview(1467),ordinary);
+  expect(snap.assumptions.join(" ")).toContain("10층 초기 자동 가정");
+  expect(snap.blockers.join(" ")).toContain("10층은 초기 자동 가정값");
  });
  it("never reuses stale user site area when a new address failed its cadastral search",()=>{
   const input:ProjectInput={...DEFAULT_INPUT,siteArea:1467,maxFloors:10,buildingCoverageRatio:60,baseFar:250};
