@@ -236,6 +236,7 @@ export default function Home() {
   const selectedSource = reviewCandidateIndex === null ? null : reviewData?.ordinanceArticleCandidates?.[reviewCandidateIndex] ?? null;
   const results = useMemo(() => calculateAll(input, calculationContext), [input, calculationContext]);
   const selected = results.find((result) => result.definition.id === selectedId) ?? results[0];
+  const selectedParkingKnown = selected.definition.useType === "apartment" ? readiness.hasApartmentParking : readiness.hasOfficetelParking;
   const recommendation = [...results].filter((result) => result.recommendable).sort((a, b) => b.score - a.score)[0] ?? null;
   const appliedFar = input.useRelaxedFar ? input.relaxedFar : input.baseFar;
   const regulationGroups = buildRegulationGroups(input, reviewData, lookupDetails);
@@ -507,7 +508,7 @@ export default function Home() {
       <div className="side-caption">PROJECT WORKFLOW</div>
       <nav>{tabs.map((tab, index) => <button key={tab.name} className={activeTab === index ? "active" : ""} onClick={() => setActiveTab(index)}><span className="nav-icon"><Icon name={tab.icon} /></span><span><b>{tab.name}</b><small>{tab.subtitle}</small></span>{index === 0 && <i className="nav-dot complete" />}{index > 0 && index < 4 && <i className="nav-dot review" />}<Icon name="chevron" size={14} /></button>)}</nav>
       <div className="sidebar-spacer" />
-      <div className="project-progress"><div className="progress-head"><span>검토 완성도</span><b>42%</b></div><div className="progress-track"><i /></div><p>법적 근거 및 지구단위계획 원문 연결이 필요합니다.</p></div>
+      <div className="project-progress"><div className="progress-head"><span>검토 완성도</span><b>{reviewCompleteness}%</b></div><div className="progress-track"><i style={{ width: reviewCompleteness + "%" }} /></div><p>법규 적용·LH 인수조건은 추가 검증이 필요합니다.</p></div>
       <button className="side-tool" onClick={() => setToast(`저장된 검토 버전 ${versionCount}개`)}><Icon name="history" size={18} /> 버전 기록 <span>{versionCount}</span></button>
       <button className="side-tool" onClick={() => setToast("환경설정은 입력 화면의 계획 가정에서 편집할 수 있습니다.")}><Icon name="settings" size={18} /> 환경설정</button>
       <div className="user-block"><span>김</span><div><b>사업기획팀</b><small>Architecture Office</small></div><i>···</i></div>
@@ -521,11 +522,11 @@ export default function Home() {
           <SectionHeader eyebrow="01 · SITE INPUT" title="대상지 및 사업조건" description="자동조회 정보와 사용자 입력값을 구분해 관리합니다. 입력 즉시 4개 대안이 다시 계산됩니다." action={<div className="source-legend"><Badge status="verified" /><Badge status="user" /><Badge status="unknown" /></div>} />
           <div className="workflow-hint"><b>① 주소 입력·자동조회</b><span>→</span><b>② 법규 원문 확인</b><span>→</span><b>③ 가정 층수로 예비규모 산정</b><span>→</span><b>④ 건축개요 확인</b></div>
           <div className="summary-strip">
-            <Metric label="대지면적" value={f(input.siteArea)} suffix="㎡" sub="사용자 입력" />
-            <Metric label="적용 용적률" value={appliedFar} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
-            <Metric label="건폐율 상한" value={input.buildingCoverageRatio} suffix="%" sub="근거 확인 필요" />
-            <Metric label="접도 폭원" value={input.roadWidth} suffix="m" sub="사용자 입력" />
-            <div className="strip-status"><span>검토 상태</span><b><i /> 법규 원문 연결 전</b><small>자동 확정 판정 안 함</small></div>
+            <Metric label="대지면적" value={input.siteArea > 0 ? f(input.siteArea) : "—"} suffix="㎡" sub="사용자 입력" />
+            <Metric label="적용 용적률" value={appliedFar > 0 ? appliedFar : "—"} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
+            <Metric label="건폐율 상한" value={input.buildingCoverageRatio > 0 ? input.buildingCoverageRatio : "—"} suffix="%" sub="근거 확인 필요" />
+            <Metric label="접도 폭원" value={input.roadWidth > 0 ? input.roadWidth : "—"} suffix="m" sub="사용자 입력" />
+            <div className="strip-status"><span>검토 상태</span><b><i /> {reviewData ? "공식자료 조회 · 적용 검증 전" : "공식자료 조회 전"}</b><small>확정 법규·LH 인수 판정 전</small></div>
           </div>
 
           <section className="card form-card">
@@ -840,7 +841,7 @@ export default function Home() {
             <section className="card result-detail"><div className="result-title"><div><span className="alt-label">{selected.definition.id}</span><span><h3>{selected.definition.name}</h3><p>선택 대안 상세 산출내역</p></span></div><button className="button ghost" onClick={() => setActiveTab(4)}>비교표에서 보기 <Icon name="chevron" size={15} /></button></div>
               <div className="result-metrics"><Metric label="용적률상 최대" value={selected.unitCountByFar} suffix={selected.definition.useType === "apartment" ? "세대" : "호"} sub="법규 입력값 기준" /><Metric label="배치 가능 최대" value={selected.unitCountByEnvelope} suffix={selected.definition.useType === "apartment" ? "세대" : "호"} sub="층수·높이·기준층 기준" /><Metric label="권장 계획수량" value={selected.unitCount} suffix={selected.definition.useType === "apartment" ? "세대" : "호"} sub="부대시설 반영" tone="navy" /></div>
               <div className="area-breakdown"><h4>면적 구성</h4><div className="area-bar"><i className="exclusive" style={{ flex: selected.residentialExclusiveArea }} /><i className="common" style={{ flex: selected.residentialCommonArea }} /><i className="amenity" style={{ flex: selected.amenityArea }} /><i className="parking" style={{ flex: selected.parkingArea }} /></div><div className="area-legend"><span><i className="exclusive" />전용 <b>{f(selected.residentialExclusiveArea)}㎡</b></span><span><i className="common" />주거공용 <b>{f(selected.residentialCommonArea)}㎡</b></span><span><i className="amenity" />부대·설비 <b>{f(selected.amenityArea + selected.equipmentArea)}㎡</b></span><span><i className="parking" />주차 <b>{f(selected.parkingArea)}㎡</b></span></div></div>
-              <div className="calculation-grid"><div><h4>건축 규모</h4><dl><dt>최대 건축면적</dt><dd>{f(selected.maxBuildableArea)}㎡</dd><dt>계획 건축면적</dt><dd>{f(selected.plannedBuildingArea)}㎡</dd><dt>용적률 산정 연면적</dt><dd>{f(selected.farCountedArea)}㎡</dd><dt>지하층 연면적</dt><dd>{f(selected.belowGroundArea)}㎡</dd><dt>전체 연면적</dt><dd>{f(selected.totalFloorArea)}㎡</dd></dl></div><div><h4>주차 계획</h4><dl><dt>원 법정 / LH 요구</dt><dd>{selected.parking.originalLegalCount} / {selected.parking.lhCount}대</dd><dt>특례 조건부 / 기본</dt><dd>{selected.parking.conditionalCount ?? "-"} / {selected.parking.fallbackCount}대</dd><dt>최종 적용</dt><dd>{selected.parking.finalCount}대</dd><dt>자주식 / 기계식</dt><dd>{selected.parking.selfCount} / {selected.parking.mechanicalCount}대</dd><dt>장애인 / 전기차</dt><dd>{selected.parking.accessibleCount} / {selected.parking.evCount}대</dd><dt>예상 지하층</dt><dd>B{selected.parking.basementFloors}</dd></dl></div></div>
+              <div className="calculation-grid"><div><h4>건축 규모</h4><dl><dt>최대 건축면적</dt><dd>{f(selected.maxBuildableArea)}㎡</dd><dt>계획 건축면적</dt><dd>{f(selected.plannedBuildingArea)}㎡</dd><dt>용적률 산정 연면적</dt><dd>{f(selected.farCountedArea)}㎡</dd><dt>지하층 연면적</dt><dd>{selectedParkingKnown ? f(selected.belowGroundArea) + "㎡" : "주차계수 확인 후 산정"}</dd><dt>전체 연면적</dt><dd>{selectedParkingKnown ? f(selected.totalFloorArea) + "㎡" : "주차계수 확인 후 산정"}</dd></dl></div>{selectedParkingKnown ? <div><h4>주차 계획</h4><dl><dt>원 법정 / LH 요구</dt><dd>{selected.parking.originalLegalCount} / {selected.parking.lhCount}대</dd><dt>특례 조건부 / 기본</dt><dd>{selected.parking.conditionalCount ?? "-"} / {selected.parking.fallbackCount}대</dd><dt>최종 적용</dt><dd>{selected.parking.finalCount}대</dd><dt>자주식 / 기계식</dt><dd>{selected.parking.selfCount} / {selected.parking.mechanicalCount}대</dd><dt>장애인 / 전기차</dt><dd>{selected.parking.accessibleCount} / {selected.parking.evCount}대</dd><dt>예상 지하층</dt><dd>B{selected.parking.basementFloors}</dd></dl></div> : <div><h4>주차 계획</h4><p className="parking-unverified">법정·LH 주차계수를 확인한 다음 산정해. 0대가 아니라 미산정 상태야.</p><button type="button" className="button ghost" onClick={() => setActiveTab(2)}>주차계수 입력</button></div>}</div>
               <details className="formula-box" open><summary>공개 산식 <Icon name="chevron" size={15} /></summary>{selected.formulas.map((formula) => <code key={formula}>{formula}</code>)}</details>
             </section>
             <aside className="warnings-panel"><h3><Icon name="alert" size={19} /> 주요 검토사항</h3>{selected.warnings.map((warning, index) => <div key={warning}><span>{index + 1}</span><p>{warning}</p></div>)}<button className="button light" onClick={() => setActiveTab(1)}>법규 검토로 이동 <Icon name="chevron" size={14} /></button></aside>
