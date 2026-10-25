@@ -8,7 +8,7 @@ import { screenParking03 } from "@/lib/lh-parking-screen";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
-import { assessParcelAssembly, normalizeAssemblyAddresses } from "@/lib/parcel-assembly";
+import { assessParcelAssembly, normalizeAssemblyAddresses, type AssemblyStudy } from "@/lib/parcel-assembly";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
@@ -185,6 +185,45 @@ function EfficiencyControls({ input, update }: {
   </section>;
 }
 
+
+function ParcelAssemblyCard({ study, onWeightedPreview }: { study: AssemblyStudy | null; onWeightedPreview?: () => void }) {
+  if (!study?.isMultiple) return null;
+  const flag=study.status==="ready"?"same":study.status==="mixed"?"mixed":"issue";
+  return <section className="parcel-assembly-card" aria-label="합필 예정지 통합 규모검토">
+    <div className="parcel-assembly-title">
+      <div><span className="eyebrow">MULTI-PARCEL COMBINED STUDY</span><h3>합필 예정지 통합검토</h3>
+        <p>전체 {study.parcelCount}필지 · 필지별 사실확인과 통합 규모 가정을 구분했어.</p></div>
+      <span className={"assembly-status "+flag}>{study.status==="ready"?"단일 용도지역 · 합산면적 확인":study.status==="mixed"?"혼합 용도지역 · 조건부":"필지 확인 필요 · 통합계산 보류"}</span>
+    </div>
+    <div className="parcel-assembly-metrics">
+      <div><small>검토대상</small><strong>{study.parcelCount}필지</strong></div>
+      <div><small>대지면적 합계</small><strong>{study.totalArea!==null?f(study.totalArea)+"㎡":"미확정"}</strong></div>
+      <div><small>건폐율 (조례 일반기준)</small><strong>{study.ordinary?study.ordinary.bcr+"%":study.weightedCandidate?study.weightedCandidate.bcr+"% (조건부)":"미확정"}</strong></div>
+      <div><small>용적률 (조례 일반기준)</small><strong>{study.ordinary?study.ordinary.far+"%":study.weightedCandidate?study.weightedCandidate.far+"% (조건부)":"미확정"}</strong></div>
+    </div>
+    <div className="parcel-table-wrap"><table className="parcel-table"><thead><tr><th>대상</th><th>주소·지번</th><th>면적</th><th>용도지역</th><th>건폐율 / 용적률</th><th>확인근거</th></tr></thead>
+      <tbody>{study.parcels.map(p=><tr key={p.number}>
+        <td><b>{p.number===1?"대표 필지":"추가 필지 "+(p.number-1)}</b></td>
+        <td><b>{p.address}</b>{p.pnu&&<small>PNU {p.pnu}</small>}</td>
+        <td>{p.area!==null?f(p.area)+"㎡":"조회 실패"}</td>
+        <td>{p.zone??"용도지역 미확인"}</td>
+        <td>{p.bcr!==null&&p.far!==null?p.bcr+"% / "+p.far+"%":"원문 확인 필요"}</td>
+        <td>{p.source??"자료 미확보"}{p.errors.length>0&&<small className="parcel-error">{p.errors.join(" · ")}</small>}</td>
+      </tr>)}</tbody></table></div>
+    {study.weightedCandidate && <div className="parcel-weighted-panel">
+      <div><b>용도지역별 면적 가중 참고값 · 확정 법규 아님</b>
+        <p>면적 합계 {study.totalArea!==null?f(study.totalArea)+"㎡":"미확정"} · 건폐율 {study.weightedCandidate.bcr}% · 용적률 {study.weightedCandidate.far}% · 용적률 산정 연면적 {f(study.weightedCandidate.farArea)}㎡</p>
+        <small>가장 작은 용도지역 부분 {f(study.weightedCandidate.smallestZoneArea)}㎡ · {study.weightedCandidate.eligibleForStatutoryThreshold?"일반적인 330㎡ 크기 요건에는 해당할 가능성 있음":"일반 가중평균 요건 미충족 가능성"} · 경계 면적 및 법적 예외 확인 필요</small>
+      </div>
+      {study.canPreviewWeighted && onWeightedPreview && <button type="button" className="button primary" onClick={onWeightedPreview}>가중 참고값으로 조건부 규모계산</button>}
+    </div>}
+    <details className="parcel-legal-details"><summary>합필 가능여부와 법규 확인사항 ({study.notes.length}건)</summary>
+      <ul>{study.notes.map((note,i)=><li key={i}>{note}</li>)}</ul>
+      <a href="https://www.law.go.kr/LSW/lsLinkCommonInfo.do?lsJoLnkSeq=1033870683" target="_blank" rel="noopener noreferrer">국토계획법 제84조 공식 원문 ↗</a>
+    </details>
+  </section>;
+}
+
 function ComparisonTable({ results, input }: { results: AlternativeResult[]; input: ProjectInput }) {
   const check = getMassingReadiness(input);
   const ready = check.canEstimateUnits;
@@ -322,6 +361,20 @@ export default function Home() {
     }));
     setReviewedRules((current) =>
       key === "parcelList" || key === "multipleParcels" ? [] : removeRuleForEditedField(current, key));
+  };
+
+  const applyWeightedAssemblyPreview = () => {
+    if (!assembly?.canPreviewWeighted || !assembly.weightedCandidate || !assembly.totalArea) {
+      setToast("각 용도지역별 면적·조례 일반수치와 합필 적용조건이 확인되지 않았어.");
+      return;
+    }
+    setInput(current=>({...current,siteArea:assembly.totalArea!,
+      buildingCoverageRatio:assembly.weightedCandidate!.bcr,
+      baseFar:assembly.weightedCandidate!.far,relaxedFar:0,useRelaxedFar:false,
+      maxFloors:current.maxFloors>0||current.maxHeight>0?current.maxFloors:10}));
+    setReviewedRules([]);
+    setToast("가중 참고값을 이용한 가상 합필 예비계산이야. 국토계획법 제84조 적용과 실제 합필허가는 확인되지 않았어.");
+    setActiveTab(3);
   };
 
   const startPreliminaryScenario = (farOption: "base" | "example" = "base") => {
@@ -601,6 +654,7 @@ export default function Home() {
             <Toggle checked={input.districtPlan} onChange={(v) => update("districtPlan", v)} label="지구단위계획구역" note="체크 시 결정도서와 시행지침 원문 검토가 필수입니다." />
           </section>
 
+          <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
           <div className="summary-strip">
             <Metric label="대지면적" value={input.siteArea > 0 ? f(input.siteArea) : "—"} suffix="㎡" sub="사용자 입력" />
             <Metric label="적용 용적률" value={appliedFar > 0 ? appliedFar : "—"} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
@@ -671,6 +725,7 @@ export default function Home() {
 
         {activeTab === 1 && <>
           <SectionHeader eyebrow="02 · REGULATION REVIEW" title="법규 및 도시계획 검토" description="확인된 원문, 사용자 입력, 자료 미확보 상태를 분리합니다. 미확인 값으로 적법 판정을 만들지 않습니다." action={<a className="official-link" href="https://www.law.go.kr" target="_blank" rel="noreferrer">국가법령정보센터 ↗</a>} />
+          <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
           {reviewData && <section className="site-decision-summary" aria-label="주소 한 번 조회한 핵심 결론">
             <div className="site-decision-title"><div><span>주소 기반 자동 검토</span><h3>{input.address}</h3><p>확인된 사항과 조건부 제한을 대안별로 바로 보여줘. 인허가·매입 승인 이전 단계야.</p></div><button type="button" className="button ghost" onClick={runSiteReview} disabled={isReviewing}>공식자료 새로 조회</button></div>
             <div className="site-decision-grid">{results.map(result => {
@@ -938,6 +993,7 @@ export default function Home() {
         </>}
 
         {activeTab === 3 && <>
+          {assembly?.isMultiple && <div className="assembly-massing-note"><b>합필 예정지 {assembly.parcelCount}필지</b><span>{assembly.totalArea!==null?"합계 "+f(assembly.totalArea)+"㎡": "합산면적 미확인"} · {assembly.sameZone?"동일 용도지역 예비규모": "혼합 용도지역 · 적용기준 조건부"} · 법적 합필 확정 전</span><button type="button" onClick={()=>setActiveTab(1)}>필지별 검토표</button></div>}
           <SectionHeader eyebrow="04 · MASSING STUDY" title="건축 규모검토" description="법규상 최대치와 배치·주차를 고려한 개략 실현가능 규모를 구분합니다." action={<span className="live-pill"><i /> LIVE CALCULATION</span>} />
           {!readiness.canEstimateUnits && <div className="massing-unready"><Icon name="alert" size={20}/><div><strong>아직 규모를 산정할 조건이 부족해.</strong><span>필요: {readiness.missing.join(" · ")} · 법적으로 0세대라는 뜻이 아니야.</span></div><button type="button" className="button primary" onClick={() => setActiveTab(1)}>조례 일반기준으로 예비계산하기</button></div>}
           {readiness.canEstimateUnits && (!readiness.hasApartmentParking || !readiness.hasOfficetelParking) && <div className="massing-unready info"><Icon name="alert" size={20}/><div><strong>세대·호실수는 계획 가정으로 산정했어.</strong><span>주차대수·지하층·전체 연면적은 주차계수 확인 전까지 미산정으로 표시해.</span></div><button type="button" className="button ghost" onClick={() => setActiveTab(2)}>주차계수 입력</button></div>}
@@ -956,6 +1012,7 @@ export default function Home() {
         </>}
 
         {activeTab === 4 && <>
+          {assembly?.isMultiple && <div className="assembly-massing-note"><b>가상 합필 규모검토</b><span>{assembly.parcelCount}필지 · {assembly.totalArea!==null?"대지합계 "+f(assembly.totalArea)+"㎡":"면적 미확정"} · 합필/건축허가 요건 검증 전</span><button type="button" onClick={()=>setActiveTab(1)}>합필 상세보기</button></div>}
           <SectionHeader eyebrow="05 · EXECUTIVE SUMMARY" title="건축개요 및 종합비교" description="발주처 보고용 핵심 지표와 산출근거를 한 화면에서 확인하고 출력합니다." action={<div className="report-actions"><button className="button ghost" onClick={exportProject}><Icon name="database" size={16} /> 프로젝트</button><button className="button ghost" onClick={exportExcel}><Icon name="download" size={16} /> Excel</button><button className="button dark" onClick={() => window.print()}><Icon name="report" size={16} /> PDF 인쇄</button></div>} />
           {!readiness.canEstimateUnits && <div className="massing-unready"><Icon name="alert" size={20}/><div><strong>건축개요는 아직 미산정 상태야.</strong><span>필요: {readiness.missing.join(" · ")} · 법규검토에서 조례 일반기준과 가정 층수로 예비계산을 시작할 수 있어.</span></div><button type="button" className="button primary" onClick={() => setActiveTab(1)}>예비개요 시작하기</button></div>}
           {readiness.canEstimateUnits && <div className="massing-unready info"><Icon name="alert" size={20}/><div><strong>예비 건축개요 · 확정 적법성 아님</strong><span>용적률·건폐율·층수는 계획 가정이며, 주차·높이·허용용도·LH 인수 검증이 남아 있어.</span></div></div>}
