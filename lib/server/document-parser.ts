@@ -54,7 +54,9 @@ export function extractParkingPassages(text:string):DocumentCandidate[]{
     if(visited.has(key))continue;
     visited.add(key);
     const number=text.match(/(-?\d+(?:\.\d+)?)\s*(%|퍼센트|대\/세대|대\/호|대|m|미터|층|㎡)/i);
-    matches.push({topic:classify(text),quote:text,value:number?Number(number[1]):null,unit:number?number[2]:null,verified:false});
+    // Classify the matched row, not a neighboring paragraph; otherwise an
+    // adjacent 0.3 clause would incorrectly relabel a mechanical 50% rule.
+    matches.push({topic:classify(lines[i]),quote:text,value:number?Number(number[1]):null,unit:number?number[2]:null,verified:false});
     if(matches.length>=45)break;
   }
   return matches;
