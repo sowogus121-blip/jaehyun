@@ -36,6 +36,8 @@ export function deriveCalculationContext(review: SiteReviewResult | null, input:
     lhPurchaseEligibility,
     mechanicalParkingEligibility: input.mechanicalAllowed ? mechanicalFinding : "ineligible",
     lhPurchaseMechanicalRestrictedToOfficetelOrUrban: Boolean(review?.lhNotice?.rules && input.businessMode === "purchase"),
+    lhCommunityMinimumHomes: input.businessMode === "purchase" ? review?.lhNotice?.rules?.communityThreshold : undefined,
+    lhCommunitySqmPerHome: input.businessMode === "purchase" && review?.lhNotice?.rules ? 1 : undefined,
   };
 }
 

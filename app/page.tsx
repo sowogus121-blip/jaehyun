@@ -857,7 +857,7 @@ export default function Home() {
               <article><span>신혼 / 청년 전용면적</span><b>{lhRules.newlywedMinimumArea}㎡ 이상 / {lhRules.youthMinimumArea}~{lhRules.youthMaximumArea}㎡</b><small>신혼 2실 / 청년 1실 이상 · 실제 평면 필요</small></article>
               <article><span>기계식주차 한도</span><b>{lhRules.mechanicalMaxPercent}% 이하</b><small>역 출구 {lhRules.mechanicalTransitMaxMeters}m 이내 · 주거용 오피스텔·도시형생활주택</small></article>
               <article><span>청년형 0.3대 특례</span><b>0.3대/호 (조건부)</b><small>전용 {lhRules.parking03MaxArea}㎡ 미만 · 역 또는 대학 {lhRules.parking03YouthMaxMeters}m · 협의·적용검증 필요</small></article>
-              <article><span>커뮤니티공간</span><b>{lhRules.communityThreshold}호 이상</b><small>청년·신혼형 · 관리사무소 {lhRules.managementOfficeThreshold}호 이상</small></article>
+              <article><span>커뮤니티공간</span><b>{lhRules.communityThreshold}호 이상</b><small>청년·신혼형 최소 1㎡/호 · 관리사무소 {lhRules.managementOfficeThreshold}호 이상</small></article>
             </div> : <p>공식 공고가 확인됐지만 최신 첨부 원문을 확인하지 못해 숫자 적용을 보류해.</p>}
           </section>}
           <div className="lh-layout">

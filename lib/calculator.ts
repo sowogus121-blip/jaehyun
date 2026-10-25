@@ -141,18 +141,20 @@ export function getEvidenceStatus(hasSource: boolean, manuallyEntered = false): 
   return "unknown";
 }
 
-export function calculateFacilities(useType: AlternativeDefinition["useType"], units: number): FacilityResult[] {
+export function calculateFacilities(useType: AlternativeDefinition["useType"], units: number, context: CalculationContext = DEFAULT_CALCULATION_CONTEXT): FacilityResult[] {
+  const lhCommunityRequired = Boolean(context.lhCommunityMinimumHomes && units >= context.lhCommunityMinimumHomes);
+  const minCommunityArea = lhCommunityRequired ? units * (context.lhCommunitySqmPerHome ?? 0) : 0;
   if (useType === "apartment") {
     return [
       { name: "관리·운영공간", required: units >= 50, basis: "50세대 이상 계획 가정 · 근거 확인 필요", area: units >= 50 ? 18 + units * 0.08 : 0, location: "지상·지하", farIncluded: true },
-      { name: "주민공동공간", required: units >= 100, basis: "100세대 이상 계획 가정 · LH 기준 확인 필요", area: units >= 100 ? 30 + units * 0.12 : 0, location: "지상", farIncluded: true },
+      { name: "주민공동공간", required: lhCommunityRequired || units >= 100, basis: lhCommunityRequired ? "LH 해당 공고: 50세대 이상 · 최소 1㎡/세대 (추가 조건 확인)" : "100세대 이상 일반 계획가정", area: lhCommunityRequired ? Math.max(30 + units * 0.12, minCommunityArea) : units >= 100 ? 30 + units * 0.12 : 0, location: "지상", farIncluded: true },
       { name: "택배보관공간", required: units >= 30, basis: "실무 계획 가정 · LH 공고 확인 필요", area: units >= 30 ? 12 + units * 0.03 : 0, location: "지상", farIncluded: true },
       { name: "폐기물 보관공간", required: units > 0, basis: "계획 필수공간 · 지자체 기준 확인 필요", area: units > 0 ? 18 + units * 0.025 : 0, location: "지상", farIncluded: true },
     ];
   }
   return [
     { name: "관리·주차관리공간", required: units >= 50, basis: "운영상 계획 가정 · 매입기준 확인 필요", area: units >= 50 ? 16 + units * 0.05 : 0, location: "지상·지하", farIncluded: true },
-    { name: "공용 라운지", required: false, basis: "권장시설 · LH 매입기준 확인 필요", area: units >= 100 ? 24 + units * 0.08 : 0, location: "지상", farIncluded: true },
+    { name: "공용 라운지", required: lhCommunityRequired, basis: lhCommunityRequired ? "LH 해당 공고: 청년형 50호 이상 · 최소 1㎡/호" : "권장시설 · LH 기준 검토", area: lhCommunityRequired ? Math.max(24 + units * 0.08, minCommunityArea) : units >= 100 ? 24 + units * 0.08 : 0, location: "지상", farIncluded: true },
     { name: "택배보관공간", required: units >= 30, basis: "실무 계획 가정", area: units >= 30 ? 10 + units * 0.025 : 0, location: "지상", farIncluded: true },
     { name: "폐기물 보관공간", required: units > 0, basis: "계획 필수공간 · 지자체 기준 확인 필요", area: units > 0 ? 15 + units * 0.02 : 0, location: "지상", farIncluded: true },
   ];
@@ -219,11 +221,11 @@ export function calculateParking(input: ProjectInput, definition: AlternativeDef
   };
 }
 
-function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, farLimitArea: number, envelopeArea: number) {
+function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, farLimitArea: number, envelopeArea: number, context: CalculationContext) {
   const gross = getGrossAreaPerUnit(definition.exclusiveArea, definition.efficiency);
   let units = Math.floor(Math.min(farLimitArea, envelopeArea) / gross);
   for (let i = 0; i < 12; i += 1) {
-    const facilities = calculateFacilities(definition.useType, units);
+    const facilities = calculateFacilities(definition.useType, units, context);
     const amenity = facilities.reduce((sum, item) => sum + item.area, 0);
     const equipment = Math.max(35, units * 0.35);
     const next = Math.max(0, Math.floor((Math.min(farLimitArea, envelopeArea) - amenity - equipment) / gross));
@@ -248,10 +250,10 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
     : (heightFloors ?? 0);
   const farLimitArea = input.siteArea * appliedFar / 100;
   const envelopeArea = plannedBuildingArea * legalMaxFloors;
-  const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER);
-  const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea);
-  const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea);
-  const facilities = calculateFacilities(definition.useType, unitCount);
+  const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context);
+  const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context);
+  const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea, context);
+  const facilities = calculateFacilities(definition.useType, unitCount, context);
   const amenityArea = facilities.reduce((sum, item) => sum + item.area, 0);
   const equipmentArea = unitCount > 0 ? Math.max(35, unitCount * 0.35) : 0;
   const residentialExclusiveArea = unitCount * definition.exclusiveArea;

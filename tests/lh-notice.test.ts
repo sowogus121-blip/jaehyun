@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { findLatestLhPurchaseNotice, parseLhAttachments, parseLhPurchaseList } from "../lib/server/lh-notice";
-import { ALTERNATIVES, DEFAULT_INPUT, calculateAlternative } from "../lib/calculator";
+import { ALTERNATIVES, DEFAULT_INPUT, calculateAlternative, calculateFacilities } from "../lib/calculator";
 import { DEFAULT_CALCULATION_CONTEXT } from "../lib/calculator";
 
 const html = String.raw`<table>
@@ -45,5 +45,17 @@ describe("Official LH purchase announcements",()=>{
     expect(apt.parking.mechanicalCount).toBe(0);
     expect(office.parking.mechanicalCount).toBeGreaterThan(0);
     expect(office.parking.mechanicalCount).toBeLessThanOrEqual(Math.floor(office.parking.finalCount*.5));
+  });
+  it("includes mandatory 1 sqm per home community space for >=50 homes on verified LH purchase scenario",()=>{
+    const context={...DEFAULT_CALCULATION_CONTEXT,lhCommunityMinimumHomes:50,lhCommunitySqmPerHome:1};
+    const apartment=calculateFacilities("apartment",58,context).find(x=>x.name==="주민공동공간");
+    const office=calculateFacilities("officetel",64,context).find(x=>x.name==="공용 라운지");
+    expect(apartment?.required).toBe(true);
+    expect(apartment?.area).toBeGreaterThanOrEqual(58);
+    expect(office?.required).toBe(true);
+    expect(office?.area).toBeGreaterThanOrEqual(64);
+    expect(calculateFacilities("officetel",49,context).find(x=>x.name==="공용 라운지")?.required).toBe(false);
+    const baseline=calculateFacilities("apartment",58);
+    expect(baseline.find(x=>x.name==="주민공동공간")?.area).toBe(0);
   });
 });
