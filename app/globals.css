@@ -507,3 +507,25 @@ a.law-reference-item:hover { background: #f2f7fa; border-color: #b4cbd8; }
  .parcel-legal-details{padding:13px;}
 }
 @media print{.assemble-choice,.assembly-entry{display:none}.parcel-assembly-card{box-shadow:none;break-inside:avoid}.parcel-table{min-width:0}.parcel-table td,.parcel-table th{font-size:8px;padding:5px}}
+
+
+/* Repeatable parcel editor: clear actions instead of a hidden textarea-only workflow. */
+.assembly-entry-intro { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:0 0 15px; }
+.assembly-entry-intro b { font-size:15px; color:#295066; }
+.assembly-entry-intro p { font-size:12px; color:#68808d; margin:5px 0 0; line-height:1.5; }
+.assembly-entry-intro>span { font-size:11px; color:#347686; font-weight:700; background:#e5f2f5; border-radius:5px; padding:7px 10px; white-space:nowrap; }
+.assembly-parcel-rows { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 11px; }
+.assembly-parcel-row { display:flex; gap:9px; align-items:center; padding:9px 11px; background:white; border:1px solid #dce6ec; border-radius:5px; }
+.assembly-parcel-row label { font-size:11px; white-space:nowrap; color:#557185; font-weight:750; }
+.assembly-parcel-row input { flex:1; min-width:0; padding:8px 9px; border:1px solid #dce5e9; border-radius:4px; font-size:12px; color:#274c63; }
+.assembly-remove { display:flex; justify-content:center; align-items:center; cursor:pointer; border:0; background:#edf3f6; color:#627889; border-radius:5px; width:31px; height:31px; font-size:19px; flex-shrink:0; }
+.assembly-remove:hover { background:#fce4df; color:#a33b30; }
+.assembly-entry-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:13px 0 8px; }
+.assembly-entry-toolbar span { margin-left:auto; font-size:11px; color:#73909e; }
+.assembly-bulk-entry { margin-top:8px; border:1px solid #e0eaef; border-radius:5px; background:#fbfdfe; padding:9px 12px; }
+.assembly-bulk-entry summary { font-size:12px; font-weight:650; color:#426e81; cursor:pointer; padding:3px 0; }
+.assembly-bulk-entry textarea { display:block; margin-top:12px; min-height:85px; }
+.assembly-bulk-entry small { display:block; font-size:11px; color:#738894; margin-top:6px; }
+.assembly-input-error { font-size:12px; line-height:1.5; color:#a33d2e; font-weight:750; padding:10px 12px; border:1px solid #ecd0c8; background:#fff1ed; }
+@media(max-width:950px) {.assembly-parcel-rows {grid-template-columns:1fr} .assembly-entry-intro{align-items:flex-start;flex-direction:column}}
+@media(max-width:520px) {.assembly-entry-toolbar span {margin-left:0;flex-basis:100%} .assembly-parcel-row {gap:5px} .assembly-entry-intro>span {white-space:normal}}

@@ -1,16 +1,30 @@
 import type { SiteReviewResult } from "./types";
 import { getOrdinanceZoneStandards } from "./legal-review-report";
 
+export const MAX_ASSEMBLY_PARCELS = 20;
+export const MAX_EXTRA_PARCELS = MAX_ASSEMBLY_PARCELS - 1;
+
+/** One address per row; commas and + also work for bulk pasting lot numbers. */
+export function splitAssemblyAddresses(value: string): string[] {
+  return value.split(/[\r\n,+]+/).map(s=>s.trim()).filter(Boolean);
+}
+
 export function normalizeAssemblyAddresses(primary: string, raw: string[]): string[] {
   const parts=primary.trim().split(/\s+/).filter(Boolean);
-  const region=parts.slice(0,2).join(" ");
-  const dong=parts.length>=3?parts[2]:"";
+  // Gyeongnam Changwon-si Seongsan-gu Ga-eum-dong: preserve the borough too.
+  const borough=parts[1]?.endsWith("시") && parts[2]?.endsWith("구");
+  const region=parts.slice(0,borough?3:2).join(" ");
+  const dong=parts[borough?3:2]??"";
   const seen=new Set([primary.replace(/\s+/g,"").trim()]);
-  return raw.map(x=>x.trim()).filter(Boolean).map(x=>{
+  return raw.flatMap(splitAssemblyAddresses).map(x=>{
     if(/^\d+(?:-\d+)?$/.test(x) && dong)return region+" "+dong+" "+x;
-    if(/^(?:[\p{Script=Hangul}\d]+(?:동|읍|면|리))\s+\d+(?:-\d+)?$/u.test(x)&&region)return region+" "+x;
+    // "가능동 72-5", "동대신동1가 10-2", etc.
+    if(/^[^\s]+\s+\d+(?:-\d+)?$/.test(x) && region)return region+" "+x;
+    // A local district + neighborhood but missing only the province.
+    if(/^(?:[^\s]+(?:시|군|구))\s+[^\s]+\s+\d+(?:-\d+)?$/.test(x) && parts[0])
+      return parts[0]+" "+x;
     return x;
-  }).filter(x=>{const key=x.replace(/\s+/g,"");if(seen.has(key))return false;seen.add(key);return true;}).slice(0,9);
+  }).filter(x=>{const key=x.replace(/\s+/g,"");if(seen.has(key))return false;seen.add(key);return true;});
 }
 export interface AssemblyParcel {
   number:number;address:string;area:number|null;zone:string|null;pnu:string|null;
@@ -63,14 +77,19 @@ export function assessParcelAssembly(review: SiteReviewResult | null):AssemblySt
     }
     const groups=[...map.values()];
     const smallestZoneArea=Math.min(...groups.map(g=>g.area));
-    const greenZone=parcels.some(p=>p.zone?.includes("녹지지역"));
+    const greenGroups=[...map.entries()].filter(([zone])=>zone.includes("녹지지역"));
+    // Art.84(3): the special exception applies if the smallest portion itself is green
+    // and its area is within the statutory threshold. Other mixed-green cases
+    // must not silently use a weighted whole-site FAR.
+    const greenPermitted=greenGroups.length===0 || (greenGroups.length===1 &&
+      greenGroups[0][1].area===smallestZoneArea && smallestZoneArea<=330);
     weightedCandidate={
       bcr:round(groups.reduce((sum,g)=>sum+g.area*g.bcr,0)/rawTotal!),
       far:round(groups.reduce((sum,g)=>sum+g.area*g.far,0)/rawTotal!),
       bcrArea:round(groups.reduce((sum,g)=>sum+g.area*g.bcr/100,0)),
       farArea:round(groups.reduce((sum,g)=>sum+g.area*g.far/100,0)),
       smallestZoneArea:round(smallestZoneArea),
-      eligibleForStatutoryThreshold:smallestZoneArea<=330&&!greenZone,
+      eligibleForStatutoryThreshold:smallestZoneArea<=330 && greenPermitted,
     };
   }
   const incomplete=source.some(p=>p.errors.length>0)||!consistent||!allZones;
@@ -81,9 +100,10 @@ export function assessParcelAssembly(review: SiteReviewResult | null):AssemblySt
   ];
   if(duplicate)notes.push("동일 PNU가 중복 조회돼 합계를 만들지 않았어.");
   if(incomplete)notes.push("일부 필지의 면적·용도지역 또는 합산 확인이 불완전해 통합 규모계산을 보류했어.");
+  for(const p of parcels) if(p.errors.length)notes.push(`${p.address}: ${p.errors.join(" / ")}`);
   if(isMultiple&&!sameZone)notes.push("혼합 용도지역은 국토계획법 제84조와 시행령 제94조 검토가 필요해. 항상 가중평균 가능한 것은 아니야.");
   if(weightedCandidate&&!weightedCandidate.eligibleForStatutoryThreshold)
-    notes.push("일반적인 330㎡ 이하 가중평균 기준을 충족하지 않거나 녹지지역이 있어, 구역별 용도제한 및 건축계획 검토가 필요해.");
+    notes.push("일반적인 330㎡ 면적요건 또는 녹지지역 예외 요건이 충족되지 않아 구역별 용도규정 검토가 필요해.");
   if(weightedCandidate?.eligibleForStatutoryThreshold)
     notes.push("가중 수치는 면적별 산술 참고치야. 허가권자의 경계·지구단위·조례·330㎡ 요건 검증 전에는 법적 상한이 아니야.");
   return {status,isMultiple,parcelCount:parcels.length,parcels,totalArea:consistent?rawTotal:null,
