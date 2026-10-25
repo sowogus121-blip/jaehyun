@@ -56,7 +56,7 @@ describe("site review API", () => {
     const response = await POST(request({ "x-law-api-oc": "invalid-oc" }));
     const data = await response.json();
 
-    expect(data.errors).toContain("국가법령정보센터 11개 조회 실패: 03 · 등록되지 않은 OC");
+    expect(data.errors).toContain("국가법령정보센터 12개 조회 실패: 03 · 등록되지 않은 OC");
   });
 
   it("auto-applies land use, parcel data, and planning standards for a new address", async () => {
