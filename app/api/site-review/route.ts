@@ -275,10 +275,17 @@ async function searchOrdinance(query: string, oc: string): Promise<OrdinanceReco
   const rows = Array.isArray(raw) ? raw : raw ? [raw] : [];
   // Do not use the API's first hit: a different municipality's ordinance
   // can otherwise be presented as the ordinance governing this address.
-  const normalized = (value: unknown) => String(value ?? "").replace(/\\s+/g, "");
-  const row = rows.find((candidate: Record<string, unknown>) =>
-    normalized(candidate["자치법규명"] ?? candidate["법령명한글"]) === normalized(query)
-  ) as Record<string, unknown> | undefined;
+  const normalize = (value: unknown) => String(value ?? "").replace(/\s+/g, "");
+  const scope = query.split(/\s+/).slice(0, -2).join("");
+  const subject = query.includes("주차장") ? "주차장" : query.includes("도시계획") ? "도시계획" :
+    query.includes("경관") ? "경관" : "건축";
+  const row = rows.find((candidate: Record<string, unknown>) => {
+    const title = normalize(candidate["자치법규명"] ?? candidate["법령명한글"]);
+    const office = normalize(candidate["지자체기관명"]);
+    // Scope by jurisdiction AND subject; do not use an unrelated first search hit.
+    return (title.startsWith(scope) || office === scope || (office.length > 0 && scope.endsWith(office))) &&
+      title.includes(subject) && title.includes("조례");
+  }) as Record<string, unknown> | undefined;
   if (!row) return null;
   const detail = String(row["자치법규상세링크"] ?? row["법령상세링크"] ?? "");
   return {
