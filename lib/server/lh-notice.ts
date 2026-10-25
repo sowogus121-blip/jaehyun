@@ -1,4 +1,5 @@
 /** Official LH housing-purchase board. No third-party search index, no invented legal approvals. */
+import { parseUploadedDocument } from "./document-parser";
 export interface LhNotice {
   id: string;
   title: string;
@@ -12,6 +13,8 @@ export interface LhNotice {
   isCurrent: boolean;
   rules: LhVerifiedNoticeRules | null;
   warnings: string[];
+  extractedCriteria?: Array<{topic:string;quote:string;value:number|null;unit:string|null;verified:false}>;
+  textAnalysisStatus?: "verified-original"|"text-extracted"|"not-extracted";
 }
 export interface LhVerifiedNoticeRules {
   excerptSource: string;
@@ -124,6 +127,35 @@ async function getHtml(url:string,timeout=7500,body?:URLSearchParams):Promise<st
   const html=await res.text();
   return html.slice(0,500_000);
 }
+/** Read up to 7 MB of an *exactly* LH-hosted PDF; raw extracted clauses are NEVER application-approved. */
+async function extractUnverifiedLhPdfClauses(pdfUrl:string):Promise<NonNullable<LhNotice["extractedCriteria"]>> {
+  if(!/^https:\/\/apply\.lh\.or\.kr\/lhapply\/lhFile\.do\?fileid=\d+$/.test(pdfUrl))return [];
+  const res=await fetch(pdfUrl,{
+    cache:"no-store",redirect:"error",signal:AbortSignal.timeout(9000),
+    headers:{Accept:"application/pdf,application/octet-stream"},
+  });
+  if(!res.ok || Number(res.headers.get("content-length")||0)>7*1024*1024)return [];
+  if(!res.body)return [];
+  const reader=res.body.getReader();
+  let total=0;const pieces:Uint8Array[]=[];
+  try{
+    while(true){
+      const {done,value}=await reader.read();
+      if(done)break;
+      total+=value.byteLength;
+      if(total>7*1024*1024)throw new Error("LH PDF 용량 상한 초과");
+      pieces.push(value);
+    }
+  } finally {await reader.cancel().catch(()=>undefined);}
+  const bytes=new Uint8Array(total);let offset=0;
+  for(const part of pieces){bytes.set(part,offset);offset+=part.length;}
+  if(bytes[0]!==37||bytes[1]!==80||bytes[2]!==68||bytes[3]!==70)return [];
+  const doc=new File([bytes],"latest-lh-regional-notice.pdf",{type:"application/pdf"});
+  const analysis=await parseUploadedDocument(doc);
+  return analysis.candidates.filter(c=>/매입약정|전용|주차|기계식|청년|신혼|의무|완화|커뮤니티|용적률|건폐율/.test(c.quote))
+    .slice(0,14).map(c=>({topic:c.topic,quote:c.quote,value:c.value,unit:c.unit,verified:false as const}));
+}
+
 export async function findLatestLhPurchaseNotice(district:string,regionContext=""):Promise<LhNotice|null> {
   if(!district)return null;
   const cacheKey=regionContext+"|"+district;
@@ -152,14 +184,26 @@ export async function findLatestLhPurchaseNotice(district:string,regionContext="
   const attachments=parseLhAttachments(html);
   // Verified values are anchored to the exact PDF. A changed/new notice NEVER inherits them.
   const identified=entry.id===CURRENT_ID && attachments.pdfUrl===CURRENT_PDF;
+  let extractedCriteria: NonNullable<LhNotice["extractedCriteria"]> = [];
+  let textAnalysisStatus: NonNullable<LhNotice["textAnalysisStatus"]> = identified ? "verified-original" : "not-extracted";
+  let automaticPdfWarning: string | null = null;
+  if(!identified && attachments.pdfUrl){
+    try {
+      extractedCriteria=await extractUnverifiedLhPdfClauses(attachments.pdfUrl);
+      if(extractedCriteria.length>0)textAnalysisStatus="text-extracted";
+      else automaticPdfWarning="공고문 PDF의 적용 가능한 숫자를 자동 추출하지 못했습니다.";
+    }catch(error) {
+      automaticPdfWarning="공고문 자동 분석 실패: "+(error instanceof Error?error.message:"알 수 없는 오류");
+    }
+  }
   const notice:LhNotice={
     id:entry.id,title:entry.title,url:detailUrl,
     pdfUrl:attachments.pdfUrl,guideUrl:attachments.guideUrl,
     publishedAt:entry.publishedAt,closesAt:entry.closesAt,
     matchedDistrict:district,official:true,isCurrent:entry.publishedAt<=today&&entry.closesAt>=today,
-    rules:identified?verifiedFourth:null,
+    rules:identified?verifiedFourth:null, extractedCriteria, textAnalysisStatus,
     warnings:identified?["면적·세대규모의 일반 공고기준과 입지·주차 특례는 별도 조건을 구분해 적용합니다.","역세권 500m, 인허가 가능 용도, 규제지역 및 LH 매입 여부는 해당 필지에 대해 아직 검증되지 않았습니다."]:
-      ["공식 공고 링크는 확보했으나 변경·정정 공고의 본문 규칙을 확인하지 않아 숫자를 자동 반영하지 않습니다."],
+      ["해당 지역 공고에서 발췌한 문구는 검토 후보이며 적용요건을 검증하기 전 숫자를 계산에 확정 적용하지 않습니다.",...(automaticPdfWarning?[automaticPdfWarning]:[])],
   };
   boardCache.set(cacheKey,{time:Date.now(),notice});
   return notice;
