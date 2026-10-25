@@ -16,6 +16,18 @@ export const ALTERNATIVES: AlternativeDefinition[] = [
   { id: "B-2", name: "오피스텔 · 청년형 · 기계식", shortName: "오피스텔 기계식", useType: "officetel", parkingMode: "mechanical", exclusiveArea: 25, efficiency: 0.45 },
 ];
 
+/** Resolve the two project-level efficiency sliders into each of the four alternatives. */
+export function getProjectAlternatives(input: ProjectInput): AlternativeDefinition[] {
+  const validated = (value: number, fallback: number) =>
+    Number.isFinite(value) && value >= 20 && value <= 95 ? value / 100 : fallback;
+  const apartment = validated(input.apartmentEfficiency, 0.75);
+  const officetel = validated(input.officetelEfficiency, 0.45);
+  return ALTERNATIVES.map((alternative) => ({
+    ...alternative,
+    efficiency: alternative.useType === "apartment" ? apartment : officetel,
+  }));
+}
+
 export const DEFAULT_INPUT: ProjectInput = {
   projectName: "새 프로젝트",
   address: "",
@@ -57,6 +69,8 @@ export const DEFAULT_INPUT: ProjectInput = {
   lhParkingRatioVerified: false,
   mechanicalAllowed: true,
   mechanicalMaxRatio: 70,
+  apartmentEfficiency: 75,
+  officetelEfficiency: 45,
   apartmentFloorHeight: 3.1,
   officetelFloorHeight: 3.3,
 };
@@ -356,5 +370,5 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
 }
 
 export function calculateAll(input: ProjectInput, context: CalculationContext = DEFAULT_CALCULATION_CONTEXT) {
-  return ALTERNATIVES.map((alternative) => calculateAlternative(input, alternative, context));
+  return getProjectAlternatives(input).map((alternative) => calculateAlternative(input, alternative, context));
 }
