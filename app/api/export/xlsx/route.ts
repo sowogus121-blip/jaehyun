@@ -94,6 +94,15 @@ export async function POST(request: NextRequest) {
   review?.laws.forEach((law) => evidence.addRow(["국가법령", law.name, law.applicationStatus, law.enforcementDate || "", law.link]));
   review?.ordinances?.forEach((ordinance) => evidence.addRow(["자치법규", ordinance.name, ordinance.applicationStatus, ordinance.enforcementDate || "", ordinance.link]));
   review?.ruleFindings?.forEach((finding) => evidence.addRow([finding.topic, String(finding.value ?? ""), finding.outcome, finding.article || finding.effectiveDate || "", finding.sourceUrl]));
+  review?.officialDocuments?.documents.forEach((document) => {
+    const label = document.kind === "district-plan" ? "지구단위계획 검색자료" : "LH 공식 검색자료";
+    evidence.addRow([label, document.title, document.status === "analyzed" ? "원문 분석 · 적용 미검증" : "원문 확보 미완료", document.format ?? "", document.sourceUrl]);
+    document.candidates.forEach((candidate) => evidence.addRow([
+      label, candidate.topic + " · " + candidate.quote.slice(0, 130),
+      "수치 후보 · 적용 검증 전", candidate.value === null ? "" : String(candidate.value) + (candidate.unit ?? ""),
+      document.sourceUrl,
+    ]));
+  });
   review?.unresolved.forEach((item) => evidence.addRow(["미확정", item, "확인 필요", "", ""]));
   body.reviewedRules?.forEach((rule) => evidence.addRow([
     "계산에 적용된 입력", rule.field, "검토자 확인 · 법규 자동확정 아님",
