@@ -168,8 +168,15 @@ export async function findLatestLhPurchaseNotice(district:string,regionContext="
   const failures=pageResults.filter((x)=>x.status==="rejected");
   const allPages=[list,...pageResults.flatMap(x=>x.status==="fulfilled"?[x.value]:[])];
   const found=allPages.flatMap(html=>parseLhPurchaseList(html,district)).filter(c=>isSameProvinceNotice(c.title,district,regionContext));
+  // Seoul's official LH board abbreviates its 25-borough coverage list with
+  // '...' in a single row. Thus 강남구/마포구 may be absent from the rendered
+  // list even though the entry is labelled [서울지역]. Use an explicitly
+  // 서울지역 notice only as a regional *candidate*, without asserting borough eligibility.
+  const seoulRegionalFallback=found.length===0 && /^서울(?:특별시)?(?:\s|$)/.test(regionContext)
+    ? allPages.flatMap(html=>parseLhPurchaseList(html,"서울")).filter(c=>/서울지역(?:본부)?/.test(c.title)) : [];
+  const matchedByRegion=seoulRegionalFallback.length>0;
   const seen=new Set<string>();
-  const candidates=found.filter(c=>!seen.has(c.id)&&Boolean(seen.add(c.id)));
+  const candidates=[...found,...seoulRegionalFallback].filter(c=>!seen.has(c.id)&&Boolean(seen.add(c.id)));
   if(!candidates.length){
     if(failures.length)throw new Error("LH 공식 공고 목록 추가 페이지 조회 실패");
     boardCache.set(cacheKey,{time:Date.now(),notice:null});return null;
@@ -203,7 +210,8 @@ export async function findLatestLhPurchaseNotice(district:string,regionContext="
     matchedDistrict:district,official:true,isCurrent:entry.publishedAt<=today&&entry.closesAt>=today,
     rules:identified?verifiedFourth:null, extractedCriteria, textAnalysisStatus,
     warnings:identified?["면적·세대규모의 일반 공고기준과 입지·주차 특례는 별도 조건을 구분해 적용합니다.","역세권 500m, 인허가 가능 용도, 규제지역 및 LH 매입 여부는 해당 필지에 대해 아직 검증되지 않았습니다."]:
-      ["해당 지역 공고에서 발췌한 문구는 검토 후보이며 적용요건을 검증하기 전 숫자를 계산에 확정 적용하지 않습니다.",...(automaticPdfWarning?[automaticPdfWarning]:[])],
+      [...(matchedByRegion?["서울지역 공식 공고를 지역명으로 찾았으나 해당 자치구의 실제 공고 대상 여부는 공고문에서 확인해야 합니다."]:[]),
+      "해당 지역 공고에서 발췌한 문구는 검토 후보이며 적용요건을 검증하기 전 숫자를 계산에 확정 적용하지 않습니다.",...(automaticPdfWarning?[automaticPdfWarning]:[])],
   };
   boardCache.set(cacheKey,{time:Date.now(),notice});
   return notice;
