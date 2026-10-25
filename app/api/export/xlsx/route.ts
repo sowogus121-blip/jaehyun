@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import type { AlternativeResult, ProjectInput, SiteReviewResult } from "../../../../lib/types";
 import type { ReviewedRule } from "../../../../lib/rule-application";
+import type { SiteLookupDetails } from "../../../../lib/types";
+import { buildLegalReviewReport } from "../../../../lib/legal-review-report";
 
 export const runtime = "nodejs";
 
@@ -10,6 +12,7 @@ type ExportBody = {
   results?: AlternativeResult[];
   reviewData?: SiteReviewResult | null;
   reviewedRules?: ReviewedRule[];
+  lookupDetails?: SiteLookupDetails | null;
 };
 
 function styleHeader(row: ExcelJS.Row) {
@@ -28,6 +31,53 @@ export async function POST(request: NextRequest) {
   workbook.creator = "LH Plan Lab";
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
+
+  // A printable, audit-friendly summary matching the legal review screen.
+  const legalReview = buildLegalReviewReport(body.input, body.reviewData ?? null, body.lookupDetails ?? null, body.reviewedRules ?? []);
+  const legalSheet = workbook.addWorksheet("법규검토 총괄표");
+  legalSheet.addRow(["LH Plan Lab | 법규검토 총괄표"]);
+  legalSheet.mergeCells("A1:E1");
+  legalSheet.getRow(1).font = { bold: true, size: 17, color: { argb: "FF193C57" } };
+  legalSheet.getRow(1).height = 30;
+  legalSheet.addRow(["대상지", body.input.address, "검토 기준", body.reviewData?.checkedAt ?? "실조회 전", "법규 원문 = 필지별 자동승인 아님"]);
+  legalSheet.getRow(2).height = 24;
+  legalSheet.addRow(["구분", "검토 내용", "관련 법령 / 조례", "판정", "비고 및 원문 링크"]);
+  styleHeader(legalSheet.getRow(3));
+  const labels: Record<string, string> = { source: "원문 확인 (적용검토 전)", conditional: "조건부 검토", unknown: "미확정", user: "계획 입력" };
+  let currentSection = "";
+  legalReview.rows.forEach((item) => {
+    if (item.section !== currentSection) {
+      currentSection = item.section;
+      const sectionRow = legalSheet.addRow([currentSection]);
+      legalSheet.mergeCells(sectionRow.number, 1, sectionRow.number, 5);
+      sectionRow.font = { bold: true, color: { argb: "FF274B62" } };
+      sectionRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDEEAF0" } };
+      sectionRow.height = 22;
+    }
+    const row = legalSheet.addRow([item.label, item.detail, item.citation, labels[item.status], item.note]);
+    row.height = 52;
+    row.getCell(1).font = { bold: true, color: { argb: "FF254357" } };
+    row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F7F9" } };
+    row.getCell(4).font = { bold: true, color: { argb: item.status === "source" ? "FF23715D" :
+      item.status === "conditional" ? "FFA1662C" : item.status === "user" ? "FF2D6487" : "FF7A8791" } };
+    if (item.sourceUrl) {
+      row.getCell(3).value = { text: item.citation, hyperlink: item.sourceUrl };
+      row.getCell(3).font = { color: { argb: "FF25759B" }, underline: true };
+    }
+    if (item.excerpt) row.getCell(5).value = item.note + "\n[조문 발췌] " + item.excerpt;
+  });
+  legalSheet.addRow([]);
+  const calcTitle = legalSheet.addRow(["규모검토 계산 입력값 · 법정상한과 구분"]);
+  legalSheet.mergeCells(calcTitle.number, 1, calcTitle.number, 5);
+  calcTitle.font = { bold: true, color: { argb: "FF193C57" } };
+  legalReview.calculatedLimits.forEach((item) => legalSheet.addRow([item.label, item.value, item.source,
+    labels[item.status], "조문·별표 적용조건 확인 필요"]));
+  legalSheet.columns = [
+    { width: 27 }, { width: 45 }, { width: 44 }, { width: 25 }, { width: 72 },
+  ];
+  legalSheet.views = [{ state: "frozen", ySplit: 3 }];
+  legalSheet.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  for (const column of [2, 3, 4, 5]) legalSheet.getColumn(column).alignment = { wrapText: true, vertical: "middle" };
 
   const inputs = workbook.addWorksheet("입력값");
   inputs.addRow(["항목", "값", "단위·상태"]);
