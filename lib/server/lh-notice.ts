@@ -68,6 +68,46 @@ export function parseLhPurchaseList(html:string,district:string) {
   }
   return items.sort((a,b)=>b.publishedAt.localeCompare(a.publishedAt));
 }
+const REPEATED_DISTRICTS = new Set(["중구","동구","서구","남구","북구","강서구"]);
+const PROVINCE_NOTICE_TERMS: Array<[string,string[]]> = [
+  ["서울", ["서울"]], ["부산", ["부산","부울경"]],
+  ["대구", ["대구","대구경북"]], ["인천", ["인천","인천부천"]],
+  ["광주", ["광주","광주전남"]], ["대전", ["대전","대전충남"]],
+  ["울산", ["울산","부산울산","부울경"]], ["세종", ["세종","대전충남"]],
+  ["경기", ["경기","수도권"]], ["강원", ["강원"]],
+  ["충북", ["충북"]], ["충남", ["충남","대전충남"]],
+  ["전북", ["전북"]], ["전남", ["전남","광주전남"]],
+  ["경북", ["경북","대구경북"]], ["경남", ["경남","부울경"]],
+  ["제주", ["제주"]],
+];
+export function isSameProvinceNotice(title:string,district:string,regionContext=""):boolean {
+  if(!REPEATED_DISTRICTS.has(district) || !regionContext) return true;
+  const province=regionContext.split(/\s+/)[0];
+  const terms=PROVINCE_NOTICE_TERMS.find(([word])=>province.includes(word))?.[1];
+  if(!terms)return false;
+  const compact=title.replace(/\s+/g,"");
+  return terms.some(term=>compact.includes(term));
+}
+
+export function countLhListPages(html:string):number {
+  const numbers=[...html.matchAll(/goPaging\((\d+)\)/g)].map(x=>Number(x[1]));
+  return Math.min(5,Math.max(1,...numbers.filter(n=>Number.isFinite(n)&&n>=1)));
+}
+export function buildLhPagingBody(html:string,page:number):URLSearchParams|null {
+  // LH uses POST currPage with the original paging form state, not pageIndex.
+  const form=html.match(/<form\b[^>]*name=["']pagingForm["'][^>]*>([\s\S]*?)<\/form>/i)?.[1];
+  if(!form || page<2 || page>5)return null;
+  const fields=new URLSearchParams();
+  for(const tag of form.matchAll(/<input\b[^>]*>/gi)){
+    const name=tag[0].match(/\bname=["']([^"']+)["']/i)?.[1];
+    const value=tag[0].match(/\bvalue=["']([^"']*)["']/i)?.[1]??"";
+    if(name && /^(?:currPage|xssChk|panEdDt|maxSn|listCo|prevListCo|panSs|pchPanSn|panStDt|mi|srchY|minSn)$/.test(name))fields.set(name,value);
+  }
+  if(!fields.has("currPage"))return null;
+  fields.set("currPage",String(page));
+  return fields;
+}
+
 export function parseLhAttachments(html:string):{pdfUrl:string|null;guideUrl:string|null} {
   const anchor=[...html.matchAll(/<a\s+href=["'](\/lhapply\/lhFile\.do\?fileid=\d+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
     .map(m=>({url:ensureOfficial(m[1]),title:stripTags(m[2])}));
@@ -76,37 +116,51 @@ export function parseLhAttachments(html:string):{pdfUrl:string|null;guideUrl:str
     guideUrl:anchor.find(a=>/가이드라인|설계|신청서식/.test(a.title))?.url??null,
   };
 }
-async function getHtml(url:string,timeout=7500):Promise<string> {
-  const res=await fetch(url,{cache:"no-store",signal:AbortSignal.timeout(timeout),headers:{Accept:"text/html","User-Agent":"LH-Plan-Lab/1.0"}});
+async function getHtml(url:string,timeout=7500,body?:URLSearchParams):Promise<string> {
+  const res=await fetch(url,{method:body?"POST":"GET",body:body?.toString(),cache:"no-store",signal:AbortSignal.timeout(timeout),headers:{Accept:"text/html","User-Agent":"LH-Plan-Lab/1.0",...(body?{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"}:{})}});
   if(!res.ok)throw new Error("LH 공식 게시판 HTTP "+res.status);
   const type=res.headers.get("content-type")||"";
   if(!type.toLowerCase().includes("text/html"))throw new Error("LH 게시판이 HTML을 반환하지 않음");
   const html=await res.text();
   return html.slice(0,500_000);
 }
-export async function findLatestLhPurchaseNotice(district:string):Promise<LhNotice|null> {
+export async function findLatestLhPurchaseNotice(district:string,regionContext=""):Promise<LhNotice|null> {
   if(!district)return null;
-  const old=boardCache.get(district);
+  const cacheKey=regionContext+"|"+district;
+  const old=boardCache.get(cacheKey);
   if(old&&Date.now()-old.time<CACHED_MS)return old.notice;
   const list=await getHtml(BOARD_URL);
-  const candidates=parseLhPurchaseList(list,district);
-  if(!candidates.length){boardCache.set(district,{time:Date.now(),notice:null});return null;}
+  // Search the complete official notice list, not just the first 15 rows.
+  const pages=Array.from({length:countLhListPages(list)-1},(_,i)=>buildLhPagingBody(list,i+2)).filter((body):body is URLSearchParams=>Boolean(body));
+  const pageResults=await Promise.allSettled(pages.map(body=>getHtml(BOARD_URL,7500,body)));
+  const failures=pageResults.filter((x)=>x.status==="rejected");
+  const allPages=[list,...pageResults.flatMap(x=>x.status==="fulfilled"?[x.value]:[])];
+  const found=allPages.flatMap(html=>parseLhPurchaseList(html,district)).filter(c=>isSameProvinceNotice(c.title,district,regionContext));
+  const seen=new Set<string>();
+  const candidates=found.filter(c=>!seen.has(c.id)&&Boolean(seen.add(c.id)));
+  if(!candidates.length){
+    if(failures.length)throw new Error("LH 공식 공고 목록 추가 페이지 조회 실패");
+    boardCache.set(cacheKey,{time:Date.now(),notice:null});return null;
+  }
+  const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}).replace(/-/g,".");
+  // Prefer an active municipality-specific notice; otherwise link the latest closed notice with an explicit status.
+  candidates.sort((a,b)=>Number(b.publishedAt<=today&&b.closesAt>=today)-Number(a.publishedAt<=today&&a.closesAt>=today)
+    || b.publishedAt.localeCompare(a.publishedAt));
   const entry=candidates[0];
   const detailUrl=BASE+"/lhapply/apply/pch/view.do?mi=1076&pchPanSn="+entry.id;
   const html=await getHtml(detailUrl);
   const attachments=parseLhAttachments(html);
   // Verified values are anchored to the exact PDF. A changed/new notice NEVER inherits them.
   const identified=entry.id===CURRENT_ID && attachments.pdfUrl===CURRENT_PDF;
-  const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}).replace(/-/g,".");
   const notice:LhNotice={
     id:entry.id,title:entry.title,url:detailUrl,
     pdfUrl:attachments.pdfUrl,guideUrl:attachments.guideUrl,
     publishedAt:entry.publishedAt,closesAt:entry.closesAt,
-    matchedDistrict:district,official:true,isCurrent:entry.closesAt>=today,
+    matchedDistrict:district,official:true,isCurrent:entry.publishedAt<=today&&entry.closesAt>=today,
     rules:identified?verifiedFourth:null,
     warnings:identified?["면적·세대규모의 일반 공고기준과 입지·주차 특례는 별도 조건을 구분해 적용합니다.","역세권 500m, 인허가 가능 용도, 규제지역 및 LH 매입 여부는 해당 필지에 대해 아직 검증되지 않았습니다."]:
       ["공식 공고 링크는 확보했으나 변경·정정 공고의 본문 규칙을 확인하지 않아 숫자를 자동 반영하지 않습니다."],
   };
-  boardCache.set(district,{time:Date.now(),notice});
+  boardCache.set(cacheKey,{time:Date.now(),notice});
   return notice;
 }
