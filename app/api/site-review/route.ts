@@ -454,7 +454,9 @@ export async function POST(request: NextRequest) {
   const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
   const localGovernment = localGovernmentFromAddress(preset?.address ?? address);
   const districtForLh = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? "";
-  const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh).catch(() => null);
+  const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh, localGovernment)
+    .then((notice) => ({ notice, error: null as string | null }))
+    .catch((error: unknown) => ({ notice: null, error: error instanceof Error ? error.message : "LH 공고 조회 실패" }));
   const webSearchPromise = searchOfficialSources({
     address: preset?.address ?? address,
     localGovernment,
@@ -519,7 +521,9 @@ export async function POST(request: NextRequest) {
   }
   const webSearch = await webSearchPromise;
   const officialDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
-  const lhNotice = await lhNoticePromise;
+  const lhNoticeResult = await lhNoticePromise;
+  const lhNotice = lhNoticeResult.notice;
+  if (lhNoticeResult.error) errors.push("LH 지역별 공식 공고 조사: " + lhNoticeResult.error);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
 
