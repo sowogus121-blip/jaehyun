@@ -9,6 +9,8 @@ type LawRecord = {
   promulgationDate: string | null;
   enforcementDate: string | null;
   ministry: string | null;
+  detailId: string | null;
+  detailMst: string | null;
   link: string;
   retrievalStatus: "metadata-only" | "full-text";
   applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
@@ -39,6 +41,7 @@ const LAW_QUERIES = [
   "국토의 계획 및 이용에 관한 법률",
   "주택법",
   "공공주택 특별법",
+  "공공주택 특별법 시행령",
   "주차장법",
   "건축법 시행령",
   "국토의 계획 및 이용에 관한 법률 시행령",
@@ -257,10 +260,22 @@ async function searchLaw(query: string, oc: string): Promise<LawRecord | null> {
     promulgationDate: exact["공포일자"] ? String(exact["공포일자"]) : null,
     enforcementDate: exact["시행일자"] ? String(exact["시행일자"]) : null,
     ministry: exact["소관부처명"] ? String(exact["소관부처명"]) : null,
+    detailId: exact["법령ID"] ? String(exact["법령ID"]) : null,
+    detailMst: exact["법령일련번호"] ? String(exact["법령일련번호"]) : null,
     link: detail.startsWith("http") ? detail : `https://www.law.go.kr${detail}`,
     retrievalStatus: "metadata-only",
     applicationStatus: "not-assessed",
   };
+}
+
+async function fetchNationalLawArticleCandidates(law: LawRecord, oc: string): Promise<OrdinanceArticleCandidate[]> {
+  if (!law.detailId && !law.detailMst) return [];
+  const params = new URLSearchParams({ OC: oc, target: "law", type: "JSON" });
+  if (law.detailId) params.set("ID", law.detailId);
+  else if (law.detailMst) params.set("MST", law.detailMst);
+  const data = await fetchJson(`https://www.law.go.kr/DRF/lawService.do?${params.toString()}`);
+  if (data?.resultCode && String(data.resultCode) !== "00") throw new Error(String(data.resultMsg ?? "법령 본문 조회 실패"));
+  return extractOrdinanceArticles(data, law.name, law.link);
 }
 
 async function searchOrdinance(query: string, oc: string): Promise<OrdinanceRecord | null> {
@@ -458,6 +473,18 @@ export async function POST(request: NextRequest) {
       errors.push(`관할 자치법규 ${ordinanceFailures.length}개 조회 실패: ${[...new Set(ordinanceFailures)].join(" / ")}`);
     }
   }
+  // Read two core national parking laws; never equate a search hit with applicability.
+  let nationalArticleCandidates: OrdinanceArticleCandidate[] = [];
+  if (lawOc) {
+    const targets = laws.filter((item) => ["공공주택 특별법 시행령", "주택건설기준 등에 관한 규정"].includes(item.name));
+    const results = await Promise.allSettled(targets.map((item) => fetchNationalLawArticleCandidates(item, lawOc)));
+    nationalArticleCandidates = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    const failed = results.filter((result) => result.status === "rejected");
+    if (failed.length) errors.push(`국가법령 본문 조회 ${failed.length}건 실패`);
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled" && result.value.length > 0) targets[index].retrievalStatus = "full-text";
+    });
+  }
   // Reading the official full text is a separate step from finding its title.
   // Keyword matches remain unverified candidates; applicability is NOT inferred.
   let ordinanceArticleCandidates: OrdinanceArticleCandidate[] = [];
@@ -489,6 +516,7 @@ export async function POST(request: NextRequest) {
     laws,
     ordinances,
     ordinanceArticleCandidates,
+    nationalArticleCandidates,
     ruleFindings: [],
     webSearch,
     missing,
