@@ -3,6 +3,8 @@
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ALTERNATIVES, DEFAULT_INPUT, calculateAll, resetSiteDependentInput } from "@/lib/calculator";
 import { calculateReviewCompleteness, deriveCalculationContext } from "@/lib/regulatory-assessment";
+import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRuleForEditedField } from "@/lib/rule-application";
+import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
 type IconName = "site" | "law" | "lh" | "scale" | "report" | "search" | "upload" | "save" | "download" | "alert" | "check" | "building" | "parking" | "area" | "height" | "chevron" | "database" | "settings" | "history";
@@ -180,6 +182,10 @@ export default function Home() {
   const [vworldKey, setVworldKey] = useState("");
   const [lawOc, setLawOc] = useState("");
   const [reviewData, setReviewData] = useState<SiteReviewResult | null>(null);
+  const [reviewedRules, setReviewedRules] = useState<ReviewedRule[]>([]);
+  const [reviewCandidateIndex, setReviewCandidateIndex] = useState<number | null>(null);
+  const [reviewRuleField, setReviewRuleField] = useState<ReviewedRuleField>("baseFar");
+  const [reviewRuleValue, setReviewRuleValue] = useState("");
   const [lookupDetails, setLookupDetails] = useState<SiteLookupDetails | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [apiPanelMessage, setApiPanelMessage] = useState("두 값을 입력한 뒤 통합 법규검토를 실행하세요.");
@@ -194,6 +200,7 @@ export default function Home() {
         setInput({ ...DEFAULT_INPUT, ...parsed.input });
         setDocuments(parsed.documents ?? []);
         setReviewData(parsed.reviewData ?? null);
+        setReviewedRules(Array.isArray(parsed.reviewedRules) ? parsed.reviewedRules : []);
         setLookupDetails(parsed.lookupDetails ?? null);
         setSavedAt(parsed.savedAt ?? null);
       } catch { /* invalid local data is ignored */ }
@@ -207,6 +214,8 @@ export default function Home() {
   }, []);
 
   const calculationContext = useMemo(() => deriveCalculationContext(reviewData, input), [reviewData, input]);
+  const activeRules = activeReviewedRules(input, reviewedRules);
+  const selectedSource = reviewCandidateIndex === null ? null : reviewData?.ordinanceArticleCandidates?.[reviewCandidateIndex] ?? null;
   const results = useMemo(() => calculateAll(input, calculationContext), [input, calculationContext]);
   const selected = results.find((result) => result.definition.id === selectedId) ?? results[0];
   const recommendation = [...results].filter((result) => result.recommendable).sort((a, b) => b.score - a.score)[0] ?? null;
@@ -226,11 +235,11 @@ export default function Home() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      localStorage.setItem("lh-plan-lab-project", JSON.stringify({ input, documents, reviewData, lookupDetails, savedAt: new Date().toISOString() }));
+      localStorage.setItem("lh-plan-lab-project", JSON.stringify({ input, documents, reviewData, reviewedRules, lookupDetails, savedAt: new Date().toISOString() }));
       setSavedAt(new Date().toISOString());
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [input, documents, reviewData, lookupDetails]);
+  }, [input, documents, reviewData, reviewedRules, lookupDetails]);
 
   useEffect(() => {
     if (!toast) return;
@@ -238,7 +247,22 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const update = <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => setInput((current) => ({ ...current, [key]: value }));
+  const update = <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => {
+    setInput((current) => ({ ...current, [key]: value }));
+    setReviewedRules((current) =>
+      key === "parcelList" || key === "multipleParcels" ? [] : removeRuleForEditedField(current, key));
+  };
+
+  const applyReviewedFinding = () => {
+    if (!selectedSource || !reviewRuleValue.trim()) return setToast("원문 조항과 적용 수치를 확인해 입력해 주세요.");
+    const rule = confirmReviewedRule(input, reviewData, reviewRuleField, Number(reviewRuleValue), selectedSource, new Date().toISOString());
+    if (!rule) return setToast("대상지·용도지역·항목·공식 출처 또는 입력 범위를 확인해 주세요. 혼합 용도지역은 개별 검토가 필요합니다.");
+    setInput((current) => applyReviewedRule(current, rule));
+    setReviewedRules((current) => [...current.filter((item) => item.field !== rule.field), rule]);
+    setReviewCandidateIndex(null);
+    setReviewRuleValue("");
+    setToast("조항과 적용조건을 확인한 사용자 계획값을 규모검토에 반영했습니다. 법적 자동확정은 아닙니다.");
+  };
 
   const updateVworldKey = (value: string) => {
     setVworldKey(value);
@@ -289,11 +313,9 @@ export default function Home() {
         ...(zoneValue ? { zone: zoneValue } : {}),
         ...(review.parcel?.area ? { siteArea: review.parcel.area } : {}),
         ...(review.districtPlan !== null ? { districtPlan: review.districtPlan } : {}),
-        ...(review.planningStandards ? {
-          buildingCoverageRatio: review.planningStandards.buildingCoverageRatio,
-          baseFar: review.planningStandards.far,
-          relaxedFar: Math.max(review.planningStandards.far, current.relaxedFar),
-        } : {}),
+        // The generic national zoning upper limit is NOT the local ordinance
+        // or district-unit-plan FAR. Display as a reference; never auto-apply.
+
       }));
       setToast(`공식자료 ${data.laws.length + (data.ordinances?.length ?? 0) + data.landUse.length + (data.webSearch?.results?.length ?? 0) + (data.location ? 1 : 0)}건을 확인했습니다.`);
       setApiPanelMessage(`조회 완료 · 좌표 ${data.location ? 1 : 0}건 · 토지이용 ${data.landUse.length}건 · 법령 ${data.laws.length}건 · 자치법규 ${data.ordinances?.length ?? 0}건 · 웹 원문후보 ${data.webSearch?.results?.length ?? 0}건${data.errors.length ? ` · 오류 ${data.errors.length}건` : ""}`);
@@ -381,7 +403,7 @@ export default function Home() {
   };
 
   const saveVersion = () => {
-    const version = { id: Date.now(), savedAt: new Date().toISOString(), input, results };
+    const version = { id: Date.now(), savedAt: new Date().toISOString(), input, reviewedRules, results };
     const versions = JSON.parse(localStorage.getItem("lh-plan-lab-versions") ?? "[]");
     const next = [version, ...(Array.isArray(versions) ? versions : [])].slice(0, 10);
     localStorage.setItem("lh-plan-lab-versions", JSON.stringify(next));
@@ -389,7 +411,7 @@ export default function Home() {
     setToast(`검토 버전 ${next.length}을 저장했습니다.`);
   };
 
-  const exportProject = () => downloadBlob(JSON.stringify({ schemaVersion: 2, exportedAt: new Date().toISOString(), input, documents, reviewData, lookupDetails }, null, 2), "application/json", "lh-plan-lab-project.json");
+  const exportProject = () => downloadBlob(JSON.stringify({ schemaVersion: 3, exportedAt: new Date().toISOString(), input, documents, reviewData, reviewedRules, lookupDetails }, null, 2), "application/json", "lh-plan-lab-project.json");
   const importProject = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -399,6 +421,7 @@ export default function Home() {
       setInput({ ...DEFAULT_INPUT, ...parsed.input });
       setDocuments(Array.isArray(parsed.documents) ? parsed.documents : []);
       setReviewData(parsed.reviewData ?? null);
+      setReviewedRules(Array.isArray(parsed.reviewedRules) ? parsed.reviewedRules : []);
       setLookupDetails(parsed.lookupDetails ?? null);
       setToast("프로젝트를 불러왔습니다.");
     } catch (error) {
@@ -413,7 +436,7 @@ export default function Home() {
       const response = await fetch("/api/export/xlsx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, results, reviewData }),
+        body: JSON.stringify({ input, results, reviewData, reviewedRules: activeRules }),
       });
       if (!response.ok) throw new Error((await response.json()).error || "XLSX 생성 실패");
       downloadBlob(await response.blob(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "LH-Plan-Lab.xlsx");
@@ -476,7 +499,7 @@ export default function Home() {
 
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
-            <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
+            <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
             <Toggle checked={input.multipleParcels} onChange={(value) => { update("multipleParcels", value); if (!value) update("parcelList", ""); }} label="복수 필지 통합검토" note="각 필지의 좌표·면적·용도지역을 분리 조회하며 최대 10필지" />
             {input.multipleParcels && <Field label="추가 필지 목록" hint="한 줄에 한 주소 또는 지번 · 대표 주소는 위에 입력"><textarea value={input.parcelList} onChange={(e) => update("parcelList", e.target.value)} rows={4} placeholder={"경기도 의정부시 가능동 72-5\n경기도 의정부시 가능동 75-1"} /></Field>}
             {lookupDetails && <div className="lookup-result-card">
@@ -551,9 +574,40 @@ export default function Home() {
                 <details key={`${candidate.sourceTitle}-${candidate.topic}-${index}`} className="reg-detail">
                   <summary><Badge status="review" /> {candidate.topic} · {candidate.sourceTitle} · {candidate.article}</summary>
                   <p>{candidate.excerpt}</p>
-                  <a href={candidate.sourceUrl} target="_blank" rel="noreferrer">국가법령정보센터 원문 확인 ↗</a>
+                  <a href={candidate.sourceUrl} target="_blank" rel="noreferrer">국가법령정보센터 원문 확인 ↗</a>{["건폐율", "용적률", "주차", "높이"].includes(candidate.topic) &&
+                    <button type="button" className="button ghost" onClick={() => {
+                      setReviewCandidateIndex(index);
+                      setReviewRuleField(candidate.topic === "건폐율" ? "buildingCoverageRatio" :
+                        candidate.topic === "용적률" ? "baseFar" : candidate.topic === "높이" ? "maxHeight" : "apartmentParkingRatio");
+                      setReviewRuleValue("");
+                    }}>이 원문 근거로 계획값 입력</button>}
                 </details>
               )}
+            </div>}
+            {selectedSource && <div className="official-group">
+              <h4>검토자 확인 후 규모계산 연결</h4>
+              <p>원문 후보는 자동 판정이 아닙니다. 아래 조항의 대상지·용도지역·지구단위계획 적용 여부를 직접 확인한 경우에만 수치를 반영하세요.</p>
+              <b>{selectedSource.sourceTitle} · {selectedSource.article}</b>
+              <p>{selectedSource.excerpt}</p>
+              <div className="form-grid two compact">
+                <Field label="계산에 적용할 항목"><select value={reviewRuleField} onChange={(event) => setReviewRuleField(event.target.value as ReviewedRuleField)}>
+                  {selectedSource.topic === "건폐율" && <option value="buildingCoverageRatio">건폐율 상한 (%)</option>}
+                  {selectedSource.topic === "용적률" && <option value="baseFar">기본 적용 용적률 (%)</option>}
+                  {selectedSource.topic === "주차" && <><option value="apartmentParkingRatio">공동주택 주차계수 (대/세대)</option><option value="officetelParkingRatio">오피스텔 주차계수 (대/호)</option></>}
+                  {selectedSource.topic === "높이" && <><option value="maxHeight">최고높이 (m)</option><option value="maxFloors">최고층수 (층)</option></>}
+                </select></Field>
+                <Field label="원문·조건 확인 후 수치"><input type="number" min="0" step="any" value={reviewRuleValue} onChange={(event) => setReviewRuleValue(event.target.value)} placeholder="원문 확인 수치" /></Field>
+              </div>
+              <button className="button primary" type="button" onClick={applyReviewedFinding}>검토자 확인값을 규모검토에 반영</button>
+              <button className="button ghost" type="button" onClick={() => setReviewCandidateIndex(null)}>취소</button>
+            </div>}
+            {activeRules.length > 0 && <div className="official-group">
+              <h4>계산에 반영된 원문 연결 입력값 (검토자 확인)</h4>
+              {activeRules.map((rule) => <div className="official-row" key={rule.field}>
+                <Badge status="user" /><b>{rule.field} · {rule.value}</b><span>{rule.sourceTitle} · 자동 적법판정 아님</span>
+                <a href={rule.sourceUrl} target="_blank" rel="noreferrer">원문 ↗</a>
+                <button type="button" onClick={() => setReviewedRules((current) => current.filter((item) => item.field !== rule.field))}>근거 연결 해제</button>
+              </div>)}
             </div>}
             {(reviewData.webSearch?.results?.length ?? 0) > 0 && <div className="official-group"><h4>공식 웹 후속검색 · 원문 후보</h4>{reviewData.webSearch.results.map((result) => <a className="official-row" href={result.url} target="_blank" rel="noreferrer" key={result.url}><Badge status="review" /><b>{result.title}</b><span>{result.sourceDomain} · 본문 분석 전</span><em>원문 ↗</em></a>)}</div>}
             {(reviewData.missing.length > 0 || reviewData.errors.length > 0) && <div className="api-errors">{reviewData.missing.map((name) => <span key={name}><Icon name="alert" size={13} /> {name} 연결 필요</span>)}{reviewData.errors.map((error) => <span key={error}><Icon name="alert" size={13} /> {error}</span>)}</div>}
