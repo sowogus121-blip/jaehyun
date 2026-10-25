@@ -343,7 +343,7 @@ async function fetchOrdinanceArticleCandidates(ordinance: OrdinanceRecord, oc: s
 function localGovernmentFromAddress(address: string) {
   const parts = address.split(/\s+/).filter(Boolean);
   if (parts[0]?.includes("세종")) return parts[0];
-  return parts.slice(0, 2).join(" ");
+  return parts.slice(0, parts[1]?.endsWith("시") && parts[2]?.endsWith("구") ? 3 : 2).join(" ");
 }
 
 export async function POST(request: NextRequest) {
@@ -454,7 +454,7 @@ export async function POST(request: NextRequest) {
       }
     }
     const mainMunicipality = localGovernmentFromAddress(preset?.address ?? address);
-    const mixedJurisdiction = parcels.some(item => item.location && localGovernmentFromAddress(item.location.parcelAddress ?? item.location.address) !== mainMunicipality);
+    const mixedJurisdiction = parcels.some(item => localGovernmentFromAddress(item.location?.parcelAddress ?? item.location?.address ?? item.inputAddress) !== mainMunicipality);
     if (duplicatePnu) errors.push("합필 대상 필지 중 동일 PNU가 중복되므로 면적을 합산할 수 없습니다.");
     if (mixedJurisdiction) errors.push("서로 다른 시·군·구 필지가 포함되어 관할 지자체·LH 인수기준을 일괄 적용할 수 없습니다.");
     const failedParcels = additionalReviews.filter((item) => item.errors.length);
