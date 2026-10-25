@@ -6,6 +6,7 @@ import { calculateReviewCompleteness, deriveCalculationContext } from "@/lib/reg
 import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRuleForEditedField } from "@/lib/rule-application";
 import { screenParking03 } from "@/lib/lh-parking-screen";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
+import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
@@ -218,6 +219,7 @@ export default function Home() {
   const calculationContext = useMemo(() => deriveCalculationContext(reviewData, input), [reviewData, input]);
   const activeRules = activeReviewedRules(input, reviewedRules);
   const autoZoningCandidates = suggestZoningRules(reviewData);
+  const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules), [input, reviewData, lookupDetails, activeRules]);
   const parking03 = screenParking03(input, ALTERNATIVES[2]);
   const selectedSource = reviewCandidateIndex === null ? null : reviewData?.ordinanceArticleCandidates?.[reviewCandidateIndex] ?? null;
   const results = useMemo(() => calculateAll(input, calculationContext), [input, calculationContext]);
@@ -575,6 +577,72 @@ export default function Home() {
 
         {activeTab === 1 && <>
           <SectionHeader eyebrow="02 · REGULATION REVIEW" title="법규 및 도시계획 검토" description="확인된 원문, 사용자 입력, 자료 미확보 상태를 분리합니다. 미확인 값으로 적법 판정을 만들지 않습니다." action={<a className="official-link" href="https://www.law.go.kr" target="_blank" rel="noreferrer">국가법령정보센터 ↗</a>} />
+          <section className="card law-report-card" aria-label="법규검토 총괄표">
+            <div className="law-report-heading">
+              <div>
+                <span className="eyebrow">SITE-SPECIFIC LEGAL FEASIBILITY</span>
+                <h3>법규검토 총괄표</h3>
+                <p>주소별 관계 법령과 조례 원문을 모아 실무용 표로 정리했어. <b>원문 확인 ≠ 대지별 적법판정</b>이며 미검증 완화는 계산에 자동 반영하지 않아.</p>
+              </div>
+              <div className="law-report-heading-actions">
+                <button type="button" className="button ghost" onClick={() => window.print()}>인쇄 / PDF</button>
+                <button type="button" className="button dark" onClick={exportXlsx}>엑셀 내려받기</button>
+              </div>
+            </div>
+            <div className="law-report-stats">
+              <div><span>대상지</span><strong>{input.address || "주소 입력 필요"}</strong><small>검토 대상</small></div>
+              <div><span>대지면적</span><strong>{legalReport.area ? f(legalReport.area) + "㎡" : "미확인"}</strong><small>지적 자료 기준</small></div>
+              <div><span>용도지역</span><strong>{legalReport.zone}</strong><small>VWorld · 토지이용계획</small></div>
+              <div><span>조문 근거 확인</span><strong>{legalReport.confirmedSourceCount}건</strong><small>조건부 {legalReport.conditionalCount} · 미확인 {legalReport.unknownCount}</small></div>
+            </div>
+            <div className="law-status-legend">
+              <span className="legal-flag legal-flag-source">원문 확인</span><span>출처·조례의 일반 수치를 확인했지만 대지에 자동 확정 적용되지 않음</span>
+              <span className="legal-flag legal-flag-conditional">조건부</span><span>용도·구역·LH 사업조건 또는 별표 확인 필요</span>
+              <span className="legal-flag legal-flag-unknown">미확정</span><span>유효한 수치·조문 또는 도면 미확보</span>
+            </div>
+            <div className="law-table-wrap">
+              <table className="law-report-table">
+                <thead><tr><th>구분</th><th>법규 검토내용</th><th>관련 법령·조례</th><th>판정</th><th>비고 / 추가 검증</th></tr></thead>
+                <tbody>{legalReport.rows.map((item, index) => <>
+                  {(index === 0 || legalReport.rows[index - 1].section !== item.section) && <tr className="law-section-heading" key={item.section}><td colSpan={5}>{item.section}</td></tr>}
+                  <tr key={item.id}>
+                    <th scope="row">{item.label}</th>
+                    <td className="law-value">{item.detail}</td>
+                    <td>
+                      <span>{item.citation}</span>
+                      {item.sourceUrl && <a className="law-source-link" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">공식 원문 ↗</a>}
+                      {item.excerpt && <details className="law-excerpt"><summary>관련 조문 펼치기</summary><p>{item.excerpt}</p></details>}
+                    </td>
+                    <td><span className={"legal-flag legal-flag-" + item.status}>{item.status === "source" ? "원문 확인" : item.status === "conditional" ? "조건부" : item.status === "user" ? "계획 입력" : "미확정"}</span></td>
+                    <td className="law-note">{item.note}</td>
+                  </tr>
+                </>)}</tbody>
+              </table>
+            </div>
+            <div className="law-calculation-panel">
+              <div><h4>규모검토에 반영되는 입력값</h4><p>아래 값은 법정 상한과 별도로 관리되는 계산 입력이야. 원문 확인 없이 자동 적용된 수치는 없어.</p></div>
+              <div className="law-calculation-grid">{legalReport.calculatedLimits.map((entry) =>
+                <div key={entry.label}><span>{entry.label}</span><strong>{entry.value}</strong><small>{entry.source}</small></div>
+              )}</div>
+            </div>
+            <div className="law-reference-panel">
+              <div className="law-reference-heading"><h4>공식 참고자료 및 도면</h4><span>원문 링크 · 본문 분석 상태 · 필지 적용성 분리</span></div>
+              <div className="law-reference-grid">
+                {reviewData?.ordinances?.map((item) => <a key={item.name} className="law-reference-item" href={item.link} target="_blank" rel="noopener noreferrer">
+                  <span className="law-doc-kind">조례</span><b>{item.name}</b><small>시행 {item.enforcementDate || "일자 확인 필요"} · 원문 열기 ↗</small>
+                </a>)}
+                {reviewData?.officialDocuments?.documents.map((item, index) =>
+                  <a key={item.sourceUrl + index} className="law-reference-item" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">
+                    <span className="law-doc-kind">{item.kind === "district-plan" ? "결정도서" : "LH 공고"}</span>
+                    <b>{item.title}</b>
+                    <small>{item.status === "analyzed" ? "본문 추출 · 대상지 검증 전" : item.status === "link-only" ? "링크 확보 · 원문 미분석" : "원문 분석 실패"} · 원문 열기 ↗</small>
+                  </a>)}
+                <a className="law-reference-item" href="https://www.eum.go.kr/" target="_blank" rel="noopener noreferrer"><span className="law-doc-kind">토지이용</span><b>토지이음 토지이용계획확인</b><small>대상 필지 검색 및 지형도면 조회 ↗</small></a>
+                {!reviewData && <div className="law-reference-item"><span className="law-doc-kind">조회 대기</span><b>주소 입력 후 통합 법규검토 실행</b><small>조례 및 공식 공고 원문이 여기에 정리돼.</small></div>}
+              </div>
+              <p className="law-doc-warning">참고자료의 원본 도면 이미지는 공식기관 링크에서 확인해야 해. 현재 원문 추출이 안 된 문서를 도면 이미지가 확보된 것처럼 표시하지 않아.</p>
+            </div>
+          </section>
           <div className="review-overview"><div><span className="overview-icon navy"><Icon name="database" /></span><span><b>{12 + (reviewData?.laws.length ?? 0) + (reviewData?.ordinances?.length ?? 0) + (reviewData?.landUse.length ?? 0)}</b><small>검토 항목</small></span></div><div><span className="overview-icon green"><Icon name="check" /></span><span><b>{(reviewData?.laws.length ?? 0) + (reviewData?.ordinances?.length ?? 0) + (reviewData?.landUse.length ?? 0) + (reviewData?.location ? 1 : 0) + (reviewData?.parcel ? 1 : 0)}</b><small>공식자료 위치 확인</small></span></div><div><span className="overview-icon blue"><Icon name="save" /></span><span><b>{reviewCompleteness}%</b><small>근거 기반 완성도</small></span></div><div><span className="overview-icon orange"><Icon name="alert" /></span><span><b>{reviewData?.unresolved.length ?? 8}</b><small>확인 필요</small></span></div></div>
           {!reviewData ? <div className="notice danger"><Icon name="alert" /><div><b>공식자료 조사가 아직 실행되지 않았습니다.</b><span>대상지 입력 화면에서 ‘전국 통합 자동검토’를 실행해 주세요.</span></div></div> : <div className={`notice ${reviewData.applicationAssessmentComplete ? "success" : "amber"}`}><Icon name={reviewData.applicationAssessmentComplete ? "check" : "alert"} /><div><b>{reviewData.applicationAssessmentComplete ? "조항 근거를 포함한 적용판정을 완료했습니다." : "공식자료 위치는 확인했지만 조항·별표 적용판정은 아직 완료되지 않았습니다."}</b><span>확인시각 {new Date(reviewData.checkedAt).toLocaleString("ko-KR")} · 법령 검색 성공과 대상지 적용판정을 구분합니다.</span></div></div>}
           {reviewData && <section className="card official-results-card">
