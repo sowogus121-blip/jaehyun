@@ -83,7 +83,7 @@ export function selectOfficialDocumentSources(
       (!location || title.includes(location))) {
       // City-wide notices are relevant context, but a notice naming only an
       // unrelated neighborhood is NOT evidence for the requested address.
-      const namedNeighborhoods = [...result.title.matchAll(/(?:^|[\s(·,/])([가-힣]{2,8}(?:동|읍|면|리))(?=$|[\s)·,/])/g)]
+      const namedNeighborhoods = [...result.title.matchAll(/(?:^|[\s(·,])([가-힣]{2,8}(?:동|읍|면|리))(?=$|[\s)·,])/g)]
         .map((match) => match[1]);
       if (!neighborhood || namedNeighborhoods.length === 0 ||
         namedNeighborhoods.includes(neighborhood)) kind = "district-plan";
