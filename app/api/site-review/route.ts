@@ -537,12 +537,17 @@ export async function POST(request: NextRequest) {
       errors.push(`국가법령정보센터 ${failures.length}개 조회 실패: ${reasons.join(" / ")}`);
     }
     ordinances = ordinanceSettled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
+    // Many borough/metro pairs do not enact all four ordinance subjects.
+    // A successful API search with no match is not a transport failure, and
+    // should not make an otherwise verified site seem broken.
     const ordinanceFailures = ordinanceSettled.flatMap((result) => result.status === "rejected"
       ? [result.reason instanceof Error ? result.reason.message : "알 수 없는 오류"]
-      : result.value ? [] : ["검색 결과 없음"]);
+      : []);
     if (ordinanceFailures.length) {
-      errors.push(`관할 자치법규 ${ordinanceFailures.length}개 조회 실패: ${[...new Set(ordinanceFailures)].join(" / ")}`);
+      errors.push(`관할 자치법규 요청 ${ordinanceFailures.length}건 오류: ${[...new Set(ordinanceFailures)].join(" / ")}`);
     }
+    if (!ordinances.length && !ordinanceFailures.length)
+      errors.push("관할 도시계획·건축·주차장 조례를 찾지 못했습니다. 광역시 및 구·군 원문을 별도로 확인해야 합니다.");
   }
   // Read two core national parking laws; never equate a search hit with applicability.
   let nationalArticleCandidates: OrdinanceArticleCandidate[] = [];
