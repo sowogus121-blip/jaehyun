@@ -316,7 +316,7 @@ async function searchOrdinance(query: string, oc: string, jurisdiction: string):
   const matches = rows.filter((candidate: Record<string, unknown>) => {
     const title = normalize(candidate["자치법규명"] ?? candidate["법령명한글"]);
     const office = normalize(candidate["지자체기관명"]);
-    return title.startsWith(normalize(district + subject)) &&
+    return (title === normalize(query) || title.startsWith(normalize(district + subject))) &&
       title.includes("조례") && !title.includes("시행규칙") &&
       (!office || office === fullScope || office.endsWith(normalize(district)));
   }) as Record<string, unknown>[];
@@ -512,17 +512,21 @@ export async function POST(request: NextRequest) {
   let ordinances: OrdinanceRecord[] = [];
   if (lawOc) {
     const district = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? localGovernment;
-    // Search by enacted ordinance title. Adding the province to 'query'
-    // yields zero results on the real official API for e.g. 의정부시.
-    const ordinanceQueries = [
-      `${district} 건축 조례`,
-      `${district} 주차장 설치 및 관리 조례`,
-      `${district} 도시계획 조례`,
-      `${district} 경관 조례`,
-    ];
+    const metro = localGovernment.split(/\s+/)[0];
+    const metropolitan = /(?:특별시|광역시|특별자치시)$/.test(metro);
+    const kinds = ["건축 조례", "주차장 설치 및 관리 조례", "도시계획 조례", "경관 조례"];
+    // The metropolitan ordinance governs urban planning and commonly parking,
+    // while borough-level ordinances can add separate local restrictions.
+    // Ask both authorities rather than searching for '서구 도시계획 조례' alone.
+    const ordinanceQueries = metropolitan
+      ? [
+          ...kinds.map(suffix=>({query:`${localGovernment} ${suffix}`,jurisdiction:localGovernment})),
+          ...kinds.map(suffix=>({query:`${metro} ${suffix}`,jurisdiction:metro})),
+        ]
+      : kinds.map(suffix=>({query:`${district} ${suffix}`,jurisdiction:localGovernment}));
     const [settled, ordinanceSettled] = await Promise.all([
       Promise.allSettled(LAW_QUERIES.map((query) => searchLaw(query, lawOc))),
-      Promise.allSettled(ordinanceQueries.map((query) => searchOrdinance(query, lawOc, localGovernment))),
+      Promise.allSettled(ordinanceQueries.map(({query,jurisdiction}) => searchOrdinance(query, lawOc, jurisdiction))),
     ]);
     laws = settled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
     const failures = settled.flatMap((result) => result.status === "rejected"
