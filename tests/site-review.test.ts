@@ -82,6 +82,40 @@ describe("site review API", () => {
     expect(data.planningStandards).toEqual(expect.objectContaining({ buildingCoverageRatio: 50, far: 300 }));
   });
 
+  it("requests the current VWorld district-unit-plan layer instead of invalid LT_C_UQ171", async () => {
+    const dataCodes: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname.includes("/req/search")) return new Response(JSON.stringify({
+        response: { status: "OK", result: { items: [{
+          address: { parcel: "경기도 의정부시 다른동 10-3" },
+          point: { x: "127.05", y: "37.75" },
+        }] } },
+      }));
+      const code = url.searchParams.get("data");
+      if (code) dataCodes.push(code);
+      const features = code === "LT_C_UPISUQ161"
+        ? [{ properties: { DGM_NM: "세부 도시관리계획" } }] : [];
+      return new Response(JSON.stringify({ response: {
+        status: "OK", result: { featureCollection: { features } },
+      } }));
+    }));
+    const response = await POST(request({ "x-vworld-api-key": "test-key" }, "경기도 의정부시 다른동 10-3"));
+    const review = await response.json();
+    expect(dataCodes).toContain("LT_C_UPISUQ161");
+    expect(dataCodes).toContain("LT_C_UPISUQ171");
+    expect(dataCodes).toContain("LT_C_UQ124");
+    expect(dataCodes).toContain("LT_C_UQ126");
+    expect(dataCodes).toContain("LT_C_UD801");
+    expect(dataCodes).not.toContain("LT_C_UQ171");
+    expect(dataCodes).not.toContain("LT_C_UQ141");
+    expect(review.districtPlan).toBe(true);
+    expect(review.landUse).toContainEqual(expect.objectContaining({
+      code: "LT_C_UPISUQ161", category: "도시계획",
+    }));
+    expect(review.errors).toEqual([]);
+  });
+
   it("keeps multiple parcels separate and aggregates only their confirmed areas", async () => {
     const response = await POST(request({}, "경기도 의정부시 가능동 75-1", ["경기도 의정부시 가능동 72-5"]));
     const data = await response.json();
