@@ -328,7 +328,7 @@ export default function Home() {
 
       }));
       setToast(`공식자료 ${data.laws.length + (data.ordinances?.length ?? 0) + data.landUse.length + (data.webSearch?.results?.length ?? 0) + (data.location ? 1 : 0)}건을 확인했습니다.`);
-      setApiPanelMessage(`조회 완료 · 좌표 ${data.location ? 1 : 0}건 · 토지이용 ${data.landUse.length}건 · 법령 ${data.laws.length}건 · 자치법규 ${data.ordinances?.length ?? 0}건 · 웹 원문후보 ${data.webSearch?.results?.length ?? 0}건 · 공식 첨부 분석 ${data.officialDocuments?.documents.filter((document) => document.status === "analyzed").length ?? 0}건${data.errors.length ? ` · 오류 ${data.errors.length}건` : ""}`);
+      setApiPanelMessage(`조회 완료 · 좌표 ${data.location ? 1 : 0}건 · 토지이용 ${data.landUse.length}건 · 법령 ${data.laws.length}건 · 자치법규 ${data.ordinances?.length ?? 0}건 · 웹 원문후보 ${data.webSearch?.results?.length ?? 0}건 · 공식 첨부 분석 ${data.officialDocuments?.documents.filter((document: { status: string }) => document.status === "analyzed").length ?? 0}건${data.errors.length ? ` · 오류 ${data.errors.length}건` : ""}`);
       if (navigateToReview) setActiveTab(1);
       return review;
     } catch (error) {
