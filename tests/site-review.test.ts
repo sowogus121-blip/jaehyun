@@ -56,7 +56,7 @@ describe("site review API", () => {
     const response = await POST(request({ "x-law-api-oc": "invalid-oc" }));
     const data = await response.json();
 
-    expect(data.errors).toContain("국가법령정보센터 11개 조회 실패: 03 · 등록되지 않은 OC");
+    expect(data.errors).toContain("국가법령정보센터 12개 조회 실패: 03 · 등록되지 않은 OC");
   });
 
   it("auto-applies land use, parcel data, and planning standards for a new address", async () => {
@@ -90,6 +90,31 @@ describe("site review API", () => {
     expect(data.parcel.area).toBe(2095);
     expect(data.mixedUseZones).toBe(false);
     expect(data.parcels.map((item: { parcel: { area: number } }) => item.parcel.area)).toEqual([1467, 628]);
+  });
+
+  it("reads official national 0.3-parking clause as an unverified candidate, not auto-approval", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("lawService.do")) {
+        return new Response(JSON.stringify({
+          법령: { 조문: [{ 조문번호: "37", 조문내용: "공공주택사업자에게 매도하기로 약정을 체결한 주택 중 세대당 전용면적이 30제곱미터 미만인 세대는 주차대수 기준을 0.3대로 적용할 수 있다." }] },
+        }));
+      }
+      if (url.searchParams.get("target") === "ordin") {
+        return new Response(JSON.stringify({ OrdinSearch: { resultCode: "00", ordin: [] } }));
+      }
+      const query = url.searchParams.get("query") || "";
+      return new Response(JSON.stringify({ LawSearch: { resultCode: "00", law: [{
+        법령명한글: query, 법령ID: query === "공공주택 특별법 시행령" ? "000123" : "",
+        시행일자: "20260908", 법령상세링크: "/LSW/",
+      }] } }));
+    }));
+    const response = await POST(request({ "x-law-api-oc": "test-oc" }));
+    const data = await response.json();
+    expect(data.nationalArticleCandidates.some((item: { excerpt: string }) => item.excerpt.includes("0.3대"))).toBe(true);
+    expect(data.nationalArticleCandidates.every((item: { verified: boolean }) => item.verified === false)).toBe(true);
+    expect(data.applicationAssessmentComplete).toBe(false);
+    expect(data.ruleFindings).toEqual([]);
   });
 
   it("separates source discovery from target-site application assessment", async () => {

@@ -4,6 +4,8 @@ import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "re
 import { ALTERNATIVES, DEFAULT_INPUT, calculateAll, resetSiteDependentInput } from "@/lib/calculator";
 import { calculateReviewCompleteness, deriveCalculationContext } from "@/lib/regulatory-assessment";
 import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRuleForEditedField } from "@/lib/rule-application";
+import { screenParking03 } from "@/lib/lh-parking-screen";
+import { suggestZoningRules } from "@/lib/zoning-applicability";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
 
@@ -215,6 +217,8 @@ export default function Home() {
 
   const calculationContext = useMemo(() => deriveCalculationContext(reviewData, input), [reviewData, input]);
   const activeRules = activeReviewedRules(input, reviewedRules);
+  const autoZoningCandidates = suggestZoningRules(reviewData);
+  const parking03 = screenParking03(input, ALTERNATIVES[2]);
   const selectedSource = reviewCandidateIndex === null ? null : reviewData?.ordinanceArticleCandidates?.[reviewCandidateIndex] ?? null;
   const results = useMemo(() => calculateAll(input, calculationContext), [input, calculationContext]);
   const selected = results.find((result) => result.definition.id === selectedId) ?? results[0];
@@ -248,7 +252,13 @@ export default function Home() {
   }, [toast]);
 
   const update = <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => {
-    setInput((current) => ({ ...current, [key]: value }));
+    setInput((current) => ({
+      ...current, [key]: value,
+      ...(key === "businessMode" || key === "lhSupplyType" ? {
+        specialParkingApproval: "not-reviewed" as const,
+        purchaseAgreementConfirmed: false, specialParkingUseScopeConfirmed: false, specialParkingLhConfirmed: false,
+      } : {}),
+    }));
     setReviewedRules((current) =>
       key === "parcelList" || key === "multipleParcels" ? [] : removeRuleForEditedField(current, key));
   };
@@ -571,7 +581,32 @@ export default function Home() {
               <p>{reviewData.planningStandards.source} · 관할 도시계획조례와 지구단위계획에서 정한 실제 적용값을 확인해야 합니다. 이 일반 상한만으로 규모계산을 자동 확정하지 않습니다.</p>
             </div>}
             {reviewData.laws.length > 0 && <div className="official-group"><h4>현행 국가법령 · 메타데이터 확인</h4>{reviewData.laws.map((law) => <a className="official-row" href={law.link} target="_blank" rel="noreferrer" key={law.name}><Badge status="review" /><b>{law.name}</b><span>{law.ministry || "소관부처 확인"} · 시행 {law.enforcementDate || "일자 미확보"} · 적용판정 전</span><em>원문 ↗</em></a>)}</div>}
+            {(reviewData.nationalArticleCandidates?.length ?? 0) > 0 && <div className="official-group">
+              <h4>국가법령 조항 자동발췌 ({reviewData.nationalArticleCandidates?.length ?? 0}건)</h4>
+              <p>공공주택 특별법 시행령 및 주택건설기준규정 원문 발췌입니다. 법령 원문 검색 성공만으로 개별 LH 매입사업 적용이 확정되는 것은 아닙니다.</p>
+              {reviewData.nationalArticleCandidates?.filter((item) => item.topic === "주차").slice(0, 8).map((item, index) =>
+                <details className="reg-detail" key={item.sourceTitle + item.article + index}>
+                  <summary><Badge status="review"/> {item.sourceTitle} · {item.article}</summary>
+                  <p>{item.excerpt}</p>
+                  <a href={item.sourceUrl} target="_blank" rel="noreferrer">법령 원문 ↗</a>
+                </details>
+              )}
+            </div>}
             {(reviewData.ordinances?.length ?? 0) > 0 && <div className="official-group"><h4>관할 자치법규 · 메타데이터 확인</h4>{reviewData.ordinances.map((ordinance) => <a className="official-row" href={ordinance.link} target="_blank" rel="noreferrer" key={ordinance.name}><Badge status="review" /><b>{ordinance.name}</b><span>{ordinance.localGovernment || "관할기관 확인"} · 시행 {ordinance.enforcementDate || "일자 미확보"} · 조문 분석 전</span><em>원문 ↗</em></a>)}</div>}
+            {autoZoningCandidates.length > 0 && <div className="official-group">
+              <h4>대상 용도지역 ↔ 조례 수치 자동 대조 ({autoZoningCandidates.length}건)</h4>
+              <p>조례 본문의 용도지역과 숫자가 같은 행에 명시된 경우만 추출했습니다. 확정 적용값이 아니며, 지구단위계획 및 별표·부칙·개정 관계 확인 전에는 규모계산에 자동 적용하지 않습니다.</p>
+              {autoZoningCandidates.map((rule, index) => <div key={rule.sourceTitle + rule.topic + index} className="official-row">
+                <Badge status="review"/>
+                <b>{rule.zone} · {rule.topic} {rule.value}%</b>
+                <span>{rule.sourceTitle} · {rule.article}{rule.needsDistrictPlanReview ? " · 지구단위계획 별도 확인" : ""}</span>
+                <button type="button" className="button ghost" onClick={() => {
+                  setReviewCandidateIndex(rule.articleIndex);
+                  setReviewRuleField(rule.topic === "건폐율" ? "buildingCoverageRatio" : "baseFar");
+                  setReviewRuleValue(String(rule.value));
+                }}>원문 확인 후 반영</button>
+              </div>)}
+            </div>}
             {(reviewData.ordinanceArticleCandidates?.length ?? 0) > 0 && <div className="official-group">
               <h4>자치법규 조문 자동 발췌 · 적용 검증 전 ({reviewData.ordinanceArticleCandidates?.length ?? 0}건)</h4>
               <p>국가법령정보센터 원문에서 관련 키워드를 추출했습니다. 대상 필지에 적용되는 조항·별표인지 아직 검증되지 않았으며 건폐율·용적률 등 계산에는 자동 반영되지 않습니다.</p>
@@ -638,13 +673,18 @@ export default function Home() {
               <NumberField label="자주식 면적계수" value={input.selfParkingAreaPerCar} onChange={(v) => update("selfParkingAreaPerCar", v)} suffix="㎡/대" hint="계획 가정값" />
               <NumberField label="기계식 설비계수" value={input.mechanicalAreaPerCar} onChange={(v) => update("mechanicalAreaPerCar", v)} suffix="㎡/대" hint="형식별 재검토" />
               <Field label="0.3대 특례 승인상태" hint="승인 전에는 기본 주차대수를 적용"><select value={input.specialParkingApproval} onChange={(e) => update("specialParkingApproval", e.target.value as ProjectInput["specialParkingApproval"])}><option value="not-reviewed">미검토</option><option value="conditional">조건부 검토</option><option value="approved">공식 승인 확인</option><option value="rejected">적용 불가 확인</option></select></Field>
-            </div><div className="toggle-stack"><Toggle checked={input.specialParkingEnabled} onChange={(v) => update("specialParkingEnabled", v)} label="전용 30㎡ 미만 0.3대 특례 시나리오" note="미승인 시 기본안과 분리하여 표시" /><Toggle checked={input.lhParkingRatioVerified} onChange={(v) => update("lhParkingRatioVerified", v)} label="LH 주차계수 근거 확인" note="공고·가이드 원문을 확인한 경우에만 켬" /><Toggle checked={input.mechanicalAllowed} onChange={(v) => update("mechanicalAllowed", v)} label="기계식주차 허용 가정" note="LH 인수·유지관리·비율 제한 원문 확인 필요" /></div></section>
+            </div><div className="toggle-stack">
+              <Toggle checked={input.purchaseAgreementConfirmed} onChange={(v) => update("purchaseAgreementConfirmed", v)} label="공공주택사업자 매도약정 체결 원본 확인" note="예정 또는 신청 상태는 해당하지 않음"/>
+              <Toggle checked={input.specialParkingUseScopeConfirmed} onChange={(v) => update("specialParkingUseScopeConfirmed", v)} label="오피스텔 등 해당 용도의 특례 대상 인정 확인" note="관할 허가권자/LH의 실제 적용범위 확인"/>
+              <Toggle checked={input.specialParkingLhConfirmed} onChange={(v) => update("specialParkingLhConfirmed", v)} label="최신 LH 지역본부 공고 및 추가요건 확인" note="입지·공급유형 및 지역별 조건 포함"/>
+              <Toggle checked={input.specialParkingEnabled} onChange={(v) => update("specialParkingEnabled", v)} label="전용 30㎡ 미만 0.3대 특례 시나리오" note="미승인 시 기본안과 분리하여 표시" /><Toggle checked={input.lhParkingRatioVerified} onChange={(v) => update("lhParkingRatioVerified", v)} label="LH 주차계수 근거 확인" note="공고·가이드 원문을 확인한 경우에만 켬" /><Toggle checked={input.mechanicalAllowed} onChange={(v) => update("mechanicalAllowed", v)} label="기계식주차 허용 가정" note="LH 인수·유지관리·비율 제한 원문 확인 필요" /></div></section>
             <section className="card criteria-card"><div className="card-title"><div className="title-icon orange"><Icon name="alert" /></div><div><h3>특례 적용 판정</h3><p>필수조건을 개별 검증합니다.</p></div></div><div className="criteria-list">
-              <div><span className="criteria-check ok"><Icon name="check" size={15} /></span><span><b>전용면적 30㎡ 미만</b><small>B안 25㎡ 충족 · A안 46㎡ 불충족</small></span></div>
-              <div><span className={`criteria-check ${input.businessMode === "purchase" ? "ok" : "wait"}`}>{input.businessMode === "purchase" ? <Icon name="check" size={15} /> : "?"}</span><span><b>민간 신축매입약정</b><small>{input.businessMode === "purchase" ? "사용자 선택상 충족" : "사업방식 미정 또는 해당 없음"}</small></span></div>
-              <div><span className="criteria-check wait">?</span><span><b>LH 공고문·입지조건</b><small>자료 미확보 · 해당 연도/지역본부 확인 필요</small></span></div>
-              <div><span className="criteria-check wait">?</span><span><b>현행 법령 근거</b><small>공공주택 특별법령 원문 대조 필요</small></span></div>
-            </div><div className={`decision ${input.specialParkingApproval === "approved" ? "conditional" : "hold"}`}><span>{input.specialParkingApproval === "approved" ? "승인 확인값 반영" : input.specialParkingEnabled ? "조건부 시나리오" : "적용 보류"}</span><b>{input.specialParkingApproval === "approved" ? "B안 최종 주차대수에 0.3대 반영" : input.specialParkingEnabled ? "기본 주차와 0.3대 조건부 결과를 분리" : "원 법정기준으로 계산"}</b></div></section>
+              {parking03.checks.map((item) => <div key={item.id}>
+                <span className={`criteria-check ${item.status === "pass" ? "ok" : "wait"}`}>{item.status === "pass" ? <Icon name="check" size={15}/> : item.status === "fail" ? "×" : "?"}</span>
+                <span><b>{item.label}</b><small>{item.detail}</small></span>
+              </div>)}
+              <div><a href={parking03.sourceUrl} target="_blank" rel="noreferrer">법령 원문: 공공주택 특별법 시행령 제37조제4항 ↗</a></div>
+              </div><div className={`decision ${parking03.canApply ? "conditional" : "hold"}`}><span>{parking03.canApply ? "근거확인 값 반영" : parking03.canShowConditional ? "조건부 시나리오" : "적용 보류"}</span><b>{parking03.canApply ? "B안 0.3대 반영 (사용자 근거확인)" : parking03.canShowConditional ? "기본 주차와 0.3대 조건부 결과를 분리" : "원 법정기준으로 계산"}</b></div></section>
           </div>
           <section className="card facility-card"><div className="card-title"><div className="title-icon teal"><Icon name="building" /></div><div><h3>부대복리시설 비교</h3><p>세대수 변경 시 면적이 자동 재산정되며, 법정 의무와 계획 가정을 구분합니다.</p></div></div><div className="facility-columns">{[results[0], results[2]].map((result) => <div key={result.definition.id}><div className="facility-head"><span>{result.definition.useType === "apartment" ? "A · 공동주택" : "B · 오피스텔"}</span><b>{result.unitCount}{result.definition.useType === "apartment" ? "세대" : "호"} · {f(result.amenityArea)}㎡</b></div>{result.facilities.map((facility) => <div className="facility-row" key={facility.name}><span><b>{facility.name}</b><small>{facility.basis}</small></span><span>{facility.area ? `${f(facility.area)}㎡` : "미설치"}</span><Badge status="review" /></div>)}</div>)}</div></section>
         </>}

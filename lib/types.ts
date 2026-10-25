@@ -41,6 +41,9 @@ export interface ProjectInput {
   lhOfficetelParkingRatio: number;
   specialParkingEnabled: boolean;
   specialParkingApproval: ParkingRelaxationStatus;
+  purchaseAgreementConfirmed: boolean;
+  specialParkingUseScopeConfirmed: boolean;
+  specialParkingLhConfirmed: boolean;
   lhParkingRatioVerified: boolean;
   mechanicalAllowed: boolean;
   mechanicalMaxRatio: number;
@@ -235,6 +238,14 @@ export interface SiteReviewResult {
     link: string;
     retrievalStatus: "metadata-only" | "full-text";
     applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
+  }>;
+  nationalArticleCandidates?: Array<{
+    sourceTitle: string;
+    sourceUrl: string;
+    topic: string;
+    article: string;
+    excerpt: string;
+    verified: false;
   }>;
   ordinanceArticleCandidates?: Array<{
     sourceTitle: string;
