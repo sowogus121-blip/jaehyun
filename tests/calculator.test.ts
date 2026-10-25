@@ -117,6 +117,7 @@ describe("LH Plan Lab calculation engine", () => {
   it("does not let an unverified LH assumption cancel an approved relaxation", () => {
     const input = {
       ...EXAMPLE_INPUT,
+      lhSupplyType: "youth" as const,
       businessMode: "purchase" as const,
       specialParkingEnabled: true,
       specialParkingApproval: "approved" as const,
