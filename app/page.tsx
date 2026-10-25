@@ -151,6 +151,39 @@ function downloadBlob(content: BlobPart, type: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+
+function EfficiencyControls({ input, update }: {
+  input: ProjectInput;
+  update: <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => void;
+}) {
+  const efficiency = [
+    { key: "apartmentEfficiency" as const, label: "공동주택 전용률", defaultValue: 75, unit: "46㎡ 신혼형" },
+    { key: "officetelEfficiency" as const, label: "오피스텔 전용률", defaultValue: 45, unit: "25㎡ 청년형" },
+  ];
+  return <section className="efficiency-controls" aria-label="전용률 사용자 설정">
+    <div className="efficiency-heading">
+      <div><b>전용률 조정</b><p>공동주택 75% · 오피스텔 45%가 기본값이야. 변경하면 세대수·공용면적·연면적과 건축개요가 즉시 다시 계산돼.</p></div>
+      <button type="button" className="button ghost" onClick={() => {
+        update("apartmentEfficiency", 75);
+        update("officetelEfficiency", 45);
+      }}>기본값 복원</button>
+    </div>
+    <div className="efficiency-fields">{efficiency.map((item) => {
+      const value = input[item.key] ?? item.defaultValue;
+      const valid = Number.isFinite(value) && value >= 20 && value <= 95;
+      return <label key={item.key} className="efficiency-field">
+        <span><b>{item.label}</b><small>{item.unit} · 기본 {item.defaultValue}%</small></span>
+        <input type="range" min="20" max="95" step="1" value={valid ? value : item.defaultValue}
+          aria-label={item.label + " 슬라이더"} onChange={(event) => update(item.key, Number(event.target.value))} />
+        <span className="efficiency-number"><input type="number" min="20" max="95" step="1"
+          aria-label={item.label + " 직접 입력"} value={value} onChange={(event) => update(item.key, Number(event.target.value))}
+          onBlur={() => { if (!valid) update(item.key, item.defaultValue); }} /><b>%</b></span>
+        {!valid && <small className="efficiency-error">20~95% 범위로 입력해 줘. 그동안 기본값으로 계산돼.</small>}
+      </label>;
+    })}</div>
+  </section>;
+}
+
 function ComparisonTable({ results, input }: { results: AlternativeResult[]; input: ProjectInput }) {
   const check = getMassingReadiness(input);
   const ready = check.canEstimateUnits;
@@ -535,26 +568,6 @@ export default function Home() {
         {activeTab === 0 && <>
           <SectionHeader eyebrow="01 · SITE INPUT" title="대상지 및 사업조건" description="자동조회 정보와 사용자 입력값을 구분해 관리합니다. 입력 즉시 4개 대안이 다시 계산됩니다." action={<div className="source-legend"><Badge status="verified" /><Badge status="user" /><Badge status="unknown" /></div>} />
           <div className="workflow-hint"><b>① 주소 입력·자동조회</b><span>→</span><b>② 법규 원문 확인</b><span>→</span><b>③ 가정 층수로 예비규모 산정</b><span>→</span><b>④ 건축개요 확인</b></div>
-          <div className="summary-strip">
-            <Metric label="대지면적" value={input.siteArea > 0 ? f(input.siteArea) : "—"} suffix="㎡" sub="사용자 입력" />
-            <Metric label="적용 용적률" value={appliedFar > 0 ? appliedFar : "—"} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
-            <Metric label="건폐율 상한" value={input.buildingCoverageRatio > 0 ? input.buildingCoverageRatio : "—"} suffix="%" sub="근거 확인 필요" />
-            <Metric label="접도 폭원" value={input.roadWidth > 0 ? input.roadWidth : "—"} suffix="m" sub="사용자 입력" />
-            <div className="strip-status"><span>검토 상태</span><b><i /> {reviewData ? "공식자료 조회 · 적용 검증 전" : "공식자료 조회 전"}</b><small>확정 법규·LH 인수 판정 전</small></div>
-          </div>
-
-          <section className="card form-card">
-            <div className="card-title"><div className="title-icon"><Icon name="building" /></div><div><h3>사업 기본정보</h3><p>프로젝트의 식별정보와 LH 사업방식을 설정합니다.</p></div><Badge status="user" /></div>
-            <div className="form-grid three">
-              <Field label="사업명" wide><input value={input.projectName} onChange={(e) => update("projectName", e.target.value)} /></Field>
-              <Field label="사업방식"><select value={input.businessMode} onChange={(e) => update("businessMode", e.target.value as ProjectInput["businessMode"])}><option value="undecided">미정</option><option value="direct">LH 직접건설</option><option value="purchase">민간 신축매입약정</option><option value="other">기타</option></select></Field>
-              <Field label="LH 공급유형"><select value={input.lhSupplyType} onChange={(e) => update("lhSupplyType", e.target.value as ProjectInput["lhSupplyType"])}><option value="undecided">미정</option><option value="newlywed">신혼형</option><option value="youth">청년형</option><option value="general">일반형</option><option value="senior">고령자형</option></select></Field>
-              <Field label="적용 지역본부"><input value={input.regionalOffice} onChange={(e) => update("regionalOffice", e.target.value)} /></Field>
-              <Field label="사용자 확인 계획조건" wide><input value={input.userPlanNotes} onChange={(e) => update("userPlanNotes", e.target.value)} placeholder="예: 건축한계선 3m 확인, 고도제한 협의 중" /></Field>
-            </div>
-            {input.businessMode === "undecided" && <div className="notice amber"><Icon name="alert" /><div><b>사업방식이 확정되지 않았습니다.</b><span>매입약정 0.3대 특례와 관련 인센티브는 자동 적용하지 않고 별도 검토사항으로 유지합니다.</span></div></div>}
-          </section>
-
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
@@ -580,6 +593,27 @@ export default function Home() {
             <Toggle checked={input.districtPlan} onChange={(v) => update("districtPlan", v)} label="지구단위계획구역" note="체크 시 결정도서와 시행지침 원문 검토가 필수입니다." />
           </section>
 
+          <div className="summary-strip">
+            <Metric label="대지면적" value={input.siteArea > 0 ? f(input.siteArea) : "—"} suffix="㎡" sub="사용자 입력" />
+            <Metric label="적용 용적률" value={appliedFar > 0 ? appliedFar : "—"} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
+            <Metric label="건폐율 상한" value={input.buildingCoverageRatio > 0 ? input.buildingCoverageRatio : "—"} suffix="%" sub="근거 확인 필요" />
+            <Metric label="접도 폭원" value={input.roadWidth > 0 ? input.roadWidth : "—"} suffix="m" sub="사용자 입력" />
+            <div className="strip-status"><span>검토 상태</span><b><i /> {reviewData ? "공식자료 조회 · 적용 검증 전" : "공식자료 조회 전"}</b><small>확정 법규·LH 인수 판정 전</small></div>
+          </div>
+
+          <section className="card form-card">
+            <div className="card-title"><div className="title-icon"><Icon name="building" /></div><div><h3>사업 기본정보</h3><p>프로젝트의 식별정보와 LH 사업방식을 설정합니다.</p></div><Badge status="user" /></div>
+            <div className="form-grid three">
+              <Field label="사업명" wide><input value={input.projectName} onChange={(e) => update("projectName", e.target.value)} /></Field>
+              <Field label="사업방식"><select value={input.businessMode} onChange={(e) => update("businessMode", e.target.value as ProjectInput["businessMode"])}><option value="undecided">미정</option><option value="direct">LH 직접건설</option><option value="purchase">민간 신축매입약정</option><option value="other">기타</option></select></Field>
+              <Field label="LH 공급유형"><select value={input.lhSupplyType} onChange={(e) => update("lhSupplyType", e.target.value as ProjectInput["lhSupplyType"])}><option value="undecided">미정</option><option value="newlywed">신혼형</option><option value="youth">청년형</option><option value="general">일반형</option><option value="senior">고령자형</option></select></Field>
+              <Field label="적용 지역본부"><input value={input.regionalOffice} onChange={(e) => update("regionalOffice", e.target.value)} /></Field>
+              <Field label="사용자 확인 계획조건" wide><input value={input.userPlanNotes} onChange={(e) => update("userPlanNotes", e.target.value)} placeholder="예: 건축한계선 3m 확인, 고도제한 협의 중" /></Field>
+            </div>
+            {input.businessMode === "undecided" && <div className="notice amber"><Icon name="alert" /><div><b>사업방식이 확정되지 않았습니다.</b><span>매입약정 0.3대 특례와 관련 인센티브는 자동 적용하지 않고 별도 검토사항으로 유지합니다.</span></div></div>}
+          </section>
+
+          <EfficiencyControls input={input} update={update} />
           <details className="card api-connect-card advanced-api-details">
             <summary className="advanced-api-summary"><span><Icon name="database" size={18}/> 공식 API 설정·수집단계 <small>Vercel API 키 자동 사용 · 수동 입력은 선택사항</small></span><b>설정 펼치기 ▾</b></summary>
             <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>Vercel에 등록한 서버 API 키가 자동 사용됩니다. 아래 입력은 로컬 진단용으로, 비워둬도 정상입니다.</p></div><span className={`connection-pill ${vworldKey.trim() || lawOc.trim() ? "connected" : ""}`}><i />{vworldKey.trim() || lawOc.trim() ? "임시 입력됨" : "서버 자동연결"}</span></div>
@@ -645,8 +679,18 @@ export default function Home() {
             })}</div>
             <div className="site-decision-foot">미확정 사유: 허용용도·일조·최고높이·최신 LH 인수기준·주차·지구단위계획 조건의 대상지 판정 미완료. 예비 규모 산정은 조례 일반값과 10층 가정 사용.</div>
           </section>}
+          {reviewData && !lhNotice && <section className="lh-latest-banner lh-missing-banner"><div>
+            <span className="site-pill problem">관할 LH 공고 미확인</span>
+            <h3>해당 시·군·구의 현행 신축매입약정 공고를 찾지 못했어.</h3>
+            <p>다른 지역의 공고나 과거 차수의 조건을 임의로 적용하지 않았어. LH 공식 게시판에서 지역별 공고가 추가되면 다시 조회해.</p>
+          </div><div className="lh-latest-links"><a href="https://apply.lh.or.kr/lhapply/apply/pch/list.do?mi=1076" target="_blank" rel="noopener noreferrer">LH 전체 공고 열기 ↗</a></div></section>}
           {lhNotice && <section className="lh-latest-banner"><div><span className="site-pill tentative">LH 지역 공고 직접 조회</span><h3>{lhNotice.title}</h3><p>게시 {lhNotice.publishedAt} · 마감 {lhNotice.closesAt} · 지역 {lhNotice.matchedDistrict} · {lhNotice.isCurrent ? "접수기간 내" : "접수기간 경과"}</p>
-            <p>{lhRules ? "공고문 PDF의 최소규모·면적·커뮤니티·기계식주차 기준을 확인했어. 입지 및 인허가 적용성은 별도." : "LH 공식 공고를 찾았지만 이 차수의 상세 숫자 추출은 미확인."}</p></div>
+            <p>{lhRules ? "공고문 PDF의 최소규모·면적·커뮤니티·기계식주차 기준을 확인했어. 입지 및 인허가 적용성은 별도." : lhNotice.textAnalysisStatus === "text-extracted" ? "공식 PDF에서 관련 조항 후보를 자동 추출했어. 정확한 적용범위·별표 확인 전에는 수치를 법정값으로 확정하지 않아." : "LH 공식 공고를 찾았지만 이 차수의 상세 숫자 추출은 미확인."}</p>
+            {lhNotice.extractedCriteria && lhNotice.extractedCriteria.length>0 && <details className="lh-evidence-preview">
+              <summary>이번 지역 공고 PDF의 자동 추출 문구 {lhNotice.extractedCriteria.length}건 확인</summary>
+              <div>{lhNotice.extractedCriteria.map((entry,index)=><p key={index}><b>{entry.topic}</b>{entry.quote}</p>)}</div>
+              <small>추출문구는 근거 후보야. 지구단위·LH 심사·인허가 적용여부가 입증되지 않으면 자동 확정하지 않아.</small>
+            </details>}</div>
             <div className="lh-latest-links"><a href={lhNotice.url} target="_blank" rel="noopener noreferrer">LH 공고 열기 ↗</a>{lhNotice.pdfUrl && <a href={lhNotice.pdfUrl} target="_blank" rel="noopener noreferrer">공고문 PDF ↗</a>}{lhNotice.guideUrl && <a href={lhNotice.guideUrl} target="_blank" rel="noopener noreferrer">가이드라인 ZIP ↗</a>}</div>
           </section>}
           <section className="card law-report-card" aria-label="법규검토 총괄표">
@@ -889,6 +933,7 @@ export default function Home() {
           <SectionHeader eyebrow="04 · MASSING STUDY" title="건축 규모검토" description="법규상 최대치와 배치·주차를 고려한 개략 실현가능 규모를 구분합니다." action={<span className="live-pill"><i /> LIVE CALCULATION</span>} />
           {!readiness.canEstimateUnits && <div className="massing-unready"><Icon name="alert" size={20}/><div><strong>아직 규모를 산정할 조건이 부족해.</strong><span>필요: {readiness.missing.join(" · ")} · 법적으로 0세대라는 뜻이 아니야.</span></div><button type="button" className="button primary" onClick={() => setActiveTab(1)}>조례 일반기준으로 예비계산하기</button></div>}
           {readiness.canEstimateUnits && (!readiness.hasApartmentParking || !readiness.hasOfficetelParking) && <div className="massing-unready info"><Icon name="alert" size={20}/><div><strong>세대·호실수는 계획 가정으로 산정했어.</strong><span>주차대수·지하층·전체 연면적은 주차계수 확인 전까지 미산정으로 표시해.</span></div><button type="button" className="button ghost" onClick={() => setActiveTab(2)}>주차계수 입력</button></div>}
+          <EfficiencyControls input={input} update={update} />
           <div className="assumption-bar"><div><span>대지</span><b>{f(input.siteArea)}㎡</b></div><div><span>용적률</span><b>{appliedFar > 0 ? appliedFar + "%" : "미입력"}</b></div><div><span>최고</span><b>{input.maxFloors > 0 ? input.maxFloors + "층" : "미확인"} / {input.maxHeight > 0 ? input.maxHeight + "m" : "높이 미확인"}</b></div><div><span>기준층 활용</span><b>{input.floorPlateRatio}%</b></div><button onClick={() => setActiveTab(0)}><Icon name="settings" size={16} /> 입력값 수정</button></div>
           <div className="alternative-grid">{results.map((result) => <button key={result.definition.id} className={`alt-card ${selected.definition.id === result.definition.id ? "selected" : ""}`} onClick={() => setSelectedId(result.definition.id)}><div className="alt-top"><span>{result.definition.id}</span><Badge status={result.eligibility} /></div><h3>{result.definition.shortName}</h3><p>{result.definition.exclusiveArea}㎡ · 전용률 {result.definition.efficiency * 100}% · {result.definition.parkingMode === "self" ? "자주식" : "기계식"}</p><div className="alt-hero"><strong>{(input.maxFloors > 0 || input.maxHeight > 0) && input.siteArea > 0 && input.baseFar > 0 ? result.unitCount : "—"}</strong><span>{result.definition.useType === "apartment" ? "세대" : "호"}</span></div><div className="alt-stats"><span><small>계획 용적률</small><b>{readiness.canEstimateUnits ? result.plannedFar + "%" : "미산정"}</b></span><span><small>계획 주차</small><b>{readiness.canEstimateUnits && (result.definition.useType === "apartment" ? readiness.hasApartmentParking : readiness.hasOfficetelParking) ? result.parking.finalCount + "대" : "미산정"}</b></span><span><small>규모</small><b>{readiness.canEstimateUnits ? "지상 " + result.recommendedFloors + "층" : "미산정"}</b></span></div>{readiness.canEstimateUnits && <div className="alt-score"><span>보조 지표 · 법규 판정 전</span><div><i style={{ width: `${Math.min(100, Math.max(5, result.score))}%` }} /></div><b>{result.score}</b></div>}</button>)}</div>
           {readiness.canEstimateUnits && <div className="detail-layout">

@@ -35,6 +35,10 @@ function decodeXml(value: string) {
 export function extractRuleCandidates(text: string): DocumentCandidate[] {
   const sentences = text.split(/(?<=[다함음]\.|[。!?])|\n+/).map((item) => item.trim()).filter(Boolean);
   const topicPatterns: Array<[string, RegExp]> = [
+    ["LH 공급 전용면적", /전용\s*\d+(?:\.\d+)?\s*㎡/],
+    ["LH 대상주택 유형", /(?:청년|신혼|신생아|고령자).*?(?:전용|이상|이하|주택)/],
+    ["LH 커뮤니티·공용시설", /커뮤니티\s*(?:공간|시설)|주민\s*공동\s*시설|관리사무소/],
+    ["LH 기계식 주차", /기계식\s*주차/],
     ["건폐율", /건폐율/],
     ["용적률", /용적률/],
     ["높이", /최고\s*높이|높이\s*제한|최고\s*층수/],

@@ -48,6 +48,8 @@ export interface ProjectInput {
   lhParkingRatioVerified: boolean;
   mechanicalAllowed: boolean;
   mechanicalMaxRatio: number;
+  apartmentEfficiency: number; // percent: default 75
+  officetelEfficiency: number; // percent: default 45
   apartmentFloorHeight: number;
   officetelFloorHeight: number;
 }
