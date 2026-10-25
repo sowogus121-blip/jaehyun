@@ -195,10 +195,10 @@ export function buildLegalReviewReport(
   const screening = screenParking03(input, ALTERNATIVES[2]);
   const missingChecks = screening.checks.filter((item) => item.status !== "pass").map((item) => item.label);
   add("special-parking", "LH·주차 검토", "LH 주차 0.3대/호 특례",
-    screening.canApply ? "0.3대/호 (사용자 승인·요건 확인)" : screening.status === "ineligible" ? "현 사업조건에서는 특례 미적용" : "0.3대/호 조건부 비교안 · 법정 주차로 확정 계산",
+    !input.specialParkingEnabled ? "미적용 · 특례 요건 검토 전" : screening.canApply ? "0.3대/호 (사용자 승인·요건 확인)" : screening.status === "ineligible" ? "현 사업조건에서는 특례 미적용" : "0.3대/호 조건부 비교안 · 기본 주차계수 유지",
     "공공주택 특별법 시행령 관련 조항 · LH 지역본부 공고",
     missingChecks.length ? "미확인: " + missingChecks.join(", ") : "사용자 확인값으로 계산 · 허가권자 적용 근거 확인",
-    screening.canApply ? "user" : screening.status === "conditional" ? "conditional" : "unknown",
+    !input.specialParkingEnabled ? "unknown" : screening.canApply ? "user" : screening.status === "conditional" ? "conditional" : "unknown",
     screening.sourceUrl);
 
   const calculatedLimits: LegalReviewReport["calculatedLimits"] = [
