@@ -414,7 +414,7 @@ export default function Home() {
         } : {}),
       }));
       setLookupDetails(details);
-      await requestSiteReview(resolvedAddress, false);
+      await requestSiteReview(resolvedAddress, true);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "주소 조회에 실패했습니다.");
     }
