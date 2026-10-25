@@ -586,7 +586,7 @@ export default function Home() {
               </div>
               <div className="law-report-heading-actions">
                 <button type="button" className="button ghost" onClick={() => window.print()}>인쇄 / PDF</button>
-                <button type="button" className="button dark" onClick={exportXlsx}>엑셀 내려받기</button>
+                <button type="button" className="button dark" onClick={exportExcel}>엑셀 내려받기</button>
               </div>
             </div>
             <div className="law-report-stats">
