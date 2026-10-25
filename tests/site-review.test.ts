@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "../app/api/site-review/route";
 
+// Site-review tests focus on zoning/cadastre; regional LH board is validated in lh-notice.test.ts.
+vi.mock("../lib/server/lh-notice", () => ({ findLatestLhPurchaseNotice: vi.fn().mockResolvedValue(null) }));
+
 function request(headers: Record<string, string> = {}, address = "경기도 의정부시 가능동 75-1", parcelAddresses: string[] = []) {
   return new NextRequest("http://127.0.0.1:3000/api/site-review", {
     method: "POST",
