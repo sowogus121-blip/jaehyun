@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { findSitePreset } from "../../../lib/site-presets";
 
 type LawRecord = {
   name: string;
@@ -34,40 +35,63 @@ async function fetchJson(url: string) {
   const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
     const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", "User-Agent": "LH-Plan-Lab/0.6" },
       cache: "no-store",
       signal: controller.signal,
     });
+    const text = await response.text();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
+    try {
+      return JSON.parse(text);
+    } catch {
+      const summary = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+      throw new Error(summary ? `JSON이 아닌 응답: ${summary}` : "빈 응답");
+    }
   } finally {
     clearTimeout(timeout);
   }
 }
 
+function assertVWorldResponse(data: Record<string, unknown>) {
+  const response = data?.response as { status?: string; error?: { code?: string; text?: string } } | undefined;
+  if (response?.status !== "ERROR") return;
+  const code = response.error?.code ? `${response.error.code} · ` : "";
+  throw new Error(`${code}${response.error?.text || "VWorld 요청이 거부되었습니다."}`);
+}
+
 async function geocode(address: string, key: string, domain: string) {
-  const params = new URLSearchParams({
-    service: "search",
-    request: "search",
-    version: "2.0",
-    size: "5",
-    page: "1",
-    query: address,
-    type: "address",
-    format: "json",
-    errorformat: "json",
-    key,
-    domain,
-  });
-  const data = await fetchJson(`https://api.vworld.kr/req/search?${params.toString()}`);
-  const item = data?.response?.result?.items?.[0];
-  if (!item?.point?.x || !item?.point?.y) throw new Error("주소에 해당하는 좌표를 찾지 못했습니다.");
-  return {
-    address: item.address?.road || item.address?.parcel || item.title,
-    parcelAddress: item.address?.parcel || null,
-    x: String(item.point.x),
-    y: String(item.point.y),
-  };
+  let lastError: Error | null = null;
+  for (const category of ["parcel", "road"] as const) {
+    const params = new URLSearchParams({
+      service: "search",
+      request: "search",
+      version: "2.0",
+      size: "5",
+      page: "1",
+      query: address,
+      type: "address",
+      category,
+      format: "json",
+      errorformat: "json",
+      key,
+      domain,
+    });
+    try {
+      const data = await fetchJson(`https://api.vworld.kr/req/search?${params.toString()}`);
+      assertVWorldResponse(data);
+      const item = data?.response?.result?.items?.[0];
+      if (!item?.point?.x || !item?.point?.y) continue;
+      return {
+        address: item.address?.road || item.address?.parcel || item.title,
+        parcelAddress: item.address?.parcel || null,
+        x: String(item.point.x),
+        y: String(item.point.y),
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("알 수 없는 오류");
+    }
+  }
+  throw lastError ?? new Error("주소에 해당하는 좌표를 찾지 못했습니다.");
 }
 
 async function getLandUse(x: string, y: string, key: string, domain: string) {
@@ -86,6 +110,7 @@ async function getLandUse(x: string, y: string, key: string, domain: string) {
       geomFilter: `POINT(${x} ${y})`,
     });
     const data = await fetchJson(`https://api.vworld.kr/req/data?${params.toString()}`);
+    assertVWorldResponse(data);
     const features = data?.response?.result?.featureCollection?.features ?? [];
     return features.map((feature: { properties?: Record<string, unknown> }) => {
       const properties = feature.properties ?? {};
@@ -100,13 +125,24 @@ async function getLandUse(x: string, y: string, key: string, domain: string) {
     });
   }));
   const values = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
-  return values.filter((item, index) => values.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+  const errors = results.flatMap((result) => result.status === "rejected"
+    ? [result.reason instanceof Error ? result.reason.message : "알 수 없는 오류"]
+    : []);
+  return {
+    items: values.filter((item, index) => values.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index),
+    errors: [...new Set(errors)],
+  };
 }
 
 async function searchLaw(query: string, oc: string): Promise<LawRecord | null> {
   const params = new URLSearchParams({ OC: oc, target: "law", type: "JSON", query, display: "10" });
   const data = await fetchJson(`https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`);
-  const raw = data?.LawSearch?.law;
+  const root = data?.LawSearch;
+  const resultCode = String(root?.resultCode ?? data?.resultCode ?? "");
+  const resultMessage = String(root?.resultMsg ?? data?.resultMsg ?? "");
+  if (resultCode && resultCode !== "00") throw new Error(`${resultCode} · ${resultMessage || "법령 API 요청이 거부되었습니다."}`);
+  if (!root || typeof root !== "object") throw new Error("국가법령정보센터 응답 형식을 확인할 수 없습니다.");
+  const raw = root.law;
   const rows = Array.isArray(raw) ? raw : raw ? [raw] : [];
   const exact = rows.find((row: Record<string, unknown>) => String(row["법령명한글"] ?? "").replaceAll(" ", "") === query.replaceAll(" ", "")) ?? rows[0];
   if (!exact) return null;
@@ -128,18 +164,27 @@ export async function POST(request: NextRequest) {
 
   const vworldKey = getHeaderOrEnv(request, "x-vworld-api-key", "VWORLD_API_KEY");
   const lawOc = getHeaderOrEnv(request, "x-law-api-oc", "LAW_OPEN_API_OC");
+  const preset = findSitePreset(address);
   const missing: string[] = [];
   const errors: string[] = [];
   if (!vworldKey) missing.push("VWORLD_API_KEY");
   if (!lawOc) missing.push("LAW_OPEN_API_OC");
 
   let location: Awaited<ReturnType<typeof geocode>> | null = null;
-  let landUse: Awaited<ReturnType<typeof getLandUse>> = [];
+  let landUse = preset ? [{
+    category: "용도지역",
+    name: preset.zone,
+    code: "OFFICIAL-DOCUMENT",
+    source: preset.source,
+    status: "verified" as const,
+  }] : [];
   if (vworldKey) {
     try {
-      location = await geocode(address, vworldKey, request.nextUrl.origin);
-      landUse = await getLandUse(location.x, location.y, vworldKey, request.nextUrl.origin);
-      if (landUse.length === 0) errors.push("VWorld 좌표는 확인했지만 해당 위치의 용도지역 응답이 없습니다.");
+      location = await geocode(preset?.address ?? address, vworldKey, request.nextUrl.origin);
+      const vworldLandUse = await getLandUse(location.x, location.y, vworldKey, request.nextUrl.origin);
+      landUse = [...landUse, ...vworldLandUse.items].filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+      if (vworldLandUse.errors.length) errors.push(`VWorld 용도지역 일부 조회 실패: ${vworldLandUse.errors.join(" / ")}`);
+      if (vworldLandUse.items.length === 0 && !preset) errors.push("VWorld 좌표는 확인했지만 해당 위치의 용도지역 응답이 없습니다.");
     } catch (error) {
       errors.push(`VWorld 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
     }
@@ -149,12 +194,17 @@ export async function POST(request: NextRequest) {
   if (lawOc) {
     const settled = await Promise.allSettled(LAW_QUERIES.map((query) => searchLaw(query, lawOc)));
     laws = settled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
-    const failed = settled.length - laws.length;
-    if (failed) errors.push(`국가법령정보센터 ${failed}개 법령 검색 결과를 확보하지 못했습니다.`);
+    const failures = settled.flatMap((result) => result.status === "rejected"
+      ? [result.reason instanceof Error ? result.reason.message : "알 수 없는 오류"]
+      : result.value ? [] : ["검색 결과 없음"]);
+    if (failures.length) {
+      const reasons = [...new Set(failures)];
+      errors.push(`국가법령정보센터 ${failures.length}개 조회 실패: ${reasons.join(" / ")}`);
+    }
   }
 
   return NextResponse.json({
-    status: missing.length === 0 && errors.length === 0 ? "verified" : laws.length || location ? "partial" : "integration-required",
+    status: missing.length === 0 && errors.length === 0 ? "verified" : laws.length || landUse.length || location ? "partial" : "integration-required",
     checkedAt: new Date().toISOString(),
     location,
     landUse,
