@@ -36,6 +36,19 @@ describe("Official LH purchase announcements",()=>{
       expect(found?.pdfUrl).toContain("68899892");
     }finally{fetchMock.mockRestore()}
   });
+  it("finds Seoul regional bulletin when the 25-gu list abbreviation omits 강남구",async()=>{
+    const page='<table><tr><td>14</td><td>민간신축 매입약정</td><td><a data-id1="2901" class="slpaInfoBtn"><span>[정정공고](서울지역) 2026년 6차 민간신축 매입약정 공고</span></a></td><td>종로구, 중구, 용산구, 성동구, ...</td><td>첨부파일</td><td>2026.10.14</td><td>2026.11.05</td></tr></table>';
+    const mock=vi.spyOn(globalThis,"fetch").mockImplementation(async url=>new Response(String(url).includes("/pch/view.do")
+      ? '<a href="/lhapply/lhFile.do?fileid=999995" title="file">공고문.pdf</a>'
+      : page,{headers:{"Content-Type":"text/html"}}));
+    try{
+      const result=await findLatestLhPurchaseNotice("강남구","서울특별시 강남구");
+      expect(result?.id).toBe("2901");
+      expect(result?.matchedDistrict).toBe("강남구");
+      expect(result?.rules).toBeNull();
+      expect(result?.warnings.some(x=>x.includes("실제 공고 대상 여부"))).toBe(true);
+    }finally{mock.mockRestore()}
+  });
   it("excludes mechanized apartment planning under verified LH notice",()=>{
     const input={...DEFAULT_INPUT,businessMode:"purchase" as const,siteArea:1467,baseFar:250,buildingCoverageRatio:60,maxFloors:10,apartmentParkingRatio:1,officetelParkingRatio:0.5,mechanicalMaxRatio:50};
     const ctx={...DEFAULT_CALCULATION_CONTEXT,lhPurchaseMechanicalRestrictedToOfficetelOrUrban:true};

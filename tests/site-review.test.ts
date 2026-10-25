@@ -62,7 +62,7 @@ describe("site review API", () => {
     const d=await res.json();
     expect(d.location).toBeNull();
     expect(d.parcel).toBeNull();
-    expect(d.errors.join(" ")).toContain("인접 필지가 대신 조회");
+    expect(d.errors.join(" ")).toContain("면적·법규를 합산하지");
   });
 
   it("queries governing metro AND borough ordinances for Busan Seo-gu without cross-district contamination", async()=>{
@@ -91,6 +91,70 @@ describe("site review API", () => {
     expect(names).not.toContain("대구광역시 서구 도시계획 조례");
   });
 
+  it("rejects same-number different cadastral dong (아현동 vs 공덕동)",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async(input:string|URL|Request)=>{
+      if(String(input).includes("/req/search"))return new Response(JSON.stringify({response:{status:"OK",result:{items:[
+        {address:{parcel:"서울특별시 마포구 공덕동 1-1"},point:{x:"126.95",y:"37.55"}},
+      ]}}}));
+      return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[]}}}}));
+    }));
+    const res=await POST(request({"x-vworld-api-key":"test-key"},"서울특별시 마포구 아현동 1-1"));
+    const data=await res.json();
+    expect(data.location).toBeNull();
+    expect(data.parcel).toBeNull();
+    expect(data.errors.join(" ")).toContain("아현동");
+  });
+  it("rejects 산 1-1 when input is non-mountain 신림동 1-1",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async(input:string|URL|Request)=>{
+      if(String(input).includes("/req/search"))return new Response(JSON.stringify({response:{status:"OK",result:{items:[
+        {address:{parcel:"서울특별시 관악구 신림동 산 1-1"},point:{x:"126.94",y:"37.47"}},
+      ]}}}));
+      return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[]}}}}));
+    }));
+    const res=await POST(request({"x-vworld-api-key":"test-key"},"서울특별시 관악구 신림동 1-1"));
+    const data=await res.json();
+    expect(data.location).toBeNull();
+    expect(data.errors.join(" ")).toContain("산번지");
+  });
+  it("collapses broad 도시지역 overlay when the same coordinate has a more specific zoning",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async(input:string|URL|Request)=>{
+      const url=new URL(String(input));
+      if(url.pathname.includes("/req/search"))return new Response(JSON.stringify({response:{status:"OK",result:{items:[
+        {address:{parcel:"서울특별시 강남구 역삼동 737"},point:{x:"127.037",y:"37.501"}},
+      ]}}}));
+      if(url.searchParams.get("data")==="LT_C_UQ111")return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[
+        {properties:{DGM_NM:"도시지역"}},{properties:{DGM_NM:"일반상업지역"}}
+      ]}}}}));
+      return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[]}}}}));
+    }));
+    const res=await POST(request({"x-vworld-api-key":"test-key"},"서울특별시 강남구 역삼동 737"));
+    const data=await res.json();
+    expect(data.landUse.filter((x:{category:string})=>x.category==="용도지역").map((x:{name:string})=>x.name)).toEqual(["일반상업지역"]);
+    expect(data.mixedUseZones).toBe(false);
+  });
+  it("does not treat irrelevant local ordinance title as its legal governing subject",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async(input:string|URL|Request)=>{
+      const url=new URL(String(input));
+      if(url.pathname.includes("/req/search"))return new Response(JSON.stringify({response:{status:"OK",result:{items:[
+        {address:{parcel:"인천광역시 남동구 구월동 88-1"},point:{x:"126.71",y:"37.44"}},
+      ]}}}));
+      if(url.pathname.includes("/req/data"))return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[]}}}}));
+      if(url.pathname.includes("/lawSearch") && url.searchParams.get("target")==="ordin")
+        return new Response(JSON.stringify({OrdinSearch:{resultCode:"00",ordin:[
+          {자치법규명:"남동구 건축물관리자의 제설ㆍ제빙 등에 관한 조례",지자체기관명:"인천광역시 남동구"},
+          {자치법규명:"남동구 도시계획위원회 운영 조례",지자체기관명:"인천광역시 남동구"},
+          {자치법규명:"인천광역시 도시계획 조례",지자체기관명:"인천광역시"}
+        ]}}));
+      if(url.pathname.includes("/lawSearch"))return new Response(JSON.stringify({LawSearch:{resultCode:"00",law:[]}}));
+      return new Response(JSON.stringify({resultCode:"00"}));
+    }));
+    const res=await POST(request({"x-law-api-oc":"test-oc","x-vworld-api-key":"key"},"인천광역시 남동구 구월동 88-1"));
+    const data=await res.json();
+    const names=data.ordinances.map((x:{name:string})=>x.name);
+    expect(names).toContain("인천광역시 도시계획 조례");
+    expect(names).not.toContain("남동구 건축물관리자의 제설ㆍ제빙 등에 관한 조례");
+    expect(names).not.toContain("남동구 도시계획위원회 운영 조례");
+  });
   it("requests a parcel address category and returns VWorld coordinates", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);

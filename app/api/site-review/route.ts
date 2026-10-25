@@ -154,13 +154,32 @@ async function geocode(address: string, key: string, domain: string) {
       const items = (data?.response?.result?.items ?? []) as Array<{point?:{x?:number|string;y?:number|string};address?:{road?:string;parcel?:string};title?:string}>;
       // A postcode/parcel query can return a nearby address as its first VWorld hit.
       // Never infer geometry and FAR for a *different cadastral lot*.
-      const lotNumber = address.match(/(?:동(?:\d+가)?|가|읍|면|리)\s+(\d+(?:-\d+)?)$/)?.[1];
-      const item = lotNumber
-        ? items.find(candidate => candidate.address?.parcel?.match(/(\d+(?:-\d+)?)$/)?.[1] === lotNumber &&
-            candidate.point?.x && candidate.point?.y)
-        : items.find(candidate => candidate.point?.x && candidate.point?.y);
+      const parseLot = (raw: string) => {
+        const m = raw.trim().match(/([가-힣0-9]+(?:동\d*가|동|읍|면|리|가))\s+(산\s*)?(\d+(?:-\d+)?)$/);
+        return m ? {dong:m[1],mountain:Boolean(m[2]),lot:m[3]} : null;
+      };
+      const expectedLot=parseLot(address);
+      // Require district + cadastral-dong + 산번지 flag + main/sub lot number.
+      // Same number in 공덕동 and 아현동, or 산 1-1 vs 1-1, is a different parcel.
+      const expectedDistrict=address.replace(/\s+/g,"").split(expectedLot?.dong ?? "\u0000")[0];
+      const candidateMatches=(candidate: typeof items[number])=>{
+        if(!candidate.point?.x || !candidate.point?.y)return false;
+        if(!expectedLot)return true; // road address fallback
+        const returned=candidate.address?.parcel||"";
+        const actual=parseLot(returned);
+        if(!actual || actual.dong!==expectedLot.dong || actual.lot!==expectedLot.lot ||
+          actual.mountain!==expectedLot.mountain)return false;
+        const compact=returned.replace(/\s+/g,"");
+        // Short VWorld cadastral labels do not include parent district; otherwise
+        // don't allow a same-named dong from a different 시군구.
+        if(returned.includes(" ") && (returned.includes("특별시")||returned.includes("광역시")||returned.includes("경기도")||returned.includes("경상")||returned.includes("충청"))){
+          if(expectedDistrict && !compact.startsWith(expectedDistrict))return false;
+        }
+        return true;
+      };
+      const item=items.find(candidateMatches);
       if (!item?.point?.x || !item?.point?.y) {
-        if (lotNumber && items.length) lastError = new Error(`VWorld 조회 결과에 요청 지번 ${lotNumber}이 없습니다. 인접 필지가 대신 조회되어 면적·법규 합산을 차단했습니다.`);
+        if (expectedLot && items.length) lastError = new Error(`VWorld의 조회 결과가 입력한 ${expectedLot.dong} ${expectedLot.mountain?"산 ":""}${expectedLot.lot}과 다릅니다. 다른 법정동 또는 산번지의 면적·법규를 합산하지 않았습니다.`);
         continue;
       }
       return {
@@ -207,11 +226,16 @@ async function getLandUse(x: string, y: string, key: string, domain: string) {
     });
   }));
   const values = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  // VWorld LT_C_UQ111 returns both a broad '도시지역' and a detailed
+  // 용도지역 at the same point. These are hierarchy, not mixed zoning.
+  const detailedZone=values.some(v=>v.category==="용도지역" && !["도시지역","관리지역","농림지역","자연환경보전지역"].includes(v.name));
+  const specificValues=detailedZone ? values.filter(v=>v.category!=="용도지역" ||
+    !["도시지역","관리지역","농림지역","자연환경보전지역"].includes(v.name)) : values;
   const errors = results.flatMap((result) => result.status === "rejected"
     ? [result.reason instanceof Error ? result.reason.message : "알 수 없는 오류"]
     : []);
   return {
-    items: values.filter((item, index) => values.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index),
+    items: specificValues.filter((item, index) => specificValues.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index),
     errors: [...new Set(errors)],
   };
 }
@@ -316,9 +340,18 @@ async function searchOrdinance(query: string, oc: string, jurisdiction: string):
   const matches = rows.filter((candidate: Record<string, unknown>) => {
     const title = normalize(candidate["자치법규명"] ?? candidate["법령명한글"]);
     const office = normalize(candidate["지자체기관명"]);
-    return (title === normalize(query) || title.startsWith(normalize(district + subject))) &&
-      title.includes("조례") && !title.includes("시행규칙") &&
-      (!office || office === fullScope || office.endsWith(normalize(district)));
+    const stem=normalize(district);
+    const simple=title.startsWith(fullScope) ? title.slice(fullScope.length) :
+      title.startsWith(stem) ? title.slice(stem.length) : "";
+    // Generic word-prefix search previously confused '남동구 건축물관리자의
+    // 제설 조례' with the Building Ordinance, and '도시계획위원회 운영 조례'
+    // with binding urban planning FAR standards. Only accept actual subjects.
+    const subjectValid=subject==="건축" ? simple==="건축조례" :
+      subject==="경관" ? simple==="경관조례" :
+      subject==="도시계획" ? simple==="도시계획조례" :
+      (simple==="주차장조례" || /^주차장설치및관리(?:운영에관한)?조례$/.test(simple));
+    return subjectValid &&
+      (!office || office === fullScope || office.endsWith(stem));
   }) as Record<string, unknown>[];
   const row = matches.find((candidate) =>
     normalize(candidate["자치법규명"] ?? candidate["법령명한글"]) === normalize(query)
@@ -537,12 +570,14 @@ export async function POST(request: NextRequest) {
       errors.push(`국가법령정보센터 ${failures.length}개 조회 실패: ${reasons.join(" / ")}`);
     }
     ordinances = ordinanceSettled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
-    const ordinanceFailures = ordinanceSettled.flatMap((result) => result.status === "rejected"
-      ? [result.reason instanceof Error ? result.reason.message : "알 수 없는 오류"]
-      : result.value ? [] : ["검색 결과 없음"]);
-    if (ordinanceFailures.length) {
-      errors.push(`관할 자치법규 ${ordinanceFailures.length}개 조회 실패: ${[...new Set(ordinanceFailures)].join(" / ")}`);
-    }
+    // Optional metro / borough ordinance subjects may not exist locally.
+    // A successful 0-result search is not a service failure.
+    const ordinanceFailures=ordinanceSettled.flatMap(result=>result.status==="rejected"
+      ? [result.reason instanceof Error?result.reason.message:"알 수 없는 오류"] : []);
+    if(ordinanceFailures.length)
+      errors.push(`관할 자치법규 요청 ${ordinanceFailures.length}건 오류: ${[...new Set(ordinanceFailures)].join(" / ")}`);
+    if(!ordinances.length && !ordinanceFailures.length)
+      errors.push("관할 도시계획·건축·주차장 조례를 찾지 못해 용적률·건폐율 확정을 보류했습니다.");
   }
   // Read two core national parking laws; never equate a search hit with applicability.
   let nationalArticleCandidates: OrdinanceArticleCandidate[] = [];
