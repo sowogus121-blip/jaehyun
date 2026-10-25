@@ -15,6 +15,16 @@ function request(headers: Record<string, string> = {}, address = "경기도 의�
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("multi-parcel API request validation", () => {
+  it("rejects requests exceeding 20 total lots instead of truncating them", async()=>{
+    const addresses=Array.from({length:20},(_,i)=>"경기도 의정부시 가능동 "+(100+i)+"-1");
+    const res=await POST(request({},"경기도 의정부시 가능동 75-1",addresses));
+    expect(res.status).toBe(400);
+    const data=await res.json();
+    expect(data.error).toContain("최대 20필지");
+  });
+});
+
 describe("site review API", () => {
   it("keeps uploaded official-document land use available without credentials", async () => {
     const response = await POST(request());
