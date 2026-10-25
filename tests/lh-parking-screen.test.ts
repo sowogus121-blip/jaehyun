@@ -5,6 +5,7 @@ import { screenParking03 } from "../lib/lh-parking-screen";
 const candidate = {
   ...EXAMPLE_INPUT,
   businessMode: "purchase" as const,
+  lhSupplyType: "youth" as const,
   specialParkingEnabled: true,
   specialParkingApproval: "approved" as const,
   officetelParkingRatio: 0.6,
@@ -37,6 +38,13 @@ describe("LH 0.3 parking statutory screening", () => {
     expect(calculateParking(pending, ALTERNATIVES[2], 100).finalCount).toBe(60);
   });
 
+  it("does not grant youth/senior 0.3 ratio to newlywed or general plans",()=>{
+    const checked={...candidate,purchaseAgreementConfirmed:true,specialParkingUseScopeConfirmed:true,specialParkingLhConfirmed:true};
+    expect(screenParking03({...checked,lhSupplyType:"newlywed" as const},ALTERNATIVES[2]).status).toBe("ineligible");
+    expect(calculateParking({...checked,lhSupplyType:"newlywed" as const},ALTERNATIVES[2],100).finalCount).toBe(60);
+    expect(screenParking03({...checked,lhSupplyType:"senior" as const},ALTERNATIVES[2]).canApply).toBe(true);
+    expect(screenParking03({...checked,lhSupplyType:"undecided" as const},ALTERNATIVES[2]).canApply).toBe(false);
+  });
   it("never extends this B-plan scenario to 46m2 apartment or non-purchase projects", () => {
     const allChecked = {
       ...candidate,
