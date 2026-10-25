@@ -685,7 +685,12 @@ export default function Home() {
             <p>다른 지역의 공고나 과거 차수의 조건을 임의로 적용하지 않았어. LH 공식 게시판에서 지역별 공고가 추가되면 다시 조회해.</p>
           </div><div className="lh-latest-links"><a href="https://apply.lh.or.kr/lhapply/apply/pch/list.do?mi=1076" target="_blank" rel="noopener noreferrer">LH 전체 공고 열기 ↗</a></div></section>}
           {lhNotice && <section className="lh-latest-banner"><div><span className="site-pill tentative">LH 지역 공고 직접 조회</span><h3>{lhNotice.title}</h3><p>게시 {lhNotice.publishedAt} · 마감 {lhNotice.closesAt} · 지역 {lhNotice.matchedDistrict} · {lhNotice.isCurrent ? "접수기간 내" : "접수기간 경과"}</p>
-            <p>{lhRules ? "공고문 PDF의 최소규모·면적·커뮤니티·기계식주차 기준을 확인했어. 입지 및 인허가 적용성은 별도." : "LH 공식 공고를 찾았지만 이 차수의 상세 숫자 추출은 미확인."}</p></div>
+            <p>{lhRules ? "공고문 PDF의 최소규모·면적·커뮤니티·기계식주차 기준을 확인했어. 입지 및 인허가 적용성은 별도." : lhNotice.textAnalysisStatus === "text-extracted" ? "공식 PDF에서 관련 조항 후보를 자동 추출했어. 정확한 적용범위·별표 확인 전에는 수치를 법정값으로 확정하지 않아." : "LH 공식 공고를 찾았지만 이 차수의 상세 숫자 추출은 미확인."}</p>
+            {lhNotice.extractedCriteria && lhNotice.extractedCriteria.length>0 && <details className="lh-evidence-preview">
+              <summary>이번 지역 공고 PDF의 자동 추출 문구 {lhNotice.extractedCriteria.length}건 확인</summary>
+              <div>{lhNotice.extractedCriteria.map((entry,index)=><p key={index}><b>{entry.topic}</b>{entry.quote}</p>)}</div>
+              <small>추출문구는 근거 후보야. 지구단위·LH 심사·인허가 적용여부가 입증되지 않으면 자동 확정하지 않아.</small>
+            </details>}</div>
             <div className="lh-latest-links"><a href={lhNotice.url} target="_blank" rel="noopener noreferrer">LH 공고 열기 ↗</a>{lhNotice.pdfUrl && <a href={lhNotice.pdfUrl} target="_blank" rel="noopener noreferrer">공고문 PDF ↗</a>}{lhNotice.guideUrl && <a href={lhNotice.guideUrl} target="_blank" rel="noopener noreferrer">가이드라인 ZIP ↗</a>}</div>
           </section>}
           <section className="card law-report-card" aria-label="법규검토 총괄표">
