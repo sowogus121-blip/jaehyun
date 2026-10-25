@@ -151,6 +151,39 @@ function downloadBlob(content: BlobPart, type: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+
+function EfficiencyControls({ input, update }: {
+  input: ProjectInput;
+  update: <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => void;
+}) {
+  const efficiency = [
+    { key: "apartmentEfficiency" as const, label: "공동주택 전용률", defaultValue: 75, unit: "46㎡ 신혼형" },
+    { key: "officetelEfficiency" as const, label: "오피스텔 전용률", defaultValue: 45, unit: "25㎡ 청년형" },
+  ];
+  return <section className="efficiency-controls" aria-label="전용률 사용자 설정">
+    <div className="efficiency-heading">
+      <div><b>전용률 조정</b><p>공동주택 75% · 오피스텔 45%가 기본값이야. 변경하면 세대수·공용면적·연면적과 건축개요가 즉시 다시 계산돼.</p></div>
+      <button type="button" className="button ghost" onClick={() => {
+        update("apartmentEfficiency", 75);
+        update("officetelEfficiency", 45);
+      }}>기본값 복원</button>
+    </div>
+    <div className="efficiency-fields">{efficiency.map((item) => {
+      const value = input[item.key] ?? item.defaultValue;
+      const valid = Number.isFinite(value) && value >= 20 && value <= 95;
+      return <label key={item.key} className="efficiency-field">
+        <span><b>{item.label}</b><small>{item.unit} · 기본 {item.defaultValue}%</small></span>
+        <input type="range" min="20" max="95" step="1" value={valid ? value : item.defaultValue}
+          aria-label={item.label + " 슬라이더"} onChange={(event) => update(item.key, Number(event.target.value))} />
+        <span className="efficiency-number"><input type="number" min="20" max="95" step="1"
+          aria-label={item.label + " 직접 입력"} value={value} onChange={(event) => update(item.key, Number(event.target.value))}
+          onBlur={() => { if (!valid) update(item.key, item.defaultValue); }} /><b>%</b></span>
+        {!valid && <small className="efficiency-error">20~95% 범위로 입력해 줘. 그동안 기본값으로 계산돼.</small>}
+      </label>;
+    })}</div>
+  </section>;
+}
+
 function ComparisonTable({ results, input }: { results: AlternativeResult[]; input: ProjectInput }) {
   const check = getMassingReadiness(input);
   const ready = check.canEstimateUnits;
@@ -555,6 +588,7 @@ export default function Home() {
             {input.businessMode === "undecided" && <div className="notice amber"><Icon name="alert" /><div><b>사업방식이 확정되지 않았습니다.</b><span>매입약정 0.3대 특례와 관련 인센티브는 자동 적용하지 않고 별도 검토사항으로 유지합니다.</span></div></div>}
           </section>
 
+          <EfficiencyControls input={input} update={update} />
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
@@ -889,6 +923,7 @@ export default function Home() {
           <SectionHeader eyebrow="04 · MASSING STUDY" title="건축 규모검토" description="법규상 최대치와 배치·주차를 고려한 개략 실현가능 규모를 구분합니다." action={<span className="live-pill"><i /> LIVE CALCULATION</span>} />
           {!readiness.canEstimateUnits && <div className="massing-unready"><Icon name="alert" size={20}/><div><strong>아직 규모를 산정할 조건이 부족해.</strong><span>필요: {readiness.missing.join(" · ")} · 법적으로 0세대라는 뜻이 아니야.</span></div><button type="button" className="button primary" onClick={() => setActiveTab(1)}>조례 일반기준으로 예비계산하기</button></div>}
           {readiness.canEstimateUnits && (!readiness.hasApartmentParking || !readiness.hasOfficetelParking) && <div className="massing-unready info"><Icon name="alert" size={20}/><div><strong>세대·호실수는 계획 가정으로 산정했어.</strong><span>주차대수·지하층·전체 연면적은 주차계수 확인 전까지 미산정으로 표시해.</span></div><button type="button" className="button ghost" onClick={() => setActiveTab(2)}>주차계수 입력</button></div>}
+          <EfficiencyControls input={input} update={update} />
           <div className="assumption-bar"><div><span>대지</span><b>{f(input.siteArea)}㎡</b></div><div><span>용적률</span><b>{appliedFar > 0 ? appliedFar + "%" : "미입력"}</b></div><div><span>최고</span><b>{input.maxFloors > 0 ? input.maxFloors + "층" : "미확인"} / {input.maxHeight > 0 ? input.maxHeight + "m" : "높이 미확인"}</b></div><div><span>기준층 활용</span><b>{input.floorPlateRatio}%</b></div><button onClick={() => setActiveTab(0)}><Icon name="settings" size={16} /> 입력값 수정</button></div>
           <div className="alternative-grid">{results.map((result) => <button key={result.definition.id} className={`alt-card ${selected.definition.id === result.definition.id ? "selected" : ""}`} onClick={() => setSelectedId(result.definition.id)}><div className="alt-top"><span>{result.definition.id}</span><Badge status={result.eligibility} /></div><h3>{result.definition.shortName}</h3><p>{result.definition.exclusiveArea}㎡ · 전용률 {result.definition.efficiency * 100}% · {result.definition.parkingMode === "self" ? "자주식" : "기계식"}</p><div className="alt-hero"><strong>{(input.maxFloors > 0 || input.maxHeight > 0) && input.siteArea > 0 && input.baseFar > 0 ? result.unitCount : "—"}</strong><span>{result.definition.useType === "apartment" ? "세대" : "호"}</span></div><div className="alt-stats"><span><small>계획 용적률</small><b>{readiness.canEstimateUnits ? result.plannedFar + "%" : "미산정"}</b></span><span><small>계획 주차</small><b>{readiness.canEstimateUnits && (result.definition.useType === "apartment" ? readiness.hasApartmentParking : readiness.hasOfficetelParking) ? result.parking.finalCount + "대" : "미산정"}</b></span><span><small>규모</small><b>{readiness.canEstimateUnits ? "지상 " + result.recommendedFloors + "층" : "미산정"}</b></span></div>{readiness.canEstimateUnits && <div className="alt-score"><span>보조 지표 · 법규 판정 전</span><div><i style={{ width: `${Math.min(100, Math.max(5, result.score))}%` }} /></div><b>{result.score}</b></div>}</button>)}</div>
           {readiness.canEstimateUnits && <div className="detail-layout">
