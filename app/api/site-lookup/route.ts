@@ -16,27 +16,42 @@ function normalizeParcelSpacing(value: string) {
 }
 
 async function searchVWorld(query: string, type: "address" | "district", key: string, domain: string) {
-  const params = new URLSearchParams({
-    service: "search",
-    request: "search",
-    version: "2.0",
-    size: "10",
-    page: "1",
-    query,
-    type,
-    format: "json",
-    errorformat: "json",
-    key,
-    domain,
-  });
-  if (type === "address") params.set("category", "parcel");
-  const response = await fetch(`https://api.vworld.kr/req/search?${params.toString()}`, {
-    headers: { Accept: "application/json" },
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(`VWorld ${response.status}`);
-  const data = await response.json();
-  return (data?.response?.result?.items ?? []) as VWorldItem[];
+  let lastError: Error | null = null;
+  const categories = type === "address" ? ["parcel", "road"] : [null];
+  for (const category of categories) {
+    const params = new URLSearchParams({
+      service: "search",
+      request: "search",
+      version: "2.0",
+      size: "10",
+      page: "1",
+      query,
+      type,
+      format: "json",
+      errorformat: "json",
+      key,
+      domain,
+    });
+    if (category) params.set("category", category);
+    try {
+      const response = await fetch(`https://api.vworld.kr/req/search?${params.toString()}`, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (data?.response?.status === "ERROR") {
+        const apiError = data.response.error;
+        throw new Error(`${apiError?.code ? `${apiError.code} · ` : ""}${apiError?.text || "VWorld 요청이 거부되었습니다."}`);
+      }
+      const items = (data?.response?.result?.items ?? []) as VWorldItem[];
+      if (items.length) return items;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("알 수 없는 오류");
+    }
+  }
+  if (lastError) throw lastError;
+  return [];
 }
 
 function presetResponse(preset: NonNullable<ReturnType<typeof findSitePreset>>, point: VWorldItem["point"] | null = null) {

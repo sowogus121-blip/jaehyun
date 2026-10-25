@@ -132,11 +132,33 @@ export interface SiteReviewResult {
     source: string;
     status: "verified";
   }>;
+  parcel: {
+    area: number | null;
+    landCategory: string | null;
+    pnu: string | null;
+    source: string;
+    approximate: boolean;
+  } | null;
+  planningStandards: {
+    zone: string;
+    buildingCoverageRatio: number;
+    far: number;
+    source: string;
+  } | null;
+  districtPlan: boolean | null;
   laws: Array<{
     name: string;
     promulgationDate: string | null;
     enforcementDate: string | null;
     ministry: string | null;
+    link: string;
+    status: "verified";
+  }>;
+  ordinances: Array<{
+    name: string;
+    localGovernment: string | null;
+    promulgationDate: string | null;
+    enforcementDate: string | null;
     link: string;
     status: "verified";
   }>;
