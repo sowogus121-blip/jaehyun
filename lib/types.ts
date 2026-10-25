@@ -102,6 +102,7 @@ export interface CalculationContext {
   usePermissions: Record<UseType, AlternativeEligibilityStatus>;
   lhPurchaseEligibility: Record<UseType, AlternativeEligibilityStatus>;
   mechanicalParkingEligibility: AlternativeEligibilityStatus;
+  lhPurchaseMechanicalRestrictedToOfficetelOrUrban?: boolean;
 }
 
 export interface AlternativeResult {
