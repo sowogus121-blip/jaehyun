@@ -512,6 +512,7 @@ export default function Home() {
       <div className="content">
         {activeTab === 0 && <>
           <SectionHeader eyebrow="01 · SITE INPUT" title="대상지 및 사업조건" description="자동조회 정보와 사용자 입력값을 구분해 관리합니다. 입력 즉시 4개 대안이 다시 계산됩니다." action={<div className="source-legend"><Badge status="verified" /><Badge status="user" /><Badge status="unknown" /></div>} />
+          <div className="workflow-hint"><b>① 주소 입력·자동조회</b><span>→</span><b>② 법규 원문 확인</b><span>→</span><b>③ 가정 층수로 예비규모 산정</b><span>→</span><b>④ 건축개요 확인</b></div>
           <div className="summary-strip">
             <Metric label="대지면적" value={f(input.siteArea)} suffix="㎡" sub="사용자 입력" />
             <Metric label="적용 용적률" value={appliedFar} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
@@ -530,19 +531,6 @@ export default function Home() {
               <Field label="사용자 확인 계획조건" wide><input value={input.userPlanNotes} onChange={(e) => update("userPlanNotes", e.target.value)} placeholder="예: 건축한계선 3m 확인, 고도제한 협의 중" /></Field>
             </div>
             {input.businessMode === "undecided" && <div className="notice amber"><Icon name="alert" /><div><b>사업방식이 확정되지 않았습니다.</b><span>매입약정 0.3대 특례와 관련 인센티브는 자동 적용하지 않고 별도 검토사항으로 유지합니다.</span></div></div>}
-          </section>
-
-          <section className="card api-connect-card">
-            <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>Vercel에 등록한 서버 API 키가 자동 사용됩니다. 아래 입력은 로컬 진단용으로, 비워둬도 정상입니다.</p></div><span className={`connection-pill ${vworldKey.trim() || lawOc.trim() ? "connected" : ""}`}><i />{vworldKey.trim() || lawOc.trim() ? "임시 입력됨" : "서버 자동연결"}</span></div>
-            <div className="api-connect-grid">
-              <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input id="vworld-api-key" className="secret-input" type="text" autoComplete="off" value={vworldKey} onChange={(e) => updateVworldKey(e.currentTarget.value)} placeholder="VWorld에서 발급받은 Key" /></Field>
-              <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input id="law-api-oc" className="secret-input" type="text" autoComplete="off" value={lawOc} onChange={(e) => updateLawOc(e.currentTarget.value)} placeholder="공동활용 신청 시 등록한 OC" /></Field>
-              <div className="api-links"><a href="https://www.vworld.kr/dev/v4dv_apikey_s001.do" target="_blank" rel="noreferrer">VWorld 키 발급 ↗</a><a href="https://open.law.go.kr/LSO/openApi/guideList.do" target="_blank" rel="noreferrer">법령 API 신청 ↗</a></div>
-              <button type="button" className="button primary review-button" disabled={isReviewing} onClick={runSiteReview}>{isReviewing ? "공식자료 조회 중…" : "대상지 통합 법규검토"}</button>
-            </div>
-            <div className="api-scope"><span><Icon name="check" size={14} /> 자동조사: 주소·필지·토지이용·법령·자치법규·공식 웹 원문후보</span><span><Icon name="alert" size={14} /> 조항·별표·지구단위계획 적용판정은 원문 확보 후 완료</span></div>
-            <div className={`api-panel-message ${isReviewing ? "loading" : ""}`}><i />{apiPanelMessage}</div>
-            <div className="review-progress">{reviewSteps.map((step, index) => <div className={step.done ? "done" : step.partial ? "partial" : isReviewing && index === 0 ? "active" : "waiting"} key={step.label}><span>{index + 1}</span><b>{step.label}</b><small>{step.done ? "근거 확보" : step.partial ? "일부 확보" : "대기"}</small></div>)}</div>
           </section>
 
           <section className="card form-card">
@@ -569,6 +557,20 @@ export default function Home() {
             </div>
             <Toggle checked={input.districtPlan} onChange={(v) => update("districtPlan", v)} label="지구단위계획구역" note="체크 시 결정도서와 시행지침 원문 검토가 필수입니다." />
           </section>
+
+          <details className="card api-connect-card advanced-api-details">
+            <summary className="advanced-api-summary"><span><Icon name="database" size={18}/> 공식 API 설정·수집단계 <small>Vercel API 키 자동 사용 · 수동 입력은 선택사항</small></span><b>설정 펼치기 ▾</b></summary>
+            <div className="card-title"><div className="title-icon teal"><Icon name="database" /></div><div><h3>공식 API 연결</h3><p>Vercel에 등록한 서버 API 키가 자동 사용됩니다. 아래 입력은 로컬 진단용으로, 비워둬도 정상입니다.</p></div><span className={`connection-pill ${vworldKey.trim() || lawOc.trim() ? "connected" : ""}`}><i />{vworldKey.trim() || lawOc.trim() ? "임시 입력됨" : "서버 자동연결"}</span></div>
+            <div className="api-connect-grid">
+              <Field label="VWorld API Key" hint="주소·좌표·용도지역 조회"><input id="vworld-api-key" className="secret-input" type="text" autoComplete="off" value={vworldKey} onChange={(e) => updateVworldKey(e.currentTarget.value)} placeholder="VWorld에서 발급받은 Key" /></Field>
+              <Field label="국가법령정보 공동활용 OC" hint="현행 법령·시행일·원문 조회"><input id="law-api-oc" className="secret-input" type="text" autoComplete="off" value={lawOc} onChange={(e) => updateLawOc(e.currentTarget.value)} placeholder="공동활용 신청 시 등록한 OC" /></Field>
+              <div className="api-links"><a href="https://www.vworld.kr/dev/v4dv_apikey_s001.do" target="_blank" rel="noreferrer">VWorld 키 발급 ↗</a><a href="https://open.law.go.kr/LSO/openApi/guideList.do" target="_blank" rel="noreferrer">법령 API 신청 ↗</a></div>
+              <button type="button" className="button primary review-button" disabled={isReviewing} onClick={runSiteReview}>{isReviewing ? "공식자료 조회 중…" : "대상지 통합 법규검토"}</button>
+            </div>
+            <div className="api-scope"><span><Icon name="check" size={14} /> 자동조사: 주소·필지·토지이용·법령·자치법규·공식 웹 원문후보</span><span><Icon name="alert" size={14} /> 조항·별표·지구단위계획 적용판정은 원문 확보 후 완료</span></div>
+            <div className={`api-panel-message ${isReviewing ? "loading" : ""}`}><i />{apiPanelMessage}</div>
+            <div className="review-progress">{reviewSteps.map((step, index) => <div className={step.done ? "done" : step.partial ? "partial" : isReviewing && index === 0 ? "active" : "waiting"} key={step.label}><span>{index + 1}</span><b>{step.label}</b><small>{step.done ? "근거 확보" : step.partial ? "일부 확보" : "대기"}</small></div>)}</div>
+          </details>
 
           <div className="two-column">
             <section className="card form-card">
