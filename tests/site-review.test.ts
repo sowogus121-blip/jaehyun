@@ -37,6 +37,34 @@ describe("site review API", () => {
     }));
   });
 
+  it("uses exact cadastral lot from VWorld search candidates, never the nearby first hit", async()=>{
+    vi.stubGlobal("fetch",vi.fn(async (input: string | URL | Request)=>{
+      const u=String(input);
+      if(u.includes("/req/search"))return new Response(JSON.stringify({response:{status:"OK",result:{items:[
+        {address:{parcel:"부산광역시 서구 동대신동1가 305-222"},point:{x:"129.000",y:"35.110"}},
+        {address:{parcel:"부산광역시 서구 동대신동1가 10-2"},point:{x:"129.025",y:"35.125"}},
+      ]}}}));
+      return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[]}}}}));
+    }));
+    const res=await POST(request({"x-vworld-api-key":"test-key"},"부산광역시 서구 동대신동1가 10-2"));
+    const d=await res.json();
+    expect(d.location.parcelAddress).toBe("부산광역시 서구 동대신동1가 10-2");
+    expect(d.location.x).toBe("129.025");
+  });
+  it("does not use a neighboring parcel when VWorld only returns a mismatched lot", async()=>{
+    vi.stubGlobal("fetch",vi.fn(async (input: string | URL | Request)=>{
+      if(String(input).includes("/req/search"))return new Response(JSON.stringify({response:{status:"OK",result:{items:[
+        {address:{parcel:"동대신동1가 305-222"},point:{x:"129.0",y:"35.1"}},
+      ]}}}));
+      return new Response(JSON.stringify({response:{status:"OK",result:{featureCollection:{features:[]}}}}));
+    }));
+    const res=await POST(request({"x-vworld-api-key":"test-key"},"부산광역시 서구 동대신동1가 10-2"));
+    const d=await res.json();
+    expect(d.location).toBeNull();
+    expect(d.parcel).toBeNull();
+    expect(d.errors.join(" ")).toContain("인접 필지가 대신 조회");
+  });
+
   it("requests a parcel address category and returns VWorld coordinates", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
