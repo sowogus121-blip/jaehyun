@@ -4,7 +4,7 @@ import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
-import { normalizeAssemblyAddresses } from "../../../lib/parcel-assembly";
+import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
 import { extractOrdinanceArticles, type OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
 
 type LawRecord = {
@@ -393,8 +393,11 @@ export async function POST(request: NextRequest) {
   };
 
   const parcels: ParcelReview[] = [{ inputAddress: address, location, parcel, landUse, errors: [] }];
-  const additionalAddresses = normalizeAssemblyAddresses(address, body?.parcelAddresses ?? []);
-  const additionalReviews = await Promise.all(additionalAddresses.map(async (parcelAddress): Promise<ParcelReview> => {
+  const rawAdditional = Array.isArray(body?.parcelAddresses) ? body.parcelAddresses : [];
+  if (rawAdditional.some(item => typeof item !== "string")) return NextResponse.json({error:"합필 대상 주소는 문자열 목록이어야 합니다."},{status:400});
+  const additionalAddresses = normalizeAssemblyAddresses(address, rawAdditional);
+  if (additionalAddresses.length > MAX_EXTRA_PARCELS) return NextResponse.json({error:`합필은 대표 필지를 포함해 최대 ${MAX_EXTRA_PARCELS + 1}필지까지 검토할 수 있습니다. 현재 추가 필지 ${additionalAddresses.length}개입니다.`},{status:400});
+  const inspectAdditionalParcel = async (parcelAddress: string): Promise<ParcelReview> => {
     const parcelPreset = findSitePreset(parcelAddress);
     let additionalLandUse: ParcelReview["landUse"] = parcelPreset ? [{
       category: "용도지역",
@@ -430,7 +433,14 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       return { inputAddress: parcelAddress, location: null, parcel: additionalParcel, landUse: additionalLandUse, errors: [error instanceof Error ? error.message : "필지 조회 실패"] };
     }
-  }));
+  };
+  // Limit concurrent VWorld calls; a 20-parcel request could otherwise fan out
+  // hundreds of national spatial API calls and cause rate limiting.
+  const additionalReviews: ParcelReview[] = [];
+  for (let offset = 0; offset < additionalAddresses.length; offset += 5) {
+    const batch = await Promise.all(additionalAddresses.slice(offset, offset+5).map(inspectAdditionalParcel));
+    additionalReviews.push(...batch);
+  }
   parcels.push(...additionalReviews);
   if (additionalReviews.length) {
     landUse = parcels.flatMap((item) => item.landUse).filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
