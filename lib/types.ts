@@ -27,6 +27,8 @@ export interface ProjectInput {
   roadWidth: number;
   buildingCoverageRatio: number;
   baseFar: number;
+  /** Percent commercial non-housing floors; 0 for projects with no verified site-specific split. */
+  commercialMixShare: number;
   relaxedFar: number;
   useRelaxedFar: boolean;
   maxFloors: number;
