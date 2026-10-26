@@ -48,6 +48,7 @@ export const DEFAULT_INPUT: ProjectInput = {
   roadWidth: 0,
   buildingCoverageRatio: 0,
   baseFar: 0,
+  commercialMixShare: 0,
   relaxedFar: 0,
   useRelaxedFar: false,
   maxFloors: 0,
@@ -124,6 +125,7 @@ export function resetSiteDependentInput(current: ProjectInput, address: string):
     roadWidth: 0,
     buildingCoverageRatio: 0,
     baseFar: 0,
+    commercialMixShare: 0,
     relaxedFar: 0,
     useRelaxedFar: false,
     maxFloors: 0,
@@ -262,8 +264,13 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const legalMaxFloors = input.maxFloors > 0
     ? (heightFloors === null ? input.maxFloors : Math.min(input.maxFloors, heightFloors))
     : (heightFloors ?? 0);
-  const farLimitArea = input.siteArea * appliedFar / 100;
-  const envelopeArea = plannedBuildingArea * legalMaxFloors;
+  // Mixed-use FAR is the WHOLE project's allowable floor area.
+  // Reserve the declared commercial share in BOTH the FAR and building envelope
+  // before counting apartment / officetel units. A pure residential tower must
+  // not consume 100% of a mixed-use FAR budget.
+  const residentialPortion = input.commercialMixShare>0 ? Math.max(0,1-input.commercialMixShare/100) : 1;
+  const farLimitArea = input.siteArea * appliedFar / 100 * residentialPortion;
+  const envelopeArea = plannedBuildingArea * legalMaxFloors * residentialPortion;
   const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context);
   const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context);
   const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea, context);
@@ -274,12 +281,13 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const grossResidentialArea = unitCount * grossAreaPerUnit;
   const residentialCommonArea = grossResidentialArea - residentialExclusiveArea;
   const farCountedArea = grossResidentialArea + amenityArea + equipmentArea;
-  const recommendedFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / plannedBuildingArea)) : 0;
+  const housingFloorPlate=plannedBuildingArea*residentialPortion;
+  const recommendedFloors = housingFloorPlate > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / housingFloorPlate)) : 0;
   const estimatedHeight = recommendedFloors > 0 ? 1.2 + recommendedFloors * floorHeight : 0;
   const parking = calculateParking(input, definition, unitCount, context);
   const belowGroundArea = farCountedArea > 0 ? parking.area + Math.max(60, farCountedArea * 0.025) : 0;
   const totalFloorArea = farCountedArea + belowGroundArea;
-  const physicalMaxFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(envelopeArea / plannedBuildingArea)) : 0;
+  const physicalMaxFloors = housingFloorPlate > 0 ? Math.min(legalMaxFloors, ceil(envelopeArea / housingFloorPlate)) : 0;
   const warnings: string[] = [];
   const blockingReasons: string[] = [];
   const conditionalReasons: string[] = [];
@@ -312,6 +320,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const recommendable = eligibility === "eligible";
 
   if (input.useRelaxedFar) warnings.push("완화 용적률은 법적 근거와 적용요건이 확인되기 전까지 조건부 값입니다.");
+  if(input.commercialMixShare>0)warnings.push("상업/비주거 "+input.commercialMixShare+"% 가정 후 남은 주거·오피스텔 용적률과 기준층에 한해 수량 산정. 하남시 조례 제56조 적용·비주거 최소비율·사업용도는 미확정.");
   if (input.businessMode === "undecided") warnings.push("사업방식 미정: 매입약정 특례를 확정 적용하지 않았습니다.");
   if (definition.parkingMode === "mechanical" && !input.mechanicalAllowed) warnings.push("기계식주차 적용 불가 설정에 따라 전량 자주식으로 대체 계산했습니다.");
   if (definition.parkingMode === "mechanical") warnings.push("기계식 면적은 개략값이며 제조사 형식·대기공간·LH 인수기준 검토가 필요합니다.");
@@ -354,7 +363,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
     warnings,
     formulas: [
       `세대당 계획면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.efficiency * 100).toFixed(0)}% = ${grossAreaPerUnit.toFixed(2)}㎡`,
-      `용적률 한도 = ${input.siteArea.toLocaleString()}㎡ × ${appliedFar}% = ${farLimitArea.toLocaleString()}㎡`,
+      `주거용 연면적 한도 = ${input.siteArea.toLocaleString()}㎡ × 전체 계획용적률 ${appliedFar}% × 주거비율 ${(residentialPortion*100).toFixed(0)}% = ${farLimitArea.toFixed(1)}㎡`,
       `계획 기준층 = min(대지×건폐율, 건축가능대지) × ${input.floorPlateRatio}% = ${plannedBuildingArea.toFixed(1)}㎡`,
       `계획 용적률 = ${farCountedArea.toFixed(1)}㎡ ÷ ${input.siteArea.toLocaleString()}㎡ × 100 = ${(farCountedArea / input.siteArea * 100).toFixed(2)}%`,
       `기본 법정주차 = ceil(${unitCount} × ${parking.originalLegalRatio}) = ${parking.originalLegalCount}대`,
