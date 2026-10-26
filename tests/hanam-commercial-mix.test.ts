@@ -1,7 +1,8 @@
 import { describe,it,expect } from "vitest";
 import { calculateHanamCommercialMix,isHanamCommercialSite } from "../lib/hanam-commercial-mix";
 import { DEFAULT_INPUT,ALTERNATIVES,calculateAlternative } from "../lib/calculator";
-import { buildLegalReviewReport } from "../lib/legal-review-report";
+import { buildLegalReviewReport, getOrdinanceZoneStandards } from "../lib/legal-review-report";
+import { getPreliminaryOrdinanceInputs } from "../lib/massing-readiness";
 import type { SiteReviewResult } from "../lib/types";
 
 const review={
@@ -36,6 +37,22 @@ describe("Hanam commercial zone 2026 Oct residential-officetel FAR",()=>{
     expect(mixed.farLimitArea).toBeCloseTo(1316.8*6.6*0.8,1);
     expect(mixed.warnings.join(" ")).toContain("비주거");
   }
+ });
+ it("parses actual Hanam council clause spelling 1천300퍼센트 and unlocks merged-lot scenario",()=>{
+  const ordinanceReview={
+    ...review,ordinanceArticleCandidates:[
+      {sourceTitle:"하남시 도시계획 조례",article:"제005000,005000조 · 용도지역 안에서의 건폐율",
+        excerpt:"제50조(용도지역 안에서의 건폐율) 일반상업지역: 80퍼센트 이하",sourceUrl:"https://www.law.go.kr",topic:"건폐율",verified:false},
+      {sourceTitle:"하남시 도시계획 조례",article:"제005300,005300조 · 용도지역 안에서의 용적률",
+        excerpt:"제53조(용도지역 안에서의 용적률) 일반상업지역 : 1천300퍼센트 이하",sourceUrl:"https://www.law.go.kr",topic:"용적률",verified:false},
+    ],
+  } as SiteReviewResult;
+  const standards=getOrdinanceZoneStandards(ordinanceReview,"일반상업지역");
+  expect(standards).toEqual({bcr:80,far:1300});
+  const report=buildLegalReviewReport({...DEFAULT_INPUT,commercialMixShare:20},ordinanceReview);
+  expect(getPreliminaryOrdinanceInputs(report.rows)).toEqual({bcr:80,far:1300});
+  // 1300 must remain the ordinary zone cap; user-facing housing mix gets 660.
+  expect(report.rows.find(r=>r.id==="hanam-use-mix")?.detail).toContain("660%");
  });
  it("places weighted ratio and donation bonus as CONDITIONAL in legal report",()=>{
   const input={...DEFAULT_INPUT,commercialMixShare:20};
