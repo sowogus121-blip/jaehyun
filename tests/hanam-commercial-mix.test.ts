@@ -41,6 +41,10 @@ describe("Hanam commercial zone 2026 Oct residential-officetel FAR",()=>{
  it("parses actual Hanam council clause spelling 1천300퍼센트 and unlocks merged-lot scenario",()=>{
   const ordinanceReview={
     ...review,ordinanceArticleCandidates:[
+      // The real LH site-review API lists §36 first; it quotes §50's heading
+      // but must not replace the governing §50 zoning table.
+      {sourceTitle:"하남시 도시계획 조례",article:"제003600,003600조 · 경관지구 안에서의 건폐율",
+        excerpt:"시가지경관지구 안에서의 건축물의 건폐율은 조례 제50조에 따른 해당 용도지역 안에서의 건폐율을 따른다.",sourceUrl:"https://www.law.go.kr",topic:"건폐율",verified:false},
       {sourceTitle:"하남시 도시계획 조례",article:"제005000,005000조 · 용도지역 안에서의 건폐율",
         excerpt:"제50조(용도지역 안에서의 건폐율) 일반상업지역: 80퍼센트 이하",sourceUrl:"https://www.law.go.kr",topic:"건폐율",verified:false},
       {sourceTitle:"하남시 도시계획 조례",article:"제005300,005300조 · 용도지역 안에서의 용적률",
