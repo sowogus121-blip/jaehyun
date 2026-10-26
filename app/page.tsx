@@ -10,6 +10,7 @@ import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
 import { buildDecisionDashboard, type DecisionDashboard } from "@/lib/decision-dashboard";
+import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANCE_URL } from "@/lib/hanam-commercial-mix";
 import { assessParcelAssembly, normalizeAssemblyAddresses, splitAssemblyAddresses, MAX_EXTRA_PARCELS, type AssemblyStudy } from "@/lib/parcel-assembly";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
@@ -575,6 +576,7 @@ export default function Home() {
       const addressParts = resolvedAddress.split(/\s+/);
       setReviewData(review);
       const merged = assessParcelAssembly(review);
+      const hanamCommercial=isHanamCommercialSite(review);
       const automaticOrdinance = merged?.isMultiple
         ? merged.status === "ready" ? merged.ordinary : null
         : getPreliminaryOrdinanceInputs(buildLegalReviewReport({ ...input, address: resolvedAddress }, review, null).rows);
@@ -593,6 +595,14 @@ export default function Home() {
           ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { mechanicalMaxRatio: Math.min(current.mechanicalMaxRatio, review.lhNotice.rules.mechanicalMaxPercent) } : {}),
         } : {}),
         ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { businessMode: "purchase" as const, regionalOffice: "경기북부지역본부" } : {}),
+        // 2026.10.01 하남시 도시계획조례 §56: 1300% general-commercial
+        // maximum is NEVER a pure residential/officetel FAR allowance.
+        // 20% nonhousing is a preliminary editable mix, not an approved rule.
+        ...(hanamCommercial ? {
+          commercialMixShare:20,baseFar:calculateHanamCommercialMix(20).totalFar,
+          relaxedFar:0,useRelaxedFar:false,
+        } : {commercialMixShare:0}),
+
         ...(review.districtPlan !== null ? { districtPlan: review.districtPlan } : {}),
         // The generic national zoning upper limit is NOT the local ordinance
         // or district-unit-plan FAR. Display as a reference; never auto-apply.
@@ -799,6 +809,24 @@ export default function Home() {
           </section>
 
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
+          {isHanamCommercialSite(reviewData) && (() => {
+            const mixed=calculateHanamCommercialMix(input.commercialMixShare||20);
+            return <section className="lh-hanam-commercial">
+              <div><span className="eyebrow">HANAM SPECIAL MIXED-USE FAR</span>
+                <h3>하남시 일반상업지역 · 주상복합 / 오피스텔 용적률 재산정</h3>
+                <p>조례 일반상업지역 1,300%를 주거용으로 그대로 사용할 수 없어. 하남시 도시계획 조례 제56조(2026.10.1 시행)의 용도비율 가중식을 계획 가정에 적용했어.</p>
+                <a href={HANAM_CITY_ORDINANCE_URL} target="_blank" rel="noopener noreferrer">조례 제53·56조 원문 ↗</a></div>
+              <div className="lh-hanam-comparison">
+                <label>상업·비주거 용도 면적비율 <strong>{mixed.commercialShare}%</strong>
+                  <input type="range" min="15" max="60" step="5" value={mixed.commercialShare}
+                    onChange={e=>{const ratio=Number(e.target.value);setInput(current=>({...current,commercialMixShare:ratio,
+                      baseFar:calculateHanamCommercialMix(ratio).totalFar,relaxedFar:0,useRelaxedFar:false}));}}/></label>
+                <div><small>전체 계획용적률 상한 가정</small><strong>{mixed.totalFar}%</strong><span>상업 {mixed.commercialShare}% × 1,300 + 주거·오피스텔 {mixed.housingShare}% × 500</span></div>
+                <div><small>주거·오피스텔용 면적 배분</small><strong>{mixed.housingShare}%</strong><span>기준층·상한 연면적에서 비주거 배분 후 세대·호실 계산</span></div>
+              </div>
+              <p className="lh-hanam-caveat">※ {mixed.commercialShare}%는 법정 최소 상업시설 비율로 확정한 값이 아니라 **변경 가능한 규모검토 가정**이야. 주상복합 허용요건, 도시계획위원회 심의, 지구단위계획, 방화지구, 법정주차 및 오피스텔 인허가 조건은 별도야. 공유하는 상업면적을 분리하지 않고 1,300%로 주거 세대를 산정하면 과대계산이야.</p>
+            </section>;
+          })()}
           {reviewData && <DecisionDashboardCard dashboard={decisionDashboard} onShowLaw={()=>setActiveTab(1)} onShowMassing={()=>setActiveTab(3)} onShowLh={()=>setActiveTab(2)} />}
           {reviewData && <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} onLhTab={()=>setActiveTab(2)} />}
           <div className="summary-strip">
