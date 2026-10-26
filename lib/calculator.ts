@@ -202,8 +202,15 @@ export function calculateParking(input: ProjectInput, definition: AlternativeDef
     !(context.lhPurchaseMechanicalRestrictedToOfficetelOrUrban && definition.useType === "apartment");
   const accessibleCount = finalCount > 0 ? Math.max(1, ceil(finalCount * 0.03)) : 0;
   const evCount = finalCount > 0 ? Math.max(1, ceil(finalCount * 0.05)) : 0;
+  // An LH-verified maximum always overrides a looser manual slider when
+  // the purchase-agreement mode is active, regardless of input order.
+  const lhMechanicalCap = context.lhPurchaseMechanicalMaxPercent;
+  const appliedMechanicalMaxPercent = input.businessMode === "purchase" &&
+    typeof lhMechanicalCap === "number" && Number.isFinite(lhMechanicalCap)
+      ? Math.min(input.mechanicalMaxRatio, Math.max(0, lhMechanicalCap))
+      : input.mechanicalMaxRatio;
   const mechanicalCount = mechanicalUsable
-    ? Math.min(finalCount - accessibleCount, Math.floor(finalCount * input.mechanicalMaxRatio / 100))
+    ? Math.min(finalCount - accessibleCount, Math.floor(finalCount * appliedMechanicalMaxPercent / 100))
     : 0;
   const selfCount = finalCount - mechanicalCount;
   const stagingArea = mechanicalCount > 0 ? 60 : 0;
@@ -323,6 +330,10 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   if(input.commercialMixShare>0)warnings.push("상업/비주거 "+input.commercialMixShare+"% 가정 후 남은 주거·오피스텔 용적률과 기준층에 한해 수량 산정. 하남시 조례 제56조 적용·비주거 최소비율·사업용도는 미확정.");
   if (input.businessMode === "undecided") warnings.push("사업방식 미정: 매입약정 특례를 확정 적용하지 않았습니다.");
   if (definition.parkingMode === "mechanical" && !input.mechanicalAllowed) warnings.push("기계식주차 적용 불가 설정에 따라 전량 자주식으로 대체 계산했습니다.");
+  if (definition.parkingMode === "mechanical" && input.businessMode === "purchase" &&
+      typeof context.lhPurchaseMechanicalMaxPercent === "number" &&
+      input.mechanicalMaxRatio > context.lhPurchaseMechanicalMaxPercent)
+    warnings.push(`공고 확인 기계식주차 상한 ${context.lhPurchaseMechanicalMaxPercent}%를 사용자 가정 ${input.mechanicalMaxRatio}%보다 우선 적용했습니다.`);
   if (definition.parkingMode === "mechanical") warnings.push("기계식 면적은 개략값이며 제조사 형식·대기공간·LH 인수기준 검토가 필요합니다.");
   if (unitCountByFar > unitCountByEnvelope) warnings.push("용적률상 가능 수량보다 높이·기준층 제약에 따른 배치 가능 수량이 작습니다.");
   if (parking.conditionalCount !== null && !parking.specialApplied) warnings.push(`0.3대 특례는 미승인 상태입니다. 기본 ${parking.fallbackCount}대와 조건부 ${parking.conditionalCount}대를 분리했습니다.`);
