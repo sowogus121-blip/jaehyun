@@ -483,9 +483,12 @@ export default function Home() {
       setToast("각 용도지역별 면적·조례 일반수치와 합필 적용조건이 확인되지 않았어.");
       return;
     }
+    const hanamMixed=isHanamCommercialSite(reviewData);
     setInput(current=>({...current,siteArea:assembly.totalArea!,
       buildingCoverageRatio:assembly.weightedCandidate!.bcr,
-      baseFar:assembly.weightedCandidate!.far,relaxedFar:0,useRelaxedFar:false,
+      baseFar:hanamMixed?calculateHanamCommercialMix(current.commercialMixShare||20).totalFar:assembly.weightedCandidate!.far,
+      commercialMixShare:hanamMixed?current.commercialMixShare||20:0,
+      relaxedFar:0,useRelaxedFar:false,
       maxFloors:current.maxFloors>0||current.maxHeight>0?current.maxFloors:10}));
     setReviewedRules([]);
     setToast("가중 참고값을 이용한 가상 합필 예비계산이야. 국토계획법 제84조 적용과 실제 합필허가는 확인되지 않았어.");
@@ -501,16 +504,18 @@ export default function Home() {
       setToast("예비 계획 층수는 1~60층 범위에서 입력해 주세요.");
       return;
     }
+    const hanamCommercial=isHanamCommercialSite(reviewData);
     setInput((current) => ({
       ...current,
       buildingCoverageRatio: preliminaryLimits.bcr,
-      baseFar: preliminaryLimits.far,
-      relaxedFar: Math.round(preliminaryLimits.far * 1.2 * 100) / 100,
-      useRelaxedFar: farOption === "example",
+      commercialMixShare:hanamCommercial?(current.commercialMixShare||20):0,
+      baseFar:hanamCommercial?calculateHanamCommercialMix(current.commercialMixShare||20).totalFar:preliminaryLimits.far,
+      relaxedFar:hanamCommercial?0:Math.round(preliminaryLimits.far * 1.2 * 100) / 100,
+      useRelaxedFar:!hanamCommercial && farOption === "example",
       maxFloors: scenarioFloors,
     }));
     setReviewedRules((current) => current.filter((rule) => !["buildingCoverageRatio", "baseFar", "maxFloors"].includes(rule.field)));
-    setToast(farOption === "example" ? "완화율 120%를 가정한 비교안이야. 대상지 적용 여부는 확인되지 않았어." : "조례 일반기준으로 예비 규모를 계산했어. 주차계수·높이·LH 적합성은 미확정이야.");
+    setToast(hanamCommercial ? "하남시 일반상업지역 주상복합·오피스텔 제56조의 비주거 포함 가중 용적률을 적용한 가정이야. 1,300%를 주거에 직접 쓰지 않아." : farOption === "example" ? "완화율 120%를 가정한 비교안이야. 대상지 적용 여부는 확인되지 않았어." : "조례 일반기준으로 예비 규모를 계산했어. 주차계수·높이·LH 적합성은 미확정이야.");
     setActiveTab(3);
   };
 
