@@ -34,8 +34,11 @@ const normalized = (s: string) => s.replace(/\s+/g, "");
 type Article = NonNullable<SiteReviewResult["ordinanceArticleCandidates"]>[number];
 
 function findArticle(review: SiteReviewResult | null, ordinance: string, terms: string[]): Article | null {
-  return review?.ordinanceArticleCandidates?.find((a) =>
-    a.sourceTitle.includes(ordinance) && terms.some((term) => a.article.includes(term) || a.excerpt.includes(term))) ?? null;
+  const rows=review?.ordinanceArticleCandidates?.filter(a=>a.sourceTitle.includes(ordinance))??[];
+  // An unrelated §36 may quote §50 and appear before §50 in the law API.
+  // Select the actual article HEADING first, not the earliest substring hit.
+  return rows.find(a=>terms.some(term=>a.article.includes(term))) ??
+    rows.find(a=>terms.some(term=>a.excerpt.includes(term))) ?? null;
 }
 function citation(article: Article | null, fallback: string) {
   return article ? article.sourceTitle + " · " + clean(article.article) : fallback;
