@@ -50,9 +50,12 @@ function zoneRatio(article: Article | null, zone: string): number | null {
   const position = body.indexOf(zoneName);
   if (position === -1) return null;
   const after = body.slice(position + zoneName.length);
-  const match = after.match(/^(?:[:：]|[은는])(\d{1,4}(?:\.\d+)?)(?:%|퍼센트)/);
-  if (!match) return null;
-  const value = Number(match[1]);
+  // Official municipal ordinances write 1300 as '1천300퍼센트' as well as
+  // '1,300퍼센트' or '1300%'. Never treat the leading '1' as the FAR.
+  const match=after.match(/^(?:[:：]|[은는])((?:\d{1,2}천\d{1,3})|(?:\d{1,2},\d{3})|(?:\d{1,4}(?:\.\d+)?))(?:%|퍼센트)/);
+  if(!match)return null;
+  const korean=match[1].match(/^(\d{1,2})천(\d{1,3})$/);
+  const value=korean?Number(korean[1])*1000+Number(korean[2]):Number(match[1].replace(/,/g,""));
   return value > 0 && value <= 2000 ? value : null;
 }
 
