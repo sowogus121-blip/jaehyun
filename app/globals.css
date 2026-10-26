@@ -633,3 +633,17 @@ a.law-reference-item:hover { background: #f2f7fa; border-color: #b4cbd8; }
 @media(max-width:1100px){.lh-parking-highlights{grid-template-columns:repeat(2,minmax(0,1fr));}.lh-parking-clause-groups{grid-template-columns:1fr;}}
 @media(max-width:600px){.lh-parking-audit-head,.lh-parking-preview,.lh-parking-audit-footer{flex-direction:column;align-items:flex-start;}.lh-parking-audit-head{padding:17px}.lh-parking-highlights>div{padding:12px}.lh-parking-highlights strong{font-size:18px}.lh-parking-clause-groups{padding:12px}.lh-parking-clause summary{align-items:flex-start}.lh-parking-clause summary em{white-space:normal;text-align:center;max-width:90px}.lh-parking-audit-footer{padding:13px;}}
 @media print{.lh-parking-audit{break-inside:avoid;box-shadow:none}.lh-parking-clause>div{display:block}}
+
+
+/* Hanam Oct-2026 §56: never show commercial 1300% as granted residential FAR. */
+.lh-hanam-commercial {margin:0 0 20px;border:1px solid #d8e6ed;border-top:4px solid #356c83;border-radius:6px;background:#fff;overflow:hidden;padding:18px 21px;box-shadow:0 3px 16px #31596c10}
+.lh-hanam-commercial h3 {font-size:16px;color:#234e62;font-weight:850;margin:5px 0 7px}
+.lh-hanam-commercial p {font-size:11px;line-height:1.7;color:#68808d;margin:5px 0}
+.lh-hanam-commercial a {font-size:11px;color:#25768b;font-weight:750;text-decoration:underline}
+.lh-hanam-comparison {display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:10px;margin:15px 0;padding:13px 0;border-top:1px solid #e8eff1;border-bottom:1px solid #e8eff1}
+.lh-hanam-comparison>label,.lh-hanam-comparison>div{display:flex;flex-direction:column;gap:5px;min-width:0;color:#527481;font-weight:650;font-size:12px;padding:6px}
+.lh-hanam-comparison input[type=range]{accent-color:#287f91;max-width:100%;margin-top:9px}
+.lh-hanam-comparison strong{font-size:21px;font-weight:850;color:#236b7d}
+.lh-hanam-comparison span{font-size:10px;line-height:1.6;color:#7e949d}
+.lh-hanam-commercial .lh-hanam-caveat{color:#8b704a;font-size:11px;background:#fff8ed;padding:11px;border-radius:4px}
+@media(max-width:800px){.lh-hanam-comparison{grid-template-columns:1fr}.lh-hanam-commercial{padding:14px}}

@@ -10,6 +10,7 @@ import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
 import { buildDecisionDashboard, type DecisionDashboard } from "@/lib/decision-dashboard";
+import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANCE_URL } from "@/lib/hanam-commercial-mix";
 import { assessParcelAssembly, normalizeAssemblyAddresses, splitAssemblyAddresses, MAX_EXTRA_PARCELS, type AssemblyStudy } from "@/lib/parcel-assembly";
 import type { ReviewedRule, ReviewedRuleField } from "@/lib/rule-application";
 import type { AlternativeResult, EvidenceStatus, ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "@/lib/types";
@@ -482,9 +483,12 @@ export default function Home() {
       setToast("각 용도지역별 면적·조례 일반수치와 합필 적용조건이 확인되지 않았어.");
       return;
     }
+    const hanamMixed=isHanamCommercialSite(reviewData);
     setInput(current=>({...current,siteArea:assembly.totalArea!,
       buildingCoverageRatio:assembly.weightedCandidate!.bcr,
-      baseFar:assembly.weightedCandidate!.far,relaxedFar:0,useRelaxedFar:false,
+      baseFar:hanamMixed?calculateHanamCommercialMix(current.commercialMixShare||20).totalFar:assembly.weightedCandidate!.far,
+      commercialMixShare:hanamMixed?current.commercialMixShare||20:0,
+      relaxedFar:0,useRelaxedFar:false,
       maxFloors:current.maxFloors>0||current.maxHeight>0?current.maxFloors:10}));
     setReviewedRules([]);
     setToast("가중 참고값을 이용한 가상 합필 예비계산이야. 국토계획법 제84조 적용과 실제 합필허가는 확인되지 않았어.");
@@ -500,16 +504,18 @@ export default function Home() {
       setToast("예비 계획 층수는 1~60층 범위에서 입력해 주세요.");
       return;
     }
+    const hanamCommercial=isHanamCommercialSite(reviewData);
     setInput((current) => ({
       ...current,
       buildingCoverageRatio: preliminaryLimits.bcr,
-      baseFar: preliminaryLimits.far,
-      relaxedFar: Math.round(preliminaryLimits.far * 1.2 * 100) / 100,
-      useRelaxedFar: farOption === "example",
+      commercialMixShare:hanamCommercial?(current.commercialMixShare||20):0,
+      baseFar:hanamCommercial?calculateHanamCommercialMix(current.commercialMixShare||20).totalFar:preliminaryLimits.far,
+      relaxedFar:hanamCommercial?0:Math.round(preliminaryLimits.far * 1.2 * 100) / 100,
+      useRelaxedFar:!hanamCommercial && farOption === "example",
       maxFloors: scenarioFloors,
     }));
     setReviewedRules((current) => current.filter((rule) => !["buildingCoverageRatio", "baseFar", "maxFloors"].includes(rule.field)));
-    setToast(farOption === "example" ? "완화율 120%를 가정한 비교안이야. 대상지 적용 여부는 확인되지 않았어." : "조례 일반기준으로 예비 규모를 계산했어. 주차계수·높이·LH 적합성은 미확정이야.");
+    setToast(hanamCommercial ? "하남시 일반상업지역 주상복합·오피스텔 제56조의 비주거 포함 가중 용적률을 적용한 가정이야. 1,300%를 주거에 직접 쓰지 않아." : farOption === "example" ? "완화율 120%를 가정한 비교안이야. 대상지 적용 여부는 확인되지 않았어." : "조례 일반기준으로 예비 규모를 계산했어. 주차계수·높이·LH 적합성은 미확정이야.");
     setActiveTab(3);
   };
 
@@ -575,6 +581,7 @@ export default function Home() {
       const addressParts = resolvedAddress.split(/\s+/);
       setReviewData(review);
       const merged = assessParcelAssembly(review);
+      const hanamCommercial=isHanamCommercialSite(review);
       const automaticOrdinance = merged?.isMultiple
         ? merged.status === "ready" ? merged.ordinary : null
         : getPreliminaryOrdinanceInputs(buildLegalReviewReport({ ...input, address: resolvedAddress }, review, null).rows);
@@ -593,6 +600,14 @@ export default function Home() {
           ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { mechanicalMaxRatio: Math.min(current.mechanicalMaxRatio, review.lhNotice.rules.mechanicalMaxPercent) } : {}),
         } : {}),
         ...(review.lhNotice?.rules && current.businessMode === "undecided" ? { businessMode: "purchase" as const, regionalOffice: "경기북부지역본부" } : {}),
+        // 2026.10.01 하남시 도시계획조례 §56: 1300% general-commercial
+        // maximum is NEVER a pure residential/officetel FAR allowance.
+        // 20% nonhousing is a preliminary editable mix, not an approved rule.
+        ...(hanamCommercial ? {
+          commercialMixShare:20,baseFar:calculateHanamCommercialMix(20).totalFar,
+          relaxedFar:0,useRelaxedFar:false,
+        } : {commercialMixShare:0}),
+
         ...(review.districtPlan !== null ? { districtPlan: review.districtPlan } : {}),
         // The generic national zoning upper limit is NOT the local ordinance
         // or district-unit-plan FAR. Display as a reference; never auto-apply.
@@ -799,6 +814,24 @@ export default function Home() {
           </section>
 
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
+          {isHanamCommercialSite(reviewData) && (() => {
+            const mixed=calculateHanamCommercialMix(input.commercialMixShare||20);
+            return <section className="lh-hanam-commercial">
+              <div><span className="eyebrow">HANAM SPECIAL MIXED-USE FAR</span>
+                <h3>하남시 일반상업지역 · 주상복합 / 오피스텔 용적률 재산정</h3>
+                <p>조례 일반상업지역 1,300%를 주거용으로 그대로 사용할 수 없어. 하남시 도시계획 조례 제56조(2026.10.1 시행)의 용도비율 가중식을 계획 가정에 적용했어.</p>
+                <a href={HANAM_CITY_ORDINANCE_URL} target="_blank" rel="noopener noreferrer">조례 제53·56조 원문 ↗</a></div>
+              <div className="lh-hanam-comparison">
+                <label>상업·비주거 용도 면적비율 <strong>{mixed.commercialShare}%</strong>
+                  <input type="range" min="15" max="60" step="5" value={mixed.commercialShare}
+                    onChange={e=>{const ratio=Number(e.target.value);setInput(current=>({...current,commercialMixShare:ratio,
+                      baseFar:calculateHanamCommercialMix(ratio).totalFar,relaxedFar:0,useRelaxedFar:false}));}}/></label>
+                <div><small>전체 계획용적률 상한 가정</small><strong>{mixed.totalFar}%</strong><span>상업 {mixed.commercialShare}% × 1,300 + 주거·오피스텔 {mixed.housingShare}% × 500</span></div>
+                <div><small>주거·오피스텔용 면적 배분</small><strong>{mixed.housingShare}%</strong><span>기준층·상한 연면적에서 비주거 배분 후 세대·호실 계산</span></div>
+              </div>
+              <p className="lh-hanam-caveat">※ {mixed.commercialShare}%는 법정 최소 상업시설 비율로 확정한 값이 아니라 **변경 가능한 규모검토 가정**이야. 주상복합 허용요건, 도시계획위원회 심의, 지구단위계획, 방화지구, 법정주차 및 오피스텔 인허가 조건은 별도야. 공유하는 상업면적을 분리하지 않고 1,300%로 주거 세대를 산정하면 과대계산이야.</p>
+            </section>;
+          })()}
           {reviewData && <DecisionDashboardCard dashboard={decisionDashboard} onShowLaw={()=>setActiveTab(1)} onShowMassing={()=>setActiveTab(3)} onShowLh={()=>setActiveTab(2)} />}
           {reviewData && <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} onLhTab={()=>setActiveTab(2)} />}
           <div className="summary-strip">

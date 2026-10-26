@@ -2,6 +2,7 @@ import type { ProjectInput, SiteLookupDetails, SiteReviewResult } from "./types"
 import type { ReviewedRule } from "./rule-application";
 import { screenParking03 } from "./lh-parking-screen";
 import { getLhParkingReview } from "./lh-parking-review";
+import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANCE_URL } from "./hanam-commercial-mix";
 import { ALTERNATIVES } from "./calculator";
 
 export type LegalRowStatus = "source" | "conditional" | "unknown" | "user";
@@ -127,6 +128,19 @@ export function buildLegalReviewReport(
     "지구단위계획·공공임대 완화 요건 대조 전 · 계산 자동반영 안 함",
     far !== null ? "source" : farArticle ? "conditional" : "unknown", farArticle?.sourceUrl || cityOrdinance, farArticle?.excerpt || null);
 
+  if(isHanamCommercialSite(review)){
+    const mix=calculateHanamCommercialMix(input.commercialMixShare||20);
+    add("hanam-use-mix","건축·도시계획","일반상업지역 주거·오피스텔 혼합 용적률",
+      "상업 "+mix.commercialShare+"% + 주거·오피스텔 "+mix.housingShare+"% 가정 → 총 "+mix.totalFar+"% (조례 일반 1,300% 직접 적용 아님)",
+      "하남시 도시계획 조례 제53조제1항·제56조제1항 (2026.10.1 시행)",
+      "상업비율은 법정 승인값이 아닌 계획 가정. 상업용도 1,300% 및 준주거 500% 가중식, 대지별 지구단위·금지용도·국토계획법 시행령 별표 9 대조 필요",
+      "conditional",HANAM_CITY_ORDINANCE_URL);
+    add("hanam-use-bonus","건축·도시계획","상업지역 비주거·공공기여 추가 용적률",
+      "위원회 심의를 거친 기반시설 기부채납 등은 제56조제2항에 따라 최대 +100%p 검토 가능",
+      "하남시 도시계획 조례 제56조제2항 (2026.10.1 시행)",
+      "도로·주차장 등 기부채납 + 심의 요건 충족 시 검토; 이 대지에 자동 허용되지 않으며 기본 계산에 미적용",
+      "conditional",HANAM_CITY_ORDINANCE_URL);
+  }
   const relaxation = findArticle(review, "도시계획 조례", ["공공임대주택", "임대주택", "용적률"]);
   add("relax", "건축·도시계획", "공공임대 용적률 완화",
     "공공임대 유형·사업방식별 완화율 및 최종 상한 조건부 검토",
