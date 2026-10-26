@@ -66,6 +66,34 @@ describe("LH Plan Lab calculation engine", () => {
     expect(result.warnings.some((warning) => warning.includes("전량 자주식"))).toBe(true);
   });
 
+  it("enforces a verified 50% LH mechanical limit despite an editable 70% input", () => {
+    const input = {
+      ...EXAMPLE_INPUT, businessMode: "purchase" as const,
+      mechanicalAllowed: true, mechanicalMaxRatio: 70,
+      officetelParkingRatio: 0.5,
+    };
+    const lh = calculateAlternative(input, ALTERNATIVES[3], {
+      planningEvidence: "unknown",
+      usePermissions: { apartment: "unknown", officetel: "unknown" },
+      lhPurchaseEligibility: { apartment: "unknown", officetel: "unknown" },
+      mechanicalParkingEligibility: "conditional",
+      lhPurchaseMechanicalMaxPercent: 50,
+    });
+    const unverified = calculateAlternative(input, ALTERNATIVES[3]);
+    expect(lh.parking.mechanicalCount).toBe(Math.floor(lh.parking.finalCount * 0.5));
+    expect(unverified.parking.mechanicalCount).toBe(Math.floor(unverified.parking.finalCount * 0.7));
+    expect(lh.warnings.join(" ")).toContain("상한 50%");
+    // The LH cap does not carry over to a self-development scheme.
+    const direct = calculateAlternative({...input, businessMode: "direct"}, ALTERNATIVES[3], {
+      planningEvidence: "unknown",
+      usePermissions: { apartment: "unknown", officetel: "unknown" },
+      lhPurchaseEligibility: { apartment: "unknown", officetel: "unknown" },
+      mechanicalParkingEligibility: "conditional",
+      lhPurchaseMechanicalMaxPercent: 50,
+    });
+    expect(direct.parking.mechanicalCount).toBe(Math.floor(direct.parking.finalCount * 0.7));
+  });
+
   it("marks missing legal evidence as unknown", () => {
     expect(getEvidenceStatus(false)).toBe("unknown");
     expect(getEvidenceStatus(false, true)).toBe("user");
