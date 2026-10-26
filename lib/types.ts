@@ -107,6 +107,8 @@ export interface CalculationContext {
   lhPurchaseEligibility: Record<UseType, AlternativeEligibilityStatus>;
   mechanicalParkingEligibility: AlternativeEligibilityStatus;
   lhPurchaseMechanicalRestrictedToOfficetelOrUrban?: boolean;
+  /** Maximum mechanical-stall share from the exact verified LH notice; undefined when unverified. */
+  lhPurchaseMechanicalMaxPercent?: number;
   lhCommunityMinimumHomes?: number;
   lhCommunitySqmPerHome?: number;
 }
