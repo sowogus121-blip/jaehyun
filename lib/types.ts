@@ -47,11 +47,13 @@ export interface ProjectInput {
   purchaseAgreementConfirmed: boolean;
   specialParkingUseScopeConfirmed: boolean;
   specialParkingLhConfirmed: boolean;
+  specialParkingLocationConfirmed?: boolean; // 청년형 역/대학 출구 500m 검증
   lhParkingRatioVerified: boolean;
   mechanicalAllowed: boolean;
   mechanicalMaxRatio: number;
   apartmentEfficiency: number; // percent: default 75
-  officetelEfficiency: number; // percent: default 45
+  officetelEfficiency: number; // 계약면적 대비 전용률: 45%
+  officetelFarEfficiency?: number; // 지상층 전용률 가정: 70%, 이전 저장본 호환 optional
   apartmentFloorHeight: number;
   officetelFloorHeight: number;
 }
@@ -116,6 +118,9 @@ export interface CalculationContext {
 export interface AlternativeResult {
   definition: AlternativeDefinition;
   grossAreaPerUnit: number;
+  farGrossAreaPerUnit: number;
+  residentialFarArea: number;
+  nonResidentialFarArea: number;
   maxBuildableArea: number;
   plannedBuildingArea: number;
   farLimitArea: number;
