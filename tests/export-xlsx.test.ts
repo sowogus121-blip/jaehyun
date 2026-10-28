@@ -13,7 +13,7 @@ describe("XLSX export formula audit",()=>{
     }));
     expect(result.status).toBe(200);
     const workbook=new ExcelJS.Workbook();
-    await workbook.xlsx.load(Buffer.from(await result.arrayBuffer()));
+    await workbook.xlsx.load(Buffer.from(await result.arrayBuffer()) as unknown as Parameters<typeof workbook.xlsx.load>[0]);
     const inputSheet=workbook.getWorksheet("입력값")!;
     const areaRow=inputSheet.getColumn(1).values.findIndex(x=>x==="대지면적");
     expect(areaRow).toBeGreaterThan(3);
