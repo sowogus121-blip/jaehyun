@@ -38,6 +38,17 @@ export function screenParking03(input: ProjectInput, alternative: AlternativeDef
       detail: supplyUndecided ? "LH 공급유형 미선택 · 청년/고령자 여부 확인" : supplyEligible ? "공급유형 조건(입지기준은 별도) 검토 가능" : "신혼·일반형에는 이 0.3대 특례 기준 적용 불가",
     },
     {
+      id: "location",
+      label: "입지: 청년형 역 출구·대학 교문 직선 500m 이내",
+      status: supplyUndecided ? "unknown" : input.lhSupplyType === "senior" ? "pass"
+        : input.lhSupplyType === "youth" && input.specialParkingLocationConfirmed ? "pass" : "unknown",
+      detail: input.lhSupplyType === "senior"
+        ? "고령자형은 입지거리 제한 없음(그 밖의 요건 별도)"
+        : input.specialParkingLocationConfirmed
+          ? "사용자가 공식 지도/좌표로 직선거리와 대상역·대학교를 확인했다고 표시"
+          : "주소 또는 행정동만으로 500m 충족을 인정하지 않음 · 역 출구/대학 교문에서 직선거리 측정 필요",
+    },
+    {
       id: "agreement", label: "실제 공공주택사업자 매도약정 체결",
       status: input.purchaseAgreementConfirmed ? "pass" : "unknown",
       detail: input.purchaseAgreementConfirmed ? "사용자가 관련 원본 문서 확인 표시" : "약정 체결문서 확인 전",
