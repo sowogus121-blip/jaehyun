@@ -6,6 +6,7 @@ import { calculateReviewCompleteness, deriveCalculationContext } from "@/lib/reg
 import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRuleForEditedField } from "@/lib/rule-application";
 import { screenParking03 } from "@/lib/lh-parking-screen";
 import { getLhParkingReview, type LhParkingReview } from "@/lib/lh-parking-review";
+import { getNoticeMemoryStatus } from "@/lib/lh-notice-memory";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
@@ -1135,6 +1136,21 @@ export default function Home() {
 
         {activeTab === 2 && <>
           <SectionHeader eyebrow="03 · LH GUIDELINE" title="LH 기준 및 특례 검토" description="LH 직접건설과 민간 신축매입약정 기준을 혼용하지 않고 사업방식별로 판단합니다." />
+          <section className="lh-rule-sheet" aria-label="공고문 지식저장소">
+            <div><strong>LH 공고문 지식저장소 · 원문 근거 및 지역 적용성</strong>
+              <span>사용자 업로드 서울 6차 공고를 페이지별 규정으로 보관 · 파주시에는 경기북부 4차 공고 우선</span></div>
+            {getNoticeMemoryStatus(input.address).map(({notice,applicable}) => (
+              <details key={notice.id} className="reg-detail">
+                <summary><b>{notice.name}</b> · {applicable ? "대상 지역 일치 · 법규 및 개별 요건 별도 검토" : "현재 주소에 적용 불가"}</summary>
+                <p>{notice.sourceKind}</p>
+                <p><strong>{notice.revisionWarning}</strong></p>
+                <p>원문 출처: <a href={notice.officialUrl} target="_blank" rel="noopener noreferrer">LH 공식 공고 확인 ↗</a></p>
+                {notice.rules.map((rule,index) => <p key={notice.id+"-"+index}>
+                  <b>{rule.topic} · 원문 {rule.sourcePage}쪽 · {rule.status}</b> — {rule.condition}
+                </p>)}
+              </details>
+            ))}
+          </section>
           <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} />
           <div className="notice navy"><Icon name="lh" /><div><b>{input.businessMode === "purchase" ? "민간 신축매입약정 검토 모드" : input.businessMode === "direct" ? "LH 직접건설 검토 모드" : "사업방식 미정 · 특례 확정 적용 보류"}</b><span>지역본부: {input.regionalOffice} · 최신 공고문 및 설계·시공 가이드라인 원문 연결 필요</span></div></div>
           {lhNotice && <section className="lh-rule-sheet">
