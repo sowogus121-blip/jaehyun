@@ -9,7 +9,7 @@ import type {
 function findingOutcome(review: SiteReviewResult | null, topic: string, useType?: UseType): AlternativeEligibilityStatus {
   const findings = review?.ruleFindings ?? [];
   const relevant = findings.filter((finding) => {
-    const searchable = `${finding.topic} ${finding.sourceTitle} ${finding.conditions.join(" ")}`;
+    const searchable = `${finding.topic} ${finding.sourceTitle ?? ""} ${(finding.conditions ?? []).join(" ")}`;
     const useMatches = !useType || searchable.includes(useType === "apartment" ? "공동주택" : "오피스텔");
     return useMatches && searchable.includes(topic) && finding.verified;
   });
