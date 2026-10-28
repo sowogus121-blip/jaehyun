@@ -120,7 +120,8 @@ export async function POST(request: NextRequest) {
   const inputRows: Array<[string, string | number | boolean, string]> = [
     ["사업명", body.input.projectName, "사용자 입력"],
     ["공동주택 전용률", body.input.apartmentEfficiency ?? 75, "% · 기본 75% / 사용자 변경 가능"],
-    ["오피스텔 전용률", body.input.officetelEfficiency ?? 45, "% · 기본 45% / 사용자 변경 가능"],
+    ["오피스텔 계약 전용률", body.input.officetelEfficiency ?? 45, "% · 계약면적 기준 / 기본 45%"],
+    ["오피스텔 지상층 전용률", body.input.officetelFarEfficiency ?? 70, "% · 용적률 산정용 / 기본 70% 가정"],
     ["주소", body.input.address, "대상지"],
     ["대지면적", body.input.siteArea, "㎡"],
     ["건폐율 상한", body.input.buildingCoverageRatio, "%"],
@@ -134,11 +135,15 @@ export async function POST(request: NextRequest) {
     ["0.3대 특례 승인", body.input.specialParkingApproval, "승인상태"],
   ];
   inputRows.forEach((row) => inputs.addRow(row));
+  // Derive the site-area cell from the actual label, never a positional guess.
+  // The input sheet changes when new assumptions (e.g. office FAR efficiency) are added.
+  const siteAreaRow = inputRows.findIndex((row) => row[0] === "대지면적") + 2;
+  if (siteAreaRow < 2) throw new Error("엑셀 입력값 시트에서 대지면적 행을 찾지 못했습니다.");
   inputs.columns = [{ width: 24 }, { width: 48 }, { width: 22 }];
   inputs.views = [{ state: "frozen", ySplit: 1 }];
 
   const comparison = workbook.addWorksheet("4개 대안 비교");
-  comparison.addRow(["대안", "용도", "적합성", "계획수량", "계획건축면적(㎡)", "용적률산정면적(㎡)", "계획건폐율(%)", "계획용적률(%)", "원 법정주차", "0.3대 조건부", "최종주차", "지하층", "보조점수"]);
+  comparison.addRow(["대안", "용도", "적합성", "계획수량", "계획건축면적(㎡)", "용적률산정면적(㎡)", "계획건폐율(%)", "계획용적률(%)", "원 법정주차", "0.3대 조건부", "최종주차", "지하층", "보조점수", "주거 지상연면적(㎡)", "비주거 지상연면적(㎡)", "계약전용률(%)", "용적률전용률(%)"]);
   styleHeader(comparison.getRow(1));
   body.results.forEach((result, index) => {
     const rowNumber = index + 2;
@@ -149,18 +154,22 @@ export async function POST(request: NextRequest) {
       result.unitCount,
       result.plannedBuildingArea,
       result.farCountedArea,
-      { formula: `IFERROR(E${rowNumber}/'입력값'!B4*100,0)`, result: result.plannedBcr },
-      { formula: `IFERROR(F${rowNumber}/'입력값'!B4*100,0)`, result: result.plannedFar },
+      { formula: `IFERROR(E${rowNumber}/'입력값'!$B${siteAreaRow}*100,0)`, result: result.plannedBcr },
+      { formula: `IFERROR(F${rowNumber}/'입력값'!$B${siteAreaRow}*100,0)`, result: result.plannedFar },
       result.parking.originalLegalCount,
       result.parking.conditionalCount ?? "-",
       result.parking.finalCount,
       result.parking.basementFloors,
       result.score,
+      result.residentialFarArea,
+      result.nonResidentialFarArea,
+      Number((result.definition.efficiency * 100).toFixed(1)),
+      Number((result.definition.exclusiveArea / result.farGrossAreaPerUnit * 100).toFixed(1)),
     ]);
   });
-  comparison.columns = [{ width: 10 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 18 }, { width: 20 }, { width: 17 }, { width: 17 }, { width: 15 }, { width: 15 }, { width: 13 }, { width: 10 }, { width: 12 }];
+  comparison.columns = [{ width: 10 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 18 }, { width: 20 }, { width: 17 }, { width: 17 }, { width: 15 }, { width: 15 }, { width: 13 }, { width: 10 }, { width: 12 }, { width: 21 }, { width: 21 }, { width: 19 }, { width: 21 }];
   comparison.views = [{ state: "frozen", ySplit: 1 }];
-  comparison.autoFilter = { from: "A1", to: "M5" };
+  comparison.autoFilter = { from: "A1", to: "Q5" };
 
   const formulas = workbook.addWorksheet("산식·제약조건");
   formulas.addRow(["대안", "구분", "내용"]);
