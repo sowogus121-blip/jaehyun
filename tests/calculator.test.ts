@@ -152,6 +152,7 @@ describe("LH Plan Lab calculation engine", () => {
       purchaseAgreementConfirmed: true,
       specialParkingUseScopeConfirmed: true,
       specialParkingLhConfirmed: true,
+      specialParkingLocationConfirmed: true,
       officetelParkingRatio: 0.5,
       lhOfficetelParkingRatio: 0.5,
       lhParkingRatioVerified: false,

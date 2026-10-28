@@ -67,11 +67,13 @@ export const DEFAULT_INPUT: ProjectInput = {
   purchaseAgreementConfirmed: false,
   specialParkingUseScopeConfirmed: false,
   specialParkingLhConfirmed: false,
+  specialParkingLocationConfirmed: false,
   lhParkingRatioVerified: false,
   mechanicalAllowed: true,
   mechanicalMaxRatio: 70,
   apartmentEfficiency: 75,
   officetelEfficiency: 45,
+  officetelFarEfficiency: 70,
   apartmentFloorHeight: 3.1,
   officetelFloorHeight: 3.3,
 };
@@ -140,6 +142,7 @@ export function resetSiteDependentInput(current: ProjectInput, address: string):
     purchaseAgreementConfirmed: false,
     specialParkingUseScopeConfirmed: false,
     specialParkingLhConfirmed: false,
+    specialParkingLocationConfirmed: false,
     lhParkingRatioVerified: false,
   };
 }
@@ -244,8 +247,8 @@ export function calculateParking(input: ProjectInput, definition: AlternativeDef
   };
 }
 
-function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, farLimitArea: number, envelopeArea: number, context: CalculationContext) {
-  const gross = getGrossAreaPerUnit(definition.exclusiveArea, definition.efficiency);
+function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, farLimitArea: number, envelopeArea: number, context: CalculationContext, farAreaPerUnit: number) {
+  const gross = farAreaPerUnit;
   let units = Math.floor(Math.min(farLimitArea, envelopeArea) / gross);
   for (let i = 0; i < 12; i += 1) {
     const facilities = calculateFacilities(definition.useType, units, context);
@@ -261,6 +264,15 @@ function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, 
 export function calculateAlternative(input: ProjectInput, definition: AlternativeDefinition, context: CalculationContext = DEFAULT_CALCULATION_CONTEXT): AlternativeResult {
   const appliedFar = input.useRelaxedFar ? input.relaxedFar : input.baseFar;
   const grossAreaPerUnit = getGrossAreaPerUnit(definition.exclusiveArea, definition.efficiency);
+  // The 45% officetel contract efficiency includes common areas outside FAR.
+  // Use a separately adjustable above-ground floor-efficiency hypothesis.
+  const validOfficeFloorRatio = typeof input.officetelFarEfficiency === "number" &&
+    Number.isFinite(input.officetelFarEfficiency) &&
+    input.officetelFarEfficiency >= 20 && input.officetelFarEfficiency <= 95;
+  const officeFarEfficiency = (validOfficeFloorRatio ? input.officetelFarEfficiency! : 70) / 100;
+  const farGrossAreaPerUnit = definition.useType === "officetel"
+    ? getGrossAreaPerUnit(definition.exclusiveArea, officeFarEfficiency)
+    : grossAreaPerUnit;
   const buildableSite = input.siteArea * input.buildableSiteRatio / 100;
   const maxBuildableArea = Math.min(input.siteArea * input.buildingCoverageRatio / 100, buildableSite);
   const plannedBuildingArea = maxBuildableArea * input.floorPlateRatio / 100;
@@ -278,21 +290,25 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const residentialPortion = input.commercialMixShare>0 ? Math.max(0,1-input.commercialMixShare/100) : 1;
   const farLimitArea = input.siteArea * appliedFar / 100 * residentialPortion;
   const envelopeArea = plannedBuildingArea * legalMaxFloors * residentialPortion;
-  const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context);
-  const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context);
-  const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea, context);
+  const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit);
+  const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit);
+  const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit);
   const facilities = calculateFacilities(definition.useType, unitCount, context);
   const amenityArea = facilities.reduce((sum, item) => sum + item.area, 0);
   const equipmentArea = unitCount > 0 ? Math.max(35, unitCount * 0.35) : 0;
   const residentialExclusiveArea = unitCount * definition.exclusiveArea;
-  const grossResidentialArea = unitCount * grossAreaPerUnit;
+  const grossResidentialArea = unitCount * farGrossAreaPerUnit;
   const residentialCommonArea = grossResidentialArea - residentialExclusiveArea;
-  const farCountedArea = grossResidentialArea + amenityArea + equipmentArea;
+  const residentialFarArea = grossResidentialArea + amenityArea + equipmentArea;
+  // A declared mixed-use share occupies additional above-ground gross area.
+  const nonResidentialFarArea = residentialPortion > 0
+    ? residentialFarArea * (1 - residentialPortion) / residentialPortion : 0;
+  const farCountedArea = residentialFarArea + nonResidentialFarArea;
   const housingFloorPlate=plannedBuildingArea*residentialPortion;
-  const recommendedFloors = housingFloorPlate > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / housingFloorPlate)) : 0;
+  const recommendedFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / plannedBuildingArea)) : 0;
   const estimatedHeight = recommendedFloors > 0 ? 1.2 + recommendedFloors * floorHeight : 0;
   const parking = calculateParking(input, definition, unitCount, context);
-  const belowGroundArea = farCountedArea > 0 ? parking.area + Math.max(60, farCountedArea * 0.025) : 0;
+  const belowGroundArea = farCountedArea > 0 ? parking.area + Math.max(60, residentialFarArea * 0.025) : 0;
   const totalFloorArea = farCountedArea + belowGroundArea;
   const physicalMaxFloors = housingFloorPlate > 0 ? Math.min(legalMaxFloors, ceil(envelopeArea / housingFloorPlate)) : 0;
   const warnings: string[] = [];
@@ -327,7 +343,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const recommendable = eligibility === "eligible";
 
   if (input.useRelaxedFar) warnings.push("완화 용적률은 법적 근거와 적용요건이 확인되기 전까지 조건부 값입니다.");
-  if(input.commercialMixShare>0)warnings.push("상업/비주거 "+input.commercialMixShare+"% 가정 후 남은 주거·오피스텔 용적률과 기준층에 한해 수량 산정. 하남시 조례 제56조 적용·비주거 최소비율·사업용도는 미확정.");
+  if (input.commercialMixShare > 0) warnings.push("비주거 "+input.commercialMixShare+"%는 지상 연면적에 포함했습니다. 그러나 비주거 주차·부대시설이 미산정이므로 전체 연면적·지하층수는 완성된 건축개요가 아닙니다. 용도별 조례 및 지구단위 적용 필요.");
   if (input.businessMode === "undecided") warnings.push("사업방식 미정: 매입약정 특례를 확정 적용하지 않았습니다.");
   if (definition.parkingMode === "mechanical" && !input.mechanicalAllowed) warnings.push("기계식주차 적용 불가 설정에 따라 전량 자주식으로 대체 계산했습니다.");
   if (definition.parkingMode === "mechanical" && input.businessMode === "purchase" &&
@@ -338,6 +354,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   if (unitCountByFar > unitCountByEnvelope) warnings.push("용적률상 가능 수량보다 높이·기준층 제약에 따른 배치 가능 수량이 작습니다.");
   if (parking.conditionalCount !== null && !parking.specialApplied) warnings.push(`0.3대 특례는 미승인 상태입니다. 기본 ${parking.fallbackCount}대와 조건부 ${parking.conditionalCount}대를 분리했습니다.`);
   warnings.push(...blockingReasons, ...conditionalReasons);
+  if (definition.useType === "officetel") warnings.push("오피스텔 계약 전용률 "+(definition.efficiency*100).toFixed(0)+"%와 지상 층 전용률 "+(officeFarEfficiency*100).toFixed(0)+"%를 구분한 개략 산정입니다. 코어·기타공용·주차장 배분 검증 필요.");
   warnings.push("대지 형상·일조·인동거리·소방활동공간 미검증으로 배치 가능성은 개략 추정입니다.");
 
   const parkingPenalty = parking.basementFloors * 7;
@@ -347,6 +364,9 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   return {
     definition,
     grossAreaPerUnit: round(grossAreaPerUnit),
+    farGrossAreaPerUnit: round(farGrossAreaPerUnit),
+    residentialFarArea: round(residentialFarArea),
+    nonResidentialFarArea: round(nonResidentialFarArea),
     maxBuildableArea: round(maxBuildableArea),
     plannedBuildingArea: round(plannedBuildingArea),
     farLimitArea: round(farLimitArea),
@@ -373,7 +393,9 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
     parking,
     warnings,
     formulas: [
-      `세대당 계획면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.efficiency * 100).toFixed(0)}% = ${grossAreaPerUnit.toFixed(2)}㎡`,
+      `세대당 계약·공급 참고면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.efficiency * 100).toFixed(0)}% = ${grossAreaPerUnit.toFixed(2)}㎡`,
+      `세대당 지상 용적률 산정면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.useType === "officetel" ? officeFarEfficiency * 100 : definition.efficiency * 100).toFixed(0)}% = ${farGrossAreaPerUnit.toFixed(2)}㎡`,
+      `지상 주거 ${residentialFarArea.toFixed(1)}㎡ + 비주거 ${nonResidentialFarArea.toFixed(1)}㎡ = 용적률 산정 총 ${farCountedArea.toFixed(1)}㎡`,
       `주거용 연면적 한도 = ${input.siteArea.toLocaleString()}㎡ × 전체 계획용적률 ${appliedFar}% × 주거비율 ${(residentialPortion*100).toFixed(0)}% = ${farLimitArea.toFixed(1)}㎡`,
       `계획 기준층 = min(대지×건폐율, 건축가능대지) × ${input.floorPlateRatio}% = ${plannedBuildingArea.toFixed(1)}㎡`,
       `계획 용적률 = ${farCountedArea.toFixed(1)}㎡ ÷ ${input.siteArea.toLocaleString()}㎡ × 100 = ${(farCountedArea / input.siteArea * 100).toFixed(2)}%`,
