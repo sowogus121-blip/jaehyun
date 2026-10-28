@@ -31,7 +31,12 @@ export function deriveCalculationContext(review: SiteReviewResult | null, input:
   const mechanicalFinding = findingOutcome(review, "기계식주차");
 
   return {
-    planningEvidence: (review?.ruleFindings ?? []).some((finding) => finding.verified && ["건폐율", "용적률", "높이"].includes(finding.topic)) ? "verified" : review?.planningStandards ? "review" : "unknown",
+    // Never mark all planning limits verified from a single verified clause.
+    planningEvidence: ["건폐율", "용적률", "높이"].every((topic) =>
+      (review?.ruleFindings ?? []).some((finding) =>
+        finding.verified && finding.topic === topic && finding.outcome === "applicable")
+    ) ? "verified" : review?.planningStandards || (review?.ruleFindings ?? []).some((finding) => finding.verified)
+      ? "review" : "unknown",
     usePermissions,
     lhPurchaseEligibility,
     mechanicalParkingEligibility: input.mechanicalAllowed ? mechanicalFinding : "ineligible",
