@@ -67,11 +67,13 @@ export const DEFAULT_INPUT: ProjectInput = {
   purchaseAgreementConfirmed: false,
   specialParkingUseScopeConfirmed: false,
   specialParkingLhConfirmed: false,
+  specialParkingLocationConfirmed: false,
   lhParkingRatioVerified: false,
   mechanicalAllowed: true,
   mechanicalMaxRatio: 70,
   apartmentEfficiency: 75,
   officetelEfficiency: 45,
+  officetelFarEfficiency: 70,
   apartmentFloorHeight: 3.1,
   officetelFloorHeight: 3.3,
 };
@@ -140,6 +142,7 @@ export function resetSiteDependentInput(current: ProjectInput, address: string):
     purchaseAgreementConfirmed: false,
     specialParkingUseScopeConfirmed: false,
     specialParkingLhConfirmed: false,
+    specialParkingLocationConfirmed: false,
     lhParkingRatioVerified: false,
   };
 }
@@ -244,8 +247,8 @@ export function calculateParking(input: ProjectInput, definition: AlternativeDef
   };
 }
 
-function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, farLimitArea: number, envelopeArea: number, context: CalculationContext) {
-  const gross = getGrossAreaPerUnit(definition.exclusiveArea, definition.efficiency);
+function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, farLimitArea: number, envelopeArea: number, context: CalculationContext, farAreaPerUnit: number) {
+  const gross = farAreaPerUnit;
   let units = Math.floor(Math.min(farLimitArea, envelopeArea) / gross);
   for (let i = 0; i < 12; i += 1) {
     const facilities = calculateFacilities(definition.useType, units, context);
@@ -261,6 +264,15 @@ function solveUnitCount(input: ProjectInput, definition: AlternativeDefinition, 
 export function calculateAlternative(input: ProjectInput, definition: AlternativeDefinition, context: CalculationContext = DEFAULT_CALCULATION_CONTEXT): AlternativeResult {
   const appliedFar = input.useRelaxedFar ? input.relaxedFar : input.baseFar;
   const grossAreaPerUnit = getGrossAreaPerUnit(definition.exclusiveArea, definition.efficiency);
+  // The 45% officetel contract efficiency includes common areas outside FAR.
+  // Use a separately adjustable above-ground floor-efficiency hypothesis.
+  const validOfficeFloorRatio = typeof input.officetelFarEfficiency === "number" &&
+    Number.isFinite(input.officetelFarEfficiency) &&
+    input.officetelFarEfficiency >= 20 && input.officetelFarEfficiency <= 95;
+  const officeFarEfficiency = (validOfficeFloorRatio ? input.officetelFarEfficiency! : 70) / 100;
+  const farGrossAreaPerUnit = definition.useType === "officetel"
+    ? getGrossAreaPerUnit(definition.exclusiveArea, officeFarEfficiency)
+    : grossAreaPerUnit;
   const buildableSite = input.siteArea * input.buildableSiteRatio / 100;
   const maxBuildableArea = Math.min(input.siteArea * input.buildingCoverageRatio / 100, buildableSite);
   const plannedBuildingArea = maxBuildableArea * input.floorPlateRatio / 100;
@@ -278,9 +290,9 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const residentialPortion = input.commercialMixShare>0 ? Math.max(0,1-input.commercialMixShare/100) : 1;
   const farLimitArea = input.siteArea * appliedFar / 100 * residentialPortion;
   const envelopeArea = plannedBuildingArea * legalMaxFloors * residentialPortion;
-  const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context);
-  const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context);
-  const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea, context);
+  const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit);
+  const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit);
+  const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit);
   const facilities = calculateFacilities(definition.useType, unitCount, context);
   const amenityArea = facilities.reduce((sum, item) => sum + item.area, 0);
   const equipmentArea = unitCount > 0 ? Math.max(35, unitCount * 0.35) : 0;
