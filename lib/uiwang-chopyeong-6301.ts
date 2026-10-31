@@ -1,3 +1,4 @@
+import type { SiteReviewResult } from "./types";
 /**
  * 2026-10-31: user visually compared current 630-1 map position against
  * the officially published 2026 district-unit-plan drawing and confirmed
@@ -116,4 +117,32 @@ export const UIWANG_6301 = {
 export function isUiwangChopyeong6301(address: string): boolean {
   const text = address.replace(/\s+/g, "");
   return /(?:^|경기도|의왕시)(?:의왕시)?초평동630-1$/.test(text) || text === "초평동630-1";
+}
+
+/**
+ * Evidence scope: user confirmed C1 BLOCK location by map comparison;
+ * official 2026 district guidance independently gives both prohibited uses.
+ * Verified here means validated for the user-supplied block location, not
+ * a government-issued cadastral lot-number change certificate.
+ * No verification of C1-2 as a specific sublot is asserted.
+ */
+export function getUiwangC1UseFindings(): SiteReviewResult["ruleFindings"] {
+  return (["공동주택", "오피스텔"] as const).map((use) => ({
+    id: "uiwang-c1-block-" + (use === "공동주택" ? "apartment" : "officetel"),
+    topic: "허용용도",
+    outcome: "not-applicable",
+    value: use,
+    unit: null,
+    sourceTitle: "초평동 630-1 C1 블록 " + use + " 허용용도 제한 (지도상 위치 사용자 확인)",
+    article: "의왕초평 지구단위계획 시행지침 제Ⅱ편 제4장 제2조 표Ⅱ-4-2",
+    sourceUrl: UIWANG_6301.districtGuidelineUrl,
+    effectiveDate: "2026-06-30",
+    conditions: [
+      "위치 근거: 사용자가 2026 지구단위계획 결정도와 현행 토지 지도 대조하여 C1 블록에 속한다고 확인",
+      "법규 근거: C1/C2 상업시설용지 표Ⅱ-4-2 " + (use === "공동주택" ? "공동주택 허용용도 미열거" : "업무시설 중 오피스텔 명시 제외"),
+      "C1-2 세부획지 및 2023 예정지번 401-2→현재 630-1 지번이력은 미확정",
+      "행정 인허가를 위한 법정 지적도 및 변경결정도 재확인 대상",
+    ],
+    verified: true,
+  }));
 }
