@@ -131,7 +131,7 @@ export function buildLegalReviewReport(
       "건폐율 70% 이하 · 용적률 450% 이하 · 7층 이하",
       "2026 의왕초평 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2",
       "C1-2에 한정한 규정. 현재 630-1의 획지 매칭 미검증이므로 해당 필지 상한으로 자동 적용 금지.",
-      "source", UIWANG_6301.districtGuidelineUrl);
+      "conditional", UIWANG_6301.districtGuidelineUrl);
     add("uiwang-zone-appendix-6", "건축·도시계획", "준주거지역 일반 건축제한 · 별표 6",
       "공동주택·오피스텔을 준주거지역 일반 금지목록에 열거하지 않음",
       "의왕시 도시계획 조례 제32조제6호 별표 6 (2024.12.30)",
