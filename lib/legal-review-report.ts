@@ -118,24 +118,24 @@ export function buildLegalReviewReport(
 
   if (isUiwangChopyeong6301(place)) {
     add("uiwang-c1-2", "대상지 현황", "LH 공급자료 확인 획지",
-      "초평동 630-1 = C1-2 (상업시설용지)",
-      "2023 LH 지번별 공급공고 + 분양 팸플릿 p.4 (1,498㎡, 72.8028억원 동일)",
-      "VWorld의 준주거지역은 법적 용도지역, C1-2 상업시설용지는 획지별 건축허용용도입니다. 2026 결정도에 C1 유지.",
-      "source", UIWANG_6301.historicalPamphletUrl);
-    add("uiwang-use-block", "건축·도시계획", "C1-2 공동주택·오피스텔",
-      "공동주택 허용용도 제외 · 주거용 오피스텔 명시 제외",
+      "초평동 630-1의 C1-2 해당 여부 미확인",
+      "2023 LH C1-2 예정지번 401-2와 현재 630-1 간 면적·가격 유사, 공식 지번 대조 미확보",
+      "준주거지역 및 지구단위계획구역은 확인. 401-2→630-1 지번 변경 이력 또는 공식 획지·지적도 중첩 확인 전 C1-2로 단정 불가.",
+      "conditional", UIWANG_6301.historicalPamphletUrl);
+    add("uiwang-use-block", "건축·도시계획", "C1-2에 한정한 공동주택·오피스텔 제한",
+      "C1-2일 경우 공동주택 미열거 · 오피스텔 제외; 630-1 해당 여부 미확정",
       "2026 의왕초평 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2, PDF p.38",
-      "LH 신혼형·청년형 매입약정 주거시설 신축 부적합. 향후 지구단위계획 적법 변경이 확인되기 전까지 추천 금지.",
-      "source", UIWANG_6301.districtGuidelineUrl);
-    add("uiwang-c1-limits", "건축·도시계획", "C1 상업시설용지 건축상한",
+      "공고상 C1-2 옛 예정지번은 401-2; 현재 630-1 해당 여부 확인 전 주거 불가 확정 판정 금지.",
+      "conditional", UIWANG_6301.districtGuidelineUrl);
+    add("uiwang-c1-limits", "건축·도시계획", "C1-2 후보 획지 건축상한",
       "건폐율 70% 이하 · 용적률 450% 이하 · 7층 이하",
       "2026 의왕초평 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2",
-      "상업용 허용용도 기준. 450%를 공동주택·오피스텔 주거개발 한도로 적용하지 말 것.",
-      "source", UIWANG_6301.districtGuidelineUrl);
+      "C1-2에 한정한 규정. 현재 630-1의 획지 매칭 미검증이므로 해당 필지 상한으로 자동 적용 금지.",
+      "conditional", UIWANG_6301.districtGuidelineUrl);
     add("uiwang-zone-appendix-6", "건축·도시계획", "준주거지역 일반 건축제한 · 별표 6",
       "공동주택·오피스텔을 준주거지역 일반 금지목록에 열거하지 않음",
       "의왕시 도시계획 조례 제32조제6호 별표 6 (2024.12.30)",
-      "준주거 일반 규정만의 결과이며, C1-2 시행지침 표Ⅱ-4-2가 해당 주거용도를 별도로 금지함.",
+      "준주거 일반규정은 확인되나 지구단위계획상 현재 630-1의 획지별 허용용도는 미확정.",
       "source", UIWANG_6301.cityZoningAnnex.appendixOriginalUrl);
     add("uiwang-zone-sales", "건축·도시계획", "판매시설 3,000㎡ 이상 · 별표 6",
       "판매시설 3,000㎡ 이상은 폭 15m 이상 도로에 15m 이상 접한 경우 예외",
@@ -145,37 +145,37 @@ export function buildLegalReviewReport(
     add("uiwang-parking-appendix-5", "LH·주차 검토", "부설주차장 · 별표 5 일반",
       "공동주택·오피스텔: 전용 85㎡ 이하 합계/85㎡, 최소 세대·호실당 1대",
       "의왕시 주차장설치 및 관리 조례 제16조제1항 별표 5 제5호 (2026.5.7)",
-      "46㎡ 신혼형·25㎡ 청년형은 일반 원칙으로 각각 세대·호실당 최소 1대. 다만 C1-2에서 두 용도의 신축은 불허.",
+      "46㎡ 신혼형·25㎡ 청년형은 일반 원칙으로 각 세대·호실당 최소 1대. 현행 획지에서 주거 허용되는지 별도 확인.",
       "source", UIWANG_6301.cityParkingAnnex.appendixOriginalUrl);
     add("uiwang-parking-03-appendix-5", "LH·주차 검토", "매입약정주택 주차 0.3대 · 별표 5",
       "공공주택사업자 매도약정 + 전용면적 30㎡ 미만 = 0.3대/세대 적용 가능",
       "의왕시 주차장설치 및 관리 조례 별표 5 제5호 (2026.5.7) · 공특법 시행령 제37조제4항",
-      "LH 경기남부 2026 3차 원문 p.6은 청년형 역·대학교 500m, 고령자 입지제한 없음. p.8·10은 0.3대 적용 시 기계식주차 불허. C1-2 금지용도를 완화하지 못함.",
+      "LH 경기남부 2026 3차 원문 p.6은 청년형 역·대학교 500m, 고령자 입지제한 없음. p.8·10은 0.3대 적용 시 기계식주차 불허. 획지별 주거 허용용도와 별개 요건.",
       "conditional", UIWANG_6301.cityParkingAnnex.appendixOriginalUrl);
     add("uiwang-parking-machine-city", "LH·주차 검토", "기계식주차 의왕시 한도",
       "법정주차대수의 최대 30%, 총 주차대수 20대 이하 설치 불가",
       "의왕시 주차장설치 및 관리 조례 제20조제1항 (2026.5.7)",
       "LH 경기남부 3차 공고 p.8의 최대 50% 안내보다 의왕시의 30% 제한을 우선 충족. LH 0.3대 특례 적용 시에는 기계식 금지.",
       "source", UIWANG_6301.cityParkingAnnex.ordinanceUrl);
-    add("uiwang-commercial-parking", "LH·주차 검토", "C1-2 허용 상업용도 주차 기준",
+    add("uiwang-commercial-parking", "LH·주차 검토", "상업시설 주차 기준(허용용도 별도)",
       "판매·일반업무시설: 시설면적 100㎡당 1대, 제1·2종 근생: 120㎡당 1대",
       "의왕시 주차장설치 및 관리 조례 별표 5 제2·3호 (2026.5.7)",
-      "세부 시설분류와 복합용도 주차 합산은 실제 설계안에 따라 재검토. LH 주거사업과는 별개인 일반 상업 개발기준.",
+      "일반 상업시설 분류에 따른 주차 별표 참고용. 현재 지번의 획지별 허용 용도는 추가확인.",
       "source", UIWANG_6301.cityParkingAnnex.appendixOriginalUrl);
   }
 
   const useArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건축제한", "용도지역 안에서의 건축제한"]);
   add("use", "건축·도시계획", "건축행위 가능 여부",
     isUiwangChopyeong6301(place)
-      ? "C1-2 공동주택·오피스텔 불허(상업용지 허용목록에 없음)"
+      ? "현행 630-1 획지 미확인 · 공동주택·오피스텔 허용여부 미확정"
       : "공동주택 / 오피스텔(업무시설) 용도별 허용여부 별도 판정",
     isUiwangChopyeong6301(place)
       ? "의왕초평 2026 지구단위계획 시행지침 제Ⅱ편 제4장 표Ⅱ-4-2"
       : citation(useArticle, cityName + " · 건축제한 조항 및 별표"),
     isUiwangChopyeong6301(place)
-      ? "준주거지역의 의왕시 도시계획조례 별표6 일반 허용 가능성과 C1-2 획지의 주거 금지는 다른 제한이며, C1-2 우선."
+      ? "2023 LH 공고 C1-2의 예정지번 401-2와 현행 630-1의 대응관계 공식 검증 필요. C1-2 조건부 규정을 현행 필지 확정값으로 취급 금지."
       : "조례 본문만으로 적합 확정 불가 · 용도별 별표, 다른 법률에 따른 제한 확인",
-    isUiwangChopyeong6301(place) ? "source" : useArticle ? "conditional" : "unknown",
+    isUiwangChopyeong6301(place) ? "conditional" : useArticle ? "conditional" : "unknown",
     isUiwangChopyeong6301(place) ? UIWANG_6301.districtGuidelineUrl : useArticle?.sourceUrl || cityOrdinance,
     isUiwangChopyeong6301(place) ? null : useArticle?.excerpt || null);
 

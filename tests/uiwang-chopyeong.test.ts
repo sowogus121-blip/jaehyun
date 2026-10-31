@@ -27,13 +27,16 @@ describe("Uiwang Chopyeong 630-1 source evidence",()=>{
     expect(UIWANG_6301.districtUses.commercial.apartmentAllowed).toBe(false);
     expect(UIWANG_6301.districtUses.commercial.maxFar).toBe(450);
     expect(UIWANG_6301.districtUses.commercial.maxFloors).toBe(7);
-    expect(UIWANG_6301.verifiedDistrictLot).toBe("C1-2");
-    expect(UIWANG_6301.verifiedBlock).toBe("C1");
+    expect(UIWANG_6301.verifiedDistrictLot).toBeNull();
+    expect(UIWANG_6301.verifiedBlock).toBeNull();
+    expect(UIWANG_6301.candidateDistrictLot).toBe("C1-2");
+    expect(UIWANG_6301.historicalPlannedParcel).toBe("401-2");
+    expect(UIWANG_6301.cadastralMappingVerified).toBe(false);
     expect(UIWANG_6301.historicalMatchingEvidence).toContain("7,280,280");
-    expect(findSitePreset("의왕시 초평동 630-1")?.farAssumption).toBe(450);
+    expect(findSitePreset("의왕시 초평동 630-1")?.farAssumption).toBe(0);
     expect(findSitePreset("의왕시 초평동 630-1")?.warnings.join(" ")).toContain("획지");
   });
-  it("labels apartment and youth officetel infeasible when exact C1-2 source findings are loaded",()=>{
+  it("an explicit matched confirmed C1-2 restriction would make housing ineligible, but historical match must not manufacture these findings",()=>{
     const findings=["공동주택","오피스텔"].map((use)=>({
       id:use, topic:"허용용도", outcome:"not-applicable" as const, value:use, unit:null,
       sourceTitle:"초평동 C1-2 "+use,article:"표Ⅱ-4-2",sourceUrl:UIWANG_6301.districtGuidelineUrl,
@@ -74,6 +77,10 @@ describe("Uiwang Chopyeong 630-1 source evidence",()=>{
     const report=buildLegalReviewReport(input,null);
     const byId=(id:string)=>report.rows.find(row=>row.id===id);
     expect(byId("uiwang-zone-appendix-6")?.detail).toContain("일반 금지목록");
+    expect(byId("uiwang-c1-2")?.status).toBe("conditional");
+    expect(byId("uiwang-use-block")?.status).toBe("conditional");
+    expect(byId("use")?.status).toBe("conditional");
+    expect(byId("use")?.detail).toContain("미확정");
     expect(byId("uiwang-parking-appendix-5")?.detail).toContain("최소 세대·호실당 1대");
     expect(byId("uiwang-parking-03-appendix-5")?.detail).toContain("0.3대");
     expect(byId("uiwang-parking-machine-city")?.detail).toContain("30%");
