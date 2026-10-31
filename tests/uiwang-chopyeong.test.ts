@@ -3,6 +3,7 @@ import { UIWANG_6301,isUiwangChopyeong6301 } from "../lib/uiwang-chopyeong-6301"
 import { findSitePreset } from "../lib/site-presets";
 import { deriveCalculationContext } from "../lib/regulatory-assessment";
 import { calculateAll, DEFAULT_INPUT } from "../lib/calculator";
+import { buildLegalReviewReport } from "../lib/legal-review-report";
 import type { SiteReviewResult } from "../lib/types";
 describe("Uiwang Chopyeong 630-1 source evidence",()=>{
   it("recognizes exact parcel only",()=>{
@@ -48,6 +49,35 @@ describe("Uiwang Chopyeong 630-1 source evidence",()=>{
     const results=calculateAll(input,context);
     expect(results.every(r=>r.eligibility==="ineligible")).toBe(true);
     expect(results.every(r=>!r.recommendable)).toBe(true);
+  });
+  it("records source-verified city annex 6 distinct from C1-2 use prohibition",()=>{
+    expect(UIWANG_6301.cityZoningAnnex.apartmentProhibitedInGeneralZone).toBe(false);
+    expect(UIWANG_6301.cityZoningAnnex.officetelProhibitedInGeneralZone).toBe(false);
+    expect(UIWANG_6301.cityZoningAnnex.salesLargeAreaSqm).toBe(3000);
+    expect(UIWANG_6301.cityZoningAnnex.salesExceptionMinFrontageM).toBe(15);
+    expect(UIWANG_6301.districtUses.commercial.apartmentAllowed).toBe(false);
+    expect(UIWANG_6301.districtUses.commercial.officetelAllowed).toBe(false);
+  });
+  it("reads the city 2026 parking annex: 1 standard per dwelling, 0.3 signed-LH small home only",()=>{
+    const parking=UIWANG_6301.cityParkingAnnex;
+    expect(parking.apartmentOfficetelStandardSqmPerSpace).toBe(85);
+    expect(parking.apartmentOfficetelMinPerHome).toBe(1);
+    expect(parking.purchaseAgreementMaxExclusiveAreaSqm).toBe(30);
+    expect(parking.purchaseAgreementParkingPerSmallHome).toBe(0.3);
+    expect(parking.commercialParkingSqmPerSpace).toBe(100);
+    expect(parking.neighborhoodParkingSqmPerSpace).toBe(120);
+    expect(parking.machineMaxPercentCity).toBe(30);
+    expect(parking.machineNotAllowedWhenTotalSpacesAtMost).toBe(20);
+  });
+  it("includes actual ordinance appendix results rather than generic unverified flags in report",()=>{
+    const input={...DEFAULT_INPUT,address:UIWANG_6301.address,siteArea:1498};
+    const report=buildLegalReviewReport(input,null);
+    const byId=(id:string)=>report.rows.find(row=>row.id===id);
+    expect(byId("uiwang-zone-appendix-6")?.detail).toContain("일반 금지목록");
+    expect(byId("uiwang-parking-appendix-5")?.detail).toContain("최소 세대·호실당 1대");
+    expect(byId("uiwang-parking-03-appendix-5")?.detail).toContain("0.3대");
+    expect(byId("uiwang-parking-machine-city")?.detail).toContain("30%");
+    expect(byId("uiwang-commercial-parking")?.sourceUrl).toBe(UIWANG_6301.cityParkingAnnex.appendixOriginalUrl);
   });
   it("never uses expired Gyeonggi South 3rd notice as current",()=>{
     expect(UIWANG_6301.lhPurchaseThird.closesAt).toBe("2026.10.15");
