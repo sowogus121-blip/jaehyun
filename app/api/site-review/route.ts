@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findSitePreset } from "../../../lib/site-presets";
+import { isUiwangChopyeong6301, UIWANG_6301 } from "../../../lib/uiwang-chopyeong-6301";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
@@ -428,7 +429,8 @@ export async function POST(request: NextRequest) {
         getParcelInfo(location.x, location.y, vworldKey, request.nextUrl.origin),
       ]);
       parcel = vworldParcel;
-      landUse = [...landUse, ...vworldLandUse.items].filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+      // The live zoning layer takes precedence over a cached preset; never mix historically conflicting zone names.
+      landUse = vworldLandUse.items.length ? vworldLandUse.items : landUse;
       if (vworldLandUse.errors.length) errors.push(`VWorld 용도지역 일부 조회 실패: ${vworldLandUse.errors.join(" / ")}`);
       if (vworldLandUse.items.length === 0 && !preset) errors.push("VWorld 좌표는 확인했지만 해당 위치의 용도지역 응답이 없습니다.");
     } catch (error) {
@@ -603,9 +605,57 @@ export async function POST(request: NextRequest) {
     ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   }
   const webSearch = await webSearchPromise;
-  const officialDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
+  const isUiwang = isUiwangChopyeong6301(address);
+  const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
+  // Replace an irrelevant old local-government search hit with the exact 2026
+  // official LH district guideline already examined from the source PDF.
+  // Source-text verification is NOT parcel-to-block verification.
+  const officialDocuments = isUiwang ? {
+    ...discoveredDocuments,
+    documents: [
+      {
+        kind: "district-plan" as const,
+        title: UIWANG_6301.districtGuidelineTitle,
+        sourceUrl: UIWANG_6301.districtGuidelineUrl,
+        landingPage: UIWANG_6301.landSupply2026Url,
+        status: "analyzed" as const,
+        format: "pdf" as const,
+        textLength: 74857,
+        pageCount: 113,
+        preview: "p.38 표Ⅱ-4-2: C1/C2 상업시설용지 건폐율 70% 이하, 용적률 450% 이하, 7층; 업무시설 중 오피스텔 제외, 공동주택 허용용도 미열거. 630-1과 해당 블록의 공간 일치는 별도 확인.",
+        candidates: [
+          {topic: "상업시설용지 C1/C2 용도 제한", quote: "제Ⅱ편 제4장 제2조 표Ⅱ-4-2 · 오피스텔 제외, 공동주택 허용용도 미열거", value: null, unit: null, verified: false as const},
+          {topic: "상업시설용지 C1/C2 용적률", quote: "표Ⅱ-4-2 C1/C2 건폐율 70%, 용적률 450%, 7층", value: 450, unit: "%", verified: false as const},
+        ],
+        warnings: ["원문은 검증했으나 초평동 630-1이 현행 C1/C2 획지에 속한다는 지형도면 대조 전: 수치와 허용용도 자동 적용 금지"],
+        siteMatchVerified: false as const,
+        applicable: false as const,
+      },
+      ...discoveredDocuments.documents.filter(item => item.kind !== "district-plan"),
+    ],
+  } : discoveredDocuments;
   const lhNoticeResult = await lhNoticePromise;
-  const lhNotice = lhNoticeResult.notice;
+  // Historical, city-matched notice is only a source/reference when the latest
+  // live LH board does not return a candidate. Its October deadline has passed.
+  const lhNotice = lhNoticeResult.notice ?? (isUiwang ? {
+    id: "1716",
+    title: UIWANG_6301.lhPurchaseThird.title + " (접수 종료 · 기준 참고용)",
+    url: UIWANG_6301.lhPurchaseThird.officialUrl,
+    pdfUrl: UIWANG_6301.lhPurchaseThird.pdfUrl,
+    guideUrl: null,
+    publishedAt: UIWANG_6301.lhPurchaseThird.publishedAt,
+    closesAt: UIWANG_6301.lhPurchaseThird.closesAt,
+    matchedDistrict: "의왕시",
+    official: true as const,
+    isCurrent: false,
+    rules: null,
+    textAnalysisStatus: "not-extracted" as const,
+    warnings: [
+      "2026년 경기남부 3차 공고는 2026.10.15 접수 마감되어 신규 신청에 적용할 수 없습니다.",
+      "원문 p.1 당시 의왕시 규제지역 최소 10호, 비규제 30호; 신규 공고 및 지정 현황의 별도 확인 필요.",
+      "원문 p.4 공동주택·주거용 오피스텔 매입대상 유형이라도 지구단위계획이 금지한 건축물은 허용되지 않습니다.",
+    ],
+  } : null);
   if (lhNoticeResult.error) errors.push("LH 지역별 공식 공고 조사: " + lhNoticeResult.error);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
@@ -635,6 +685,7 @@ export async function POST(request: NextRequest) {
     errors,
     unresolved: [
       ordinances.length ? "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요" : "관할 지자체 건축·주차장 조례 원문",
+      ...(isUiwang ? UIWANG_6301.warnings : []),
       ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
       officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
         ? "지구단위계획 관련 문서를 추출했지만 해당 필지·획지별 결정도서와 변경고시 검증 필요"
