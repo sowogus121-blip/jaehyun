@@ -1,3 +1,4 @@
+import { UIWANG_6301 } from "./uiwang-chopyeong-6301";
 export interface SitePreset {
   id: string;
   aliases: string[];
@@ -24,6 +25,32 @@ export interface SitePreset {
 }
 
 export const SITE_PRESETS: SitePreset[] = [
+  {
+    id: "uiwang-chopyeong-630-1",
+    aliases: ["초평동630-1", "초평동 630-1", "의왕시 초평동 630-1", "경기도 의왕시 초평동 630-1"],
+    address: UIWANG_6301.address,
+    province: "경기도",
+    district: "의왕시",
+    neighborhood: "초평동",
+    parcel: "630-1",
+    siteArea: UIWANG_6301.historicalArea,
+    landCategory: "대",
+    zone: UIWANG_6301.currentVworldZone,
+    districtPlan: true,
+    publicPricePerSqm: 0,
+    publicPriceBase: "공식 개별공시지가 미조회(총액 39.1억원은 사용자 제공)",
+    roads: ["28m 도로 접합(사용자 제공)", "12m 도로 접합(사용자 제공)"],
+    planningRoadWidth: 0,
+    restrictions: ["의왕초평 공급촉진지구", "지구단위계획구역", "C1/C2 상업시설용지의 주거·오피스텔 제한 여부와 획지 일치 대조 필요"],
+    landscape: "국토교통부 고시 제2026-308호 (2026-06-30) 및 지구단위계획 시행지침(2026-10 LH 첨부)",
+    buildingCoverageRatioAssumption: 0,
+    farAssumption: 0,
+    source: "2026-10-31 VWorld 준주거·지구단위 레이어 + LH 2023 일반상업용지 630-1 공급공고(면적 1,498㎡) + 사용자 토지 현황",
+    confirmedAt: "2026-10-31",
+    warnings: [...UIWANG_6301.warnings,
+      "토지 소유법인, 희망가격 81.5억원(약 1,799만원/평) 및 공시가격 39.1억원은 사용자 제시사항으로 등기·토지대장·공시지가 원본 검증 전.",
+    ],
+  },
   {
     id: "paju-bongam-1343-2",
     aliases: [
