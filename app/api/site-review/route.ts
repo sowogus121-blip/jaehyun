@@ -681,6 +681,11 @@ export async function POST(request: NextRequest) {
     nationalArticleCandidates,
     // No verified parcel-specific prohibition until historic 401-2 is mapped to 630-1.
     ruleFindings: [],
+    webSearch,
+    officialDocuments,
+    lhNotice,
+    missing,
+    errors,
     unresolved: [
       ordinances.length ? "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요" : "관할 지자체 건축·주차장 조례 원문",
       ...(isUiwang ? UIWANG_6301.warnings : []),
