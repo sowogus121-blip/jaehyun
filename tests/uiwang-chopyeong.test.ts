@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import { UIWANG_6301,isUiwangChopyeong6301 } from "../lib/uiwang-chopyeong-6301";
+import { UIWANG_6301,isUiwangChopyeong6301,getUiwangC1UseFindings } from "../lib/uiwang-chopyeong-6301";
 import { findSitePreset } from "../lib/site-presets";
 import { deriveCalculationContext } from "../lib/regulatory-assessment";
 import { calculateAll, DEFAULT_INPUT } from "../lib/calculator";
@@ -22,26 +22,27 @@ describe("Uiwang Chopyeong 630-1 source evidence",()=>{
     expect(UIWANG_6301.supply2023Category).toBe("일반상업용지");
     expect(UIWANG_6301.pnu).toBe("4143011100106300001");
   });
-  it("maps exact parcel to C1-2 and prevents a generic 500% pure residential assumption",()=>{
+  it("records user-map-confirmed C1 block, without asserting an unverified C1-2 sublot",()=>{
     expect(UIWANG_6301.districtUses.commercial.officetelAllowed).toBe(false);
     expect(UIWANG_6301.districtUses.commercial.apartmentAllowed).toBe(false);
     expect(UIWANG_6301.districtUses.commercial.maxFar).toBe(450);
     expect(UIWANG_6301.districtUses.commercial.maxFloors).toBe(7);
     expect(UIWANG_6301.verifiedDistrictLot).toBeNull();
-    expect(UIWANG_6301.verifiedBlock).toBeNull();
+    expect(UIWANG_6301.verifiedBlock).toBe("C1");
+    expect(UIWANG_6301.verifiedBlockEvidenceLevel).toBe("user-map-confirmed");
     expect(UIWANG_6301.candidateDistrictLot).toBe("C1-2");
     expect(UIWANG_6301.historicalPlannedParcel).toBe("401-2");
     expect(UIWANG_6301.cadastralMappingVerified).toBe(false);
     expect(UIWANG_6301.historicalMatchingEvidence).toContain("7,280,280");
-    expect(findSitePreset("의왕시 초평동 630-1")?.farAssumption).toBe(0);
+    expect(findSitePreset("의왕시 초평동 630-1")?.farAssumption).toBe(450);
+    expect(findSitePreset("의왕시 초평동 630-1")?.buildingCoverageRatioAssumption).toBe(70);
     expect(findSitePreset("의왕시 초평동 630-1")?.warnings.join(" ")).toContain("획지");
   });
-  it("an explicit matched confirmed C1-2 restriction would make housing ineligible, but historical match must not manufacture these findings",()=>{
-    const findings=["공동주택","오피스텔"].map((use)=>({
-      id:use, topic:"허용용도", outcome:"not-applicable" as const, value:use, unit:null,
-      sourceTitle:"초평동 C1-2 "+use,article:"표Ⅱ-4-2",sourceUrl:UIWANG_6301.districtGuidelineUrl,
-      effectiveDate:"2026-06-30",conditions:[use+" 불허"],verified:true,
-    }));
+  it("blocks LH apartment and officetel alternatives for user map-confirmed C1, without claiming C1-2",()=>{
+    const findings=getUiwangC1UseFindings();
+    expect(findings).toHaveLength(2);
+    expect(findings.every(item => item.conditions.join(" ").includes("사용자가"))).toBe(true);
+    expect(findings.every(item => !item.conditions.join(" ").includes("C1-2로 확정"))).toBe(true);
     const site={ruleFindings:findings} as unknown as SiteReviewResult;
     const input={...DEFAULT_INPUT,address:"경기도 의왕시 초평동 630-1",
       siteArea:1498,buildingCoverageRatio:70,baseFar:450,maxFloors:7,maxHeight:26,
@@ -52,6 +53,8 @@ describe("Uiwang Chopyeong 630-1 source evidence",()=>{
     const results=calculateAll(input,context);
     expect(results.every(r=>r.eligibility==="ineligible")).toBe(true);
     expect(results.every(r=>!r.recommendable)).toBe(true);
+    expect(results.every(r=>r.unitCount===0)).toBe(true);
+    expect(results.every(r=>r.unitCountByFar===0 && r.unitCountByEnvelope===0)).toBe(true);
   });
   it("records source-verified city annex 6 distinct from C1-2 use prohibition",()=>{
     expect(UIWANG_6301.cityZoningAnnex.apartmentProhibitedInGeneralZone).toBe(false);
@@ -77,10 +80,12 @@ describe("Uiwang Chopyeong 630-1 source evidence",()=>{
     const report=buildLegalReviewReport(input,null);
     const byId=(id:string)=>report.rows.find(row=>row.id===id);
     expect(byId("uiwang-zone-appendix-6")?.detail).toContain("일반 금지목록");
-    expect(byId("uiwang-c1-2")?.status).toBe("conditional");
-    expect(byId("uiwang-use-block")?.status).toBe("conditional");
-    expect(byId("use")?.status).toBe("conditional");
-    expect(byId("use")?.detail).toContain("미확정");
+    expect(byId("uiwang-c1-2")?.status).toBe("user");
+    expect(byId("uiwang-c1-2")?.detail).toContain("C1 상업시설용지");
+    expect(byId("uiwang-use-block")?.status).toBe("user");
+    expect(byId("uiwang-use-block")?.detail).toContain("오피스텔");
+    expect(byId("use")?.status).toBe("user");
+    expect(byId("use")?.detail).toContain("C1 상업시설용지");
     expect(byId("uiwang-parking-appendix-5")?.detail).toContain("최소 세대·호실당 1대");
     expect(byId("uiwang-parking-03-appendix-5")?.detail).toContain("0.3대");
     expect(byId("uiwang-parking-machine-city")?.detail).toContain("30%");

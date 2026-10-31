@@ -290,9 +290,12 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const residentialPortion = input.commercialMixShare>0 ? Math.max(0,1-input.commercialMixShare/100) : 1;
   const farLimitArea = input.siteArea * appliedFar / 100 * residentialPortion;
   const envelopeArea = plannedBuildingArea * legalMaxFloors * residentialPortion;
-  const unitCountByFar = solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit);
-  const unitCountByEnvelope = solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit);
-  const unitCount = solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit);
+  // An expressly prohibited residential use has ZERO feasible units.
+  // Do not export hypothetical unit counts as LH-feasible housing capacity.
+  const residentialUseProhibited = context.usePermissions[definition.useType] === "ineligible";
+  const unitCountByFar = residentialUseProhibited ? 0 : solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit);
+  const unitCountByEnvelope = residentialUseProhibited ? 0 : solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit);
+  const unitCount = residentialUseProhibited ? 0 : solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit);
   const facilities = calculateFacilities(definition.useType, unitCount, context);
   const amenityArea = facilities.reduce((sum, item) => sum + item.area, 0);
   const equipmentArea = unitCount > 0 ? Math.max(35, unitCount * 0.35) : 0;
@@ -317,7 +320,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
 
   const usePermission = context.usePermissions[definition.useType];
   const lhEligibility = context.lhPurchaseEligibility[definition.useType];
-  if (usePermission === "ineligible") blockingReasons.push(`${definition.useType === "apartment" ? "공동주택" : "오피스텔"} 허용용도 부적합`);
+  if (usePermission === "ineligible") { blockingReasons.push(`${definition.useType === "apartment" ? "공동주택" : "오피스텔"} 허용용도 부적합`); warnings.push("건축 허용용도에 해당하지 않아 LH 주거 규모 및 세대수는 산정하지 않았습니다."); }
   else if (usePermission === "unknown") conditionalReasons.push("대상지 건축 허용용도 미확인");
   else if (usePermission === "conditional") conditionalReasons.push("건축 허용용도 조건부");
   if (lhEligibility === "ineligible") blockingReasons.push("LH 사업·매입 대상 부적합");
