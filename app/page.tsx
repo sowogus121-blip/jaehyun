@@ -825,22 +825,20 @@ export default function Home() {
             <div className="site-decision-title"><div><span>LH 직접 첨부 원문 · 지구단위계획 제Ⅱ편 제4장</span>
               <h3>초평동 630-1 · 주거용도 제한 우선 확인</h3>
               <p>VWorld의 준주거지역 표시는 상위 용도지역이고, 공급촉진지구의 획지별 허용용도는 별도입니다.</p></div>
-              <span className="site-pill problem">LH 매입약정 주거용도 적합성 미확정</span>
+              <span className="site-pill problem">C1-2 · LH 주거 신축 불가</span>
             </div>
             <div className="site-decision-grid">
               <div className="site-decision-tile"><span>VWorld 현행 용도지역</span><strong>준주거지역</strong><small>LT_C_UQ111 · 2026.10.31 조회</small></div>
-              <div className="site-decision-tile"><span>C1·C2 상업시설용지 기준</span><strong>70% / 450%</strong><small>최고 7층 · 시행지침 p.38 표Ⅱ-4-2</small></div>
-              <div className="site-decision-tile"><span>C1·C2 주거 허용용도</span><strong>공동주택 미열거</strong><small>오피스텔 명시 제외 · 해당 획지라면 건축제한</small></div>
+              <div className="site-decision-tile"><span>해당 획지 C1-2 기준</span><strong>70% / 450%</strong><small>최고 7층 · 시행지침 p.38 표Ⅱ-4-2</small></div>
+              <div className="site-decision-tile"><span>C1-2 주거 허용용도</span><strong>공동주택 불허</strong><small>오피스텔 명시 제외 · 2023 LH 지번별·획지별 자료 일치</small></div>
               <div className="site-decision-tile"><span>LH 경기남부 3차</span><strong>2026.10.15 마감</strong><small>당시 의왕시 규제지역 최소 10호 · 신규 접수 종료</small></div>
             </div>
-            <p className="uiwang-evidence-note"><b>핵심:</b> LH의 2023년 동일 필지 공급용도는 일반상업용지입니다.
-              다만 630-1이 현행 도면의 C1 또는 C2 획지와 일치하는지는
-              <a href={UIWANG_6301.controlPlanUrl} target="_blank" rel="noreferrer"> 2026 건축물 결정도</a>를 중첩하여 확정해야 합니다.
-              해당 획지로 확인되면 공동주택·청년형 오피스텔을 법정 가능안으로 제시할 수 없습니다.</p>
+            <p className="uiwang-evidence-note"><b>재확인 완료:</b> LH 2023년 동일 공급공고에서 초평동 630-1(1,498㎡, 72.8028억원)과 C1-2 획지(1,498㎡, 72.8028억원)가 정확히 일치합니다. 2026년 <a href={UIWANG_6301.controlPlanUrl} target="_blank" rel="noreferrer">지구단위계획 결정도</a>도 C1 블록을 표시합니다. <b>이 필지의 공동주택·오피스텔은 해당 상업시설용지의 허용용도가 아니므로 LH 주거 매입약정 규모를 사업 가능 수량으로 산정해서는 안 됩니다.</b></p>
             <div className="lh-latest-links">
               <a href={UIWANG_6301.districtGuidelineUrl} target="_blank" rel="noreferrer">지구단위계획 시행지침 p.37~40 원문</a>
               <a href={UIWANG_6301.ministryNoticeUrl} target="_blank" rel="noreferrer">2026-308호 고시</a>
-              <a href={UIWANG_6301.supply2023Url} target="_blank" rel="noreferrer">2023 LH 630-1 공급근거</a>
+              <a href={UIWANG_6301.supply2023Url} target="_blank" rel="noreferrer">2023 LH 지번별 공급공고</a>
+              <a href={UIWANG_6301.historicalPamphletUrl} target="_blank" rel="noreferrer">2023 LH C1-2 팸플릿(4p)</a>
               <a href={UIWANG_6301.lhPurchaseThird.officialUrl} target="_blank" rel="noreferrer">경기남부 3차 매입공고</a>
             </div>
           </section>}
@@ -943,9 +941,9 @@ export default function Home() {
               const mechanicalRestriction = isApartment && result.definition.parkingMode === "mechanical" && Boolean(lhRules);
               const knownParking = isApartment ? readiness.hasApartmentParking : readiness.hasOfficetelParking;
               return <div key={result.definition.id} className="site-decision-tile">
-                <div><span>{result.definition.id} · {result.definition.shortName}</span><span className={"site-pill " + (mechanicalRestriction ? "problem" : "tentative")}>{mechanicalRestriction ? "LH 기준상 기계식 대상 제외" : "조건부 · 추가 확인 필요"}</span></div>
-                <strong>{readiness.canEstimateUnits ? result.unitCount + (isApartment ? "세대" : "호실") : "규모 미산정"}</strong>
-                <p>{areaOk === true ? "LH 전용면적 기준 충족" : areaOk === false ? "LH 전용면적 기준 미달" : "LH 공급유형 요건 미확인"}</p>
+                <div><span>{result.definition.id} · {result.definition.shortName}</span><span className={"site-pill " + (result.eligibility === "ineligible" || mechanicalRestriction ? "problem" : "tentative")}>{result.eligibility === "ineligible" ? "C1-2 주거용도 불허" : mechanicalRestriction ? "LH 기준상 기계식 대상 제외" : "조건부 · 추가 확인 필요"}</span></div>
+                <strong>{result.eligibility === "ineligible" ? "주거 신축 불가" : readiness.canEstimateUnits ? result.unitCount + (isApartment ? "세대" : "호실") : "규모 미산정"}</strong>
+                <p>{result.eligibility === "ineligible" ? "지구단위계획 허용용도에서 공동주택·오피스텔 제외" : areaOk === true ? "LH 전용면적 기준 충족" : areaOk === false ? "LH 전용면적 기준 미달" : "LH 공급유형 요건 미확인"}</p>
                 <small>{mechanicalRestriction ? "해당 LH 공고의 기계식 허용 용도는 주거용오피스텔·도시형생활주택" : knownParking ? "입력 주차계수 " + (isApartment ? input.apartmentParkingRatio : input.officetelParkingRatio) + "대 적용 · " + result.parking.finalCount + "대" : "주차대수 별도 검토 · 0대 판정 아님"}</small>
               </div>;
             })}</div>
@@ -986,13 +984,13 @@ export default function Home() {
                 <small>최고층수는 직접 가정하는 값이며 지구단위계획·일조·주차·LH 인수 조건을 확정하지 않아.</small>
               </div>
               <label>가정 층수 <input type="number" aria-label="예비 계획 층수" min="1" max="60" step="1" value={scenarioFloors} onChange={(e) => setScenarioFloors(Number(e.target.value) || 0)} />층</label>
-              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData} onClick={() => startPreliminaryScenario("base")}>기본안 4개 비교 <Icon name="chevron" size={15}/></button>
+              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData || isUiwangChopyeong6301(input.address)} onClick={() => startPreliminaryScenario("base")}>{isUiwangChopyeong6301(input.address) ? "주거용도 불허 · 규모검토 제외" : "기본안 4개 비교"} <Icon name="chevron" size={15}/></button>
             </div>
             {preliminaryLimits && <div className="far-compare-strip">
               <div><span>조례 일반 용적률</span><b>{preliminaryLimits.far}%</b><small>조문 일반기준 · 지구단위 검증 전</small></div>
               <div className="far-compare-arrow">→</div>
               <div><span>120% 완화 가정안</span><b>{exampleRelaxedFar}%</b><small>완화요건 미확인 · 승인값 아님</small></div>
-              <button type="button" className="button ghost" onClick={() => startPreliminaryScenario("example")} disabled={!reviewData}>완화 가정 비교</button>
+              <button type="button" className="button ghost" onClick={() => startPreliminaryScenario("example")} disabled={!reviewData || isUiwangChopyeong6301(input.address)}>완화 가정 비교</button>
             </div>}
             <div className="parking-inline-settings"><div><b>주차대수 바로 계산</b><small>현재 미확정 법정계수 대신 입력하는 계획 가정값이야. 입력 즉시 4개 대안이 갱신돼.</small></div>
               <label>공동주택 <input aria-label="공동주택 주차계수 빠른 입력" type="number" min="0" step="0.1" value={input.apartmentParkingRatio || ""} placeholder="대/세대" onChange={e => update("apartmentParkingRatio", Number(e.target.value))} /></label>
