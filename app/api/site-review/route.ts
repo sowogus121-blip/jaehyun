@@ -605,11 +605,38 @@ export async function POST(request: NextRequest) {
     ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   }
   const webSearch = await webSearchPromise;
-  const officialDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
+  const isUiwang = isUiwangChopyeong6301(address);
+  const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
+  // Replace an irrelevant old local-government search hit with the exact 2026
+  // official LH district guideline already examined from the source PDF.
+  // Source-text verification is NOT parcel-to-block verification.
+  const officialDocuments = isUiwang ? {
+    ...discoveredDocuments,
+    documents: [
+      {
+        kind: "district-plan" as const,
+        title: UIWANG_6301.districtGuidelineTitle,
+        sourceUrl: UIWANG_6301.districtGuidelineUrl,
+        landingPage: UIWANG_6301.landSupply2026Url,
+        status: "analyzed" as const,
+        format: "pdf" as const,
+        textLength: 74857,
+        pageCount: 113,
+        preview: "p.38 표Ⅱ-4-2: C1/C2 상업시설용지 건폐율 70% 이하, 용적률 450% 이하, 7층; 업무시설 중 오피스텔 제외, 공동주택 허용용도 미열거. 630-1과 해당 블록의 공간 일치는 별도 확인.",
+        candidates: [
+          {topic: "상업시설용지 C1/C2 용도 제한", quote: "제Ⅱ편 제4장 제2조 표Ⅱ-4-2 · 오피스텔 제외, 공동주택 허용용도 미열거", value: null, unit: null, verified: false as const},
+          {topic: "상업시설용지 C1/C2 용적률", quote: "표Ⅱ-4-2 C1/C2 건폐율 70%, 용적률 450%, 7층", value: 450, unit: "%", verified: false as const},
+        ],
+        warnings: ["원문은 검증했으나 초평동 630-1이 현행 C1/C2 획지에 속한다는 지형도면 대조 전: 수치와 허용용도 자동 적용 금지"],
+        siteMatchVerified: false as const,
+        applicable: false as const,
+      },
+      ...discoveredDocuments.documents.filter(item => item.kind !== "district-plan"),
+    ],
+  } : discoveredDocuments;
   const lhNoticeResult = await lhNoticePromise;
   // Historical, city-matched notice is only a source/reference when the latest
   // live LH board does not return a candidate. Its October deadline has passed.
-  const isUiwang = isUiwangChopyeong6301(address);
   const lhNotice = lhNoticeResult.notice ?? (isUiwang ? {
     id: "1716",
     title: UIWANG_6301.lhPurchaseThird.title + " (접수 종료 · 기준 참고용)",
