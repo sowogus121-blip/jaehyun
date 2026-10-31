@@ -4,6 +4,7 @@ import { screenParking03 } from "./lh-parking-screen";
 import { getLhParkingReview } from "./lh-parking-review";
 import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANCE_URL } from "./hanam-commercial-mix";
 import { ALTERNATIVES } from "./calculator";
+import { UIWANG_6301, isUiwangChopyeong6301 } from "./uiwang-chopyeong-6301";
 
 export type LegalRowStatus = "source" | "conditional" | "unknown" | "user";
 export interface LegalReviewRow {
@@ -114,6 +115,24 @@ export function buildLegalReviewReport(
   add("zone", "대상지 현황", "용도지역·지구", zone, "VWorld 토지이용정보 / 토지이용계획확인서",
     review?.mixedUseZones ? "혼합 용도지역 · 획지별 가중산정 및 면적 대조 필요" : "다른 용도지구·구역 중첩 제한 확인",
     landUse.length ? "source" : lookup?.zone ? "source" : "unknown");
+
+  if (isUiwangChopyeong6301(place)) {
+    add("uiwang-c1-2", "대상지 현황", "LH 공급자료 확인 획지",
+      "초평동 630-1 = C1-2 (상업시설용지)",
+      "2023 LH 지번별 공급공고 + 분양 팸플릿 p.4 (1,498㎡, 72.8028억원 동일)",
+      "VWorld의 준주거지역은 법적 용도지역, C1-2 상업시설용지는 획지별 건축허용용도입니다. 2026 결정도에 C1 유지.",
+      "source", UIWANG_6301.historicalPamphletUrl);
+    add("uiwang-use-block", "건축·도시계획", "C1-2 공동주택·오피스텔",
+      "공동주택 허용용도 제외 · 주거용 오피스텔 명시 제외",
+      "2026 의왕초평 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2, PDF p.38",
+      "LH 신혼형·청년형 매입약정 주거시설 신축 부적합. 향후 지구단위계획 적법 변경이 확인되기 전까지 추천 금지.",
+      "source", UIWANG_6301.districtGuidelineUrl);
+    add("uiwang-c1-limits", "건축·도시계획", "C1 상업시설용지 건축상한",
+      "건폐율 70% 이하 · 용적률 450% 이하 · 7층 이하",
+      "2026 의왕초평 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2",
+      "상업용 허용용도 기준. 450%를 공동주택·오피스텔 주거개발 한도로 적용하지 말 것.",
+      "source", UIWANG_6301.districtGuidelineUrl);
+  }
 
   const useArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건축제한", "용도지역 안에서의 건축제한"]);
   add("use", "건축·도시계획", "건축행위 가능 여부",
