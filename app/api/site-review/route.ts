@@ -529,10 +529,9 @@ export async function POST(request: NextRequest) {
 
   const zoneNames = [...new Set(landUse.filter((item) => item.category === "용도지역").map((item) => item.name))];
   const mixedUseZones = zoneNames.length > 1;
-  const planningStandards = isUiwangChopyeong6301(address)
-    ? { zone: "준주거지역 (C1-2 상업시설용지)", buildingCoverageRatio: 70, far: 450,
-      source: "2023 LH 지번 630-1=C1-2 공급공고·팸플릿 + 2026 지구단위계획 시행지침 제Ⅱ편 제4장 표Ⅱ-4-2 (상업용도 전용; 주거 개발 불허)" }
-    : mixedUseZones ? null : findZoningStandard(zoneNames);
+  // Do not apply C1-2 rules to the current cadastral parcel without an
+  // official historical-to-current lot mapping. 2023 C1-2 was planned 401-2.
+  const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
   const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
   const localGovernment = lawGovernmentFromAddress(preset?.address ?? address);
   const districtForLh = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? "";
@@ -625,14 +624,14 @@ export async function POST(request: NextRequest) {
         format: "pdf" as const,
         textLength: 74857,
         pageCount: 113,
-        preview: "초평동 630-1=C1-2: LH 2023 공급공고·팸플릿의 1,498㎡, 7,280,280천원 정확히 일치. 2026 시행지침 p.38 표Ⅱ-4-2 C1 블록은 건폐율 70%, 용적률 450%, 7층; 업무시설 중 오피스텔 제외, 공동주택 허용용도 미열거.",
+        preview: "2023 LH 공고에서 C1-2는 예정지번 401-2(1,498㎡, 7,280,280천원). 별도 LH 현재 공급목록의 초평동 630-1 면적·가격은 일치하지만 401-2→630-1 공식 지번 대응표 미확보. C1-2로 확정 적용 금지. C1-2에 한해서만 시행지침 p.38의 70%/450%/7층, 오피스텔 제외·공동주택 미열거.",
         candidates: [
           {topic: "상업시설용지 C1/C2 용도 제한", quote: "제Ⅱ편 제4장 제2조 표Ⅱ-4-2 · 오피스텔 제외, 공동주택 허용용도 미열거", value: null, unit: null, verified: false as const},
           {topic: "상업시설용지 C1/C2 용적률", quote: "표Ⅱ-4-2 C1/C2 건폐율 70%, 용적률 450%, 7층", value: 450, unit: "%", verified: false as const},
         ],
-        warnings: ["2023 LH 같은 공급공고의 C1-2와 초평동 630-1은 면적·공급가격 일치, 2026 건축물 결정도에 C1 존재. 건축허가 단계에서는 최신 공식 결정도 확인 권장."],
-        siteMatchVerified: true as const,
-        applicable: true as const,
+        warnings: ["2023 LH C1-2의 예정지번은 401-2. 630-1과 면적·예정가격이 같아도 공식 지번 변경 이력 또는 지적도 중첩 전 획지 일치 미확인."],
+        siteMatchVerified: false as const,
+        applicable: false as const,
       },
       ...discoveredDocuments.documents.filter(item => item.kind !== "district-plan"),
     ],
@@ -680,38 +679,8 @@ export async function POST(request: NextRequest) {
     ordinances,
     ordinanceArticleCandidates,
     nationalArticleCandidates,
-    ruleFindings: isUiwang ? [
-      ...(["공동주택", "오피스텔"] as const).map((use) => ({
-        id: "uiwang-c1-2-" + (use === "공동주택" ? "apartment" : "officetel"),
-        topic: "허용용도",
-        outcome: "not-applicable" as const,
-        value: use,
-        unit: null,
-        sourceTitle: "의왕초평 C1-2 " + use + " 허용용도 제외 · LH 2023 C1-2 대조",
-        article: "2026 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2",
-        sourceUrl: UIWANG_6301.districtGuidelineUrl,
-        effectiveDate: "2026-06-30",
-        conditions: ["초평동 630-1=C1-2: 2023 LH 동일 공급공고 지번별·획지별 면적 1,498㎡ 및 가격 72.8028억원 일치", "2026 지구단위계획 결정도 C1 블록 확인", use + (use === "공동주택" ? "은 허용용도 목록에 없음" : "은 업무시설 허용용도에서 명시 제외")],
-        verified: true,
-      })),
-      ...([
-        ["건폐율", 70, "%"], ["용적률", 450, "%"], ["높이", 7, "층"],
-      ] as const).map(([topic, value, unit]) => ({
-        id: "uiwang-c1-2-" + topic, topic,
-        outcome: "applicable" as const, value, unit,
-        sourceTitle: "의왕초평 상업시설용지 C1-2",
-        article: "2026 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2",
-        sourceUrl: UIWANG_6301.districtGuidelineUrl,
-        effectiveDate: "2026-06-30",
-        conditions: ["C1-2 상업시설용지의 용도별 법정 상한; 주거시설 허용을 뜻하지 않음"],
-        verified: true,
-      })),
-    ] : [],
-    webSearch,
-    officialDocuments,
-    lhNotice,
-    missing,
-    errors,
+    // No verified parcel-specific prohibition until historic 401-2 is mapped to 630-1.
+    ruleFindings: [],
     unresolved: [
       ordinances.length ? "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요" : "관할 지자체 건축·주차장 조례 원문",
       ...(isUiwang ? UIWANG_6301.warnings : []),
