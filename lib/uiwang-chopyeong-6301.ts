@@ -1,9 +1,11 @@
 /**
- * 2026-10-31 EVIDENCE RECHECK. Do not equate historical planned lot 401-2
- * (C1-2, 1,498m2 and 7,280,280,000 KRW) with current cadastral 630-1
- * purely from equal area and supply price. The official renumbering history
- * / current-to-planned lot overlay is NOT yet obtained.
- * C1-2 district restrictions apply ONLY IF identity is established.
+ * 2026-10-31: user visually compared current 630-1 map position against
+ * the officially published 2026 district-unit-plan drawing and confirmed
+ * placement inside the C1 COMMERCIAL BLOCK. This is user-supplied map
+ * verification (NOT independent official cadastral certification).
+ * The finer C1-2 plot number remains unverified because 2023's planned
+ * 401-2 -> current 630-1 renumbering record has NOT been obtained.
+ * C1 block rules in 2026 Table II-4-2 apply regardless of sublot identity.
  */
 export const UIWANG_6301 = {
   address: "경기도 의왕시 초평동 630-1",
@@ -31,7 +33,7 @@ export const UIWANG_6301 = {
     salesLargeAreaSqm: 3000,
     salesExceptionMinRoadM: 15,
     salesExceptionMinFrontageM: 15,
-    notes: "별표6에는 공동주택·오피스텔 자체를 금지하는 항목 없음. 판매시설 3,000㎡ 이상은 너비 15m 이상의 도로에 15m 이상 접한 대지 예외. 별도 C1-2 허용용도가 우선 적용.",
+    notes: "별표6에는 공동주택·오피스텔 자체를 금지하는 항목 없음. 판매시설 3,000㎡ 이상은 너비 15m 이상의 도로에 15m 이상 접한 대지 예외. 별도 C1 상업시설용지 허용용도가 우선 적용.",
   },
   /** Ordinance 2336, 2026-05-07 appendix 5, original HWP decoded from official law.go.kr. */
   cityParkingAnnex: {
@@ -50,7 +52,9 @@ export const UIWANG_6301 = {
     notes: "별표5: 전용면적 85㎡ 이하 전체 전용면적/85㎡로 산정하되 세대·호실당 최소 1대. 공특법 시행령 §37④ 매도약정·전용30㎡ 미만 세대는 0.3대 적용 가능. 제20조: 기계식 최대30%, 총 법정주차 20대 이하면 불가.",
   },
   verifiedDistrictLot: null,
-  verifiedBlock: null,
+  verifiedBlock: "C1", // user map/drawing comparison, NOT official parcel overlay
+  verifiedBlockBasis: "사용자 현행 토지지도·2026 LH 지구단위계획 결정도 위치 대조",
+  verifiedBlockEvidenceLevel: "user-map-confirmed",
   candidateDistrictLot: "C1-2",
   historicalPlannedParcel: "401-2",
   cadastralMappingVerified: false,
@@ -69,14 +73,14 @@ export const UIWANG_6301 = {
       maxFloors: 7,
       apartmentAllowed: false,
       officetelAllowed: false,
-      note: "오직 C1-2에만 적용: 2026 시행지침 제Ⅱ편 제4장 제2조 표Ⅱ-4-2 p.38 공동주택 미열거 및 오피스텔 제외. 2023 LH C1-2 당시 예정지번 401-2이므로 현재 630-1과의 지번변경 이력 검증 전 적용 불가.",
+      note: "C1/C2 상업시설용지에 공통 적용: 2026 LH 시행지침 제Ⅱ편 제4장 제2조 표Ⅱ-4-2 p.38: 공동주택 허용용도 미열거, 업무시설에서 오피스텔 명시 제외. 사용자 지도 대조로 630-1의 C1 블록 위치 확인. C1-2 세부 획지/지번변경 관계는 별도 미확인.",
     },
     office: {
       blocks: ["B1"],
       maxCoverage: 70,
       maxFar: 450,
       maxFloors: 10,
-      note: "업무시설용지 B1은 C1-2와 다른 별도 획지. 초평동 630-1의 현행 획지 일치 미확인.",
+      note: "업무시설용지 B1은 C1 상업시설용지와 별도이므로 이 필지의 비교용 기준으로 사용하면 안 됨.",
     },
   },
   lhPurchaseThird: {
@@ -97,12 +101,12 @@ export const UIWANG_6301 = {
   },
   warnings: [
     "VWorld 최신 공간정보: 준주거지역 및 지구단위계획구역 확인(2026-10-31). 2023 LH 공급자료의 일반상업용지는 '공급용도' 표기이므로 용도지역과 혼동하면 안 됩니다.",
-    "중요 정정: 2023 LH C1-2 공급공고의 당시 예정지번은 401-2입니다. 현재 초평동 630-1과 면적(1,498㎡)·예정가격(72.8028억원)이 같지만 공식 401-2→630-1 지번 변경 자료가 없으므로 C1-2 획지 확정 불가. 기존 '주거 신축 불가 확정' 판정 철회.",
-    "2026 시행지침의 C1-2 상업시설용지 기준은 건폐율 70%·용적률 450%·최고 7층이나, 현재 630-1의 획지 일치가 미확인되어 해당 수치를 대지 확정값으로 자동 적용 금지.",
+    "2026-10-31 사용자 지도 대조 결과 초평동 630-1의 위치가 C1 상업시설용지 블록과 일치한다고 확인. C1에 공통 적용되는 2026 표Ⅱ-4-2에 따라 공동주택 허용용도 미열거·오피스텔 명시 제외. 이는 사용자 지도 확인에 근거한 실무판정이며 공식 지적도 중첩확인서는 아님.",
+    "C1 상업시설용지 공통 시행지침 건폐율 70% 이하·용적률 450% 이하·최고 7층 이하. C1 블록 위치 사용자 확인 기반 적용. 세부 획지 C1-2, 401-2→630-1 지번변경 이력은 여전히 확인되지 않음.",
     "LH 경기남부 2026년 3차 공고는 2026-10-15 마감. 의왕시는 당시 공고상 규제지역으로 최소 10호 기준이지만 신규 접수는 후속 공고 확인 필요.",
     "VWorld 지적도형 면적 약 1,507.9㎡는 개략 수치. LH 2023 공급자료 1,498㎡와 토지대장 면적의 대조가 필요합니다.",
-    "의왕시 도시계획조례 별표6에서는 공동주택·오피스텔을 준주거지역 일반 금지목록에 열거하지 않음. C1-2 획지라면 둘 다 허용되지 않으나 현행 630-1의 C1-2 해당 여부 미확인.",
-    "의왕시 주차장 조례 별표5: 공동주택·오피스텔 통상 호실당 최소 1대, LH 매도약정·전용30㎡ 미만은 조건부 0.3대. 주거 허용용도는 현행 지구단위 획지와 건축허가 담당 검증 필요.",
+    "의왕시 도시계획조례 별표6에서는 공동주택·오피스텔을 준주거지역 일반 금지목록에 열거하지 않으나, 사용자 위치 확인된 C1 상업시설용지의 지구단위계획 허용용도에는 둘 다 해당되지 않음.",
+    "의왕시 주차장 조례 별표5: 공동주택·오피스텔 통상 호실당 최소 1대, LH 매도약정·전용30㎡ 미만 조건부 0.3대이지만 C1의 주거용도 제한을 해소하는 특례는 아님.",
     "의왕시 주차장 조례 제20조: 기계식은 법정주차대수 30% 이하, 총 20대 이하 기계식 불가. LH 경기남부 3차 공고 p.8은 50% 이내 계획하나 0.3대 적용 주택에는 기계식 금지; 더 엄격한 의왕시 기준 확인.",
     "의왕역 280m는 사용자 제시 거리. LH 경기남부 3차 공고 p.6 청년형 0.3대는 역 출구·대학 교문 직선 500m 이내, 고령자형 입지 제한 없음; 지구단위 허용용도를 우선 확인.",
     "지구단위계획 p.40: 차량 진출입은 낮은 위계 도로 또는 장변 원칙, 도로 가각 및 출입금지구간 제한. 제공된 28m/12m 접도만으로 진출입 승인 확정 불가.",
