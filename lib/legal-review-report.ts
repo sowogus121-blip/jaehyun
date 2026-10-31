@@ -132,6 +132,36 @@ export function buildLegalReviewReport(
       "2026 의왕초평 지구단위계획 제Ⅱ편 제4장 제2조 표Ⅱ-4-2",
       "상업용 허용용도 기준. 450%를 공동주택·오피스텔 주거개발 한도로 적용하지 말 것.",
       "source", UIWANG_6301.districtGuidelineUrl);
+    add("uiwang-zone-appendix-6", "건축·도시계획", "준주거지역 일반 건축제한 · 별표 6",
+      "공동주택·오피스텔을 준주거지역 일반 금지목록에 열거하지 않음",
+      "의왕시 도시계획 조례 제32조제6호 별표 6 (2024.12.30)",
+      "준주거 일반 규정만의 결과이며, C1-2 시행지침 표Ⅱ-4-2가 해당 주거용도를 별도로 금지함.",
+      "source", UIWANG_6301.cityZoningAnnex.appendixOriginalUrl);
+    add("uiwang-zone-sales", "건축·도시계획", "판매시설 3,000㎡ 이상 · 별표 6",
+      "판매시설 3,000㎡ 이상은 폭 15m 이상 도로에 15m 이상 접한 경우 예외",
+      "의왕시 도시계획 조례 별표 6 제2호나목 (2024.12.30)",
+      "제공된 28m 도로는 폭 요건에 유리하나 실제 해당 도로 접도길이 15m 이상·C1 허용 판매시설 종류를 별도 확인해야 함.",
+      "conditional", UIWANG_6301.cityZoningAnnex.appendixOriginalUrl);
+    add("uiwang-parking-appendix-5", "LH·주차 검토", "부설주차장 · 별표 5 일반",
+      "공동주택·오피스텔: 전용 85㎡ 이하 합계/85㎡, 최소 세대·호실당 1대",
+      "의왕시 주차장설치 및 관리 조례 제16조제1항 별표 5 제5호 (2026.5.7)",
+      "46㎡ 신혼형·25㎡ 청년형은 일반 원칙으로 각각 세대·호실당 최소 1대. 다만 C1-2에서 두 용도의 신축은 불허.",
+      "source", UIWANG_6301.cityParkingAnnex.appendixOriginalUrl);
+    add("uiwang-parking-03-appendix-5", "LH·주차 검토", "매입약정주택 주차 0.3대 · 별표 5",
+      "공공주택사업자 매도약정 + 전용면적 30㎡ 미만 = 0.3대/세대 적용 가능",
+      "의왕시 주차장설치 및 관리 조례 별표 5 제5호 (2026.5.7) · 공특법 시행령 제37조제4항",
+      "LH 경기남부 2026 3차 원문 p.6은 청년형 역·대학교 500m, 고령자 입지제한 없음. p.8·10은 0.3대 적용 시 기계식주차 불허. C1-2 금지용도를 완화하지 못함.",
+      "conditional", UIWANG_6301.cityParkingAnnex.appendixOriginalUrl);
+    add("uiwang-parking-machine-city", "LH·주차 검토", "기계식주차 의왕시 한도",
+      "법정주차대수의 최대 30%, 총 주차대수 20대 이하 설치 불가",
+      "의왕시 주차장설치 및 관리 조례 제20조제1항 (2026.5.7)",
+      "LH 경기남부 3차 공고 p.8의 최대 50% 안내보다 의왕시의 30% 제한을 우선 충족. LH 0.3대 특례 적용 시에는 기계식 금지.",
+      "source", UIWANG_6301.cityParkingAnnex.ordinanceUrl);
+    add("uiwang-commercial-parking", "LH·주차 검토", "C1-2 허용 상업용도 주차 기준",
+      "판매·일반업무시설: 시설면적 100㎡당 1대, 제1·2종 근생: 120㎡당 1대",
+      "의왕시 주차장설치 및 관리 조례 별표 5 제2·3호 (2026.5.7)",
+      "세부 시설분류와 복합용도 주차 합산은 실제 설계안에 따라 재검토. LH 주거사업과는 별개인 일반 상업 개발기준.",
+      "source", UIWANG_6301.cityParkingAnnex.appendixOriginalUrl);
   }
 
   const useArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건축제한", "용도지역 안에서의 건축제한"]);
