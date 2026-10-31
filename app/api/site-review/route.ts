@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findSitePreset } from "../../../lib/site-presets";
-import { isUiwangChopyeong6301, UIWANG_6301 } from "../../../lib/uiwang-chopyeong-6301";
+import { isUiwangChopyeong6301, UIWANG_6301, getUiwangC1UseFindings } from "../../../lib/uiwang-chopyeong-6301";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
@@ -529,9 +529,16 @@ export async function POST(request: NextRequest) {
 
   const zoneNames = [...new Set(landUse.filter((item) => item.category === "용도지역").map((item) => item.name))];
   const mixedUseZones = zoneNames.length > 1;
-  // Do not apply C1-2 rules to the current cadastral parcel without an
-  // official historical-to-current lot mapping. 2023 C1-2 was planned 401-2.
-  const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
+  // C1 block placement was user-confirmed by map overlay. Apply C1's general
+  // commercial block envelope (70/450/7 floors), NOT an unverified C1-2 sublot.
+  const isUiwangC1 = isUiwangChopyeong6301(address);
+  const planningStandards = isUiwangC1
+    ? {
+      zone: "준주거지역 · C1 상업시설용지(위치 사용자 지도 대조)",
+      buildingCoverageRatio: 70, far: 450,
+      source: "사용자 2026 결정도 위치 대조 C1 블록 확인 + 의왕초평 2026 지구단위계획 표Ⅱ-4-2; C1-2 세부획지는 미확정",
+    }
+    : mixedUseZones ? null : findZoningStandard(zoneNames);
   const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
   const localGovernment = lawGovernmentFromAddress(preset?.address ?? address);
   const districtForLh = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? "";
@@ -624,12 +631,12 @@ export async function POST(request: NextRequest) {
         format: "pdf" as const,
         textLength: 74857,
         pageCount: 113,
-        preview: "2023 LH 공고에서 C1-2는 예정지번 401-2(1,498㎡, 7,280,280천원). 별도 LH 현재 공급목록의 초평동 630-1 면적·가격은 일치하지만 401-2→630-1 공식 지번 대응표 미확보. C1-2로 확정 적용 금지. C1-2에 한해서만 시행지침 p.38의 70%/450%/7층, 오피스텔 제외·공동주택 미열거.",
+        preview: "사용자 지도·2026 결정도 위치 대조로 630-1의 C1 상업시설용지 블록을 확인. 해당 블록 공통 시행지침 p.38 표Ⅱ-4-2 건폐율70%, 용적률450%, 최고7층; 공동주택 미열거, 오피스텔 명시 제외. C1-2 세부획지·2023 예정지번 401-2 대응은 별도 미확정.",
         candidates: [
           {topic: "상업시설용지 C1/C2 용도 제한", quote: "제Ⅱ편 제4장 제2조 표Ⅱ-4-2 · 오피스텔 제외, 공동주택 허용용도 미열거", value: null, unit: null, verified: false as const},
           {topic: "상업시설용지 C1/C2 용적률", quote: "표Ⅱ-4-2 C1/C2 건폐율 70%, 용적률 450%, 7층", value: 450, unit: "%", verified: false as const},
         ],
-        warnings: ["2023 LH C1-2의 예정지번은 401-2. 630-1과 면적·예정가격이 같아도 공식 지번 변경 이력 또는 지적도 중첩 전 획지 일치 미확인."],
+        warnings: ["630-1의 C1 블록 위치는 사용자가 지도와 지구단위계획 도면을 대조하여 확인했습니다. 본 API의 공식 지적도 중첩검증을 뜻하지 않으며 C1-2 세부획지·2023 예정지번 401-2 대응은 별도 미확정입니다."],
         siteMatchVerified: false as const,
         applicable: false as const,
       },
@@ -679,15 +686,16 @@ export async function POST(request: NextRequest) {
     ordinances,
     ordinanceArticleCandidates,
     nationalArticleCandidates,
-    // No verified parcel-specific prohibition until historic 401-2 is mapped to 630-1.
-    ruleFindings: [],
+    // C1 use restriction is sourced to the 2026 LH guideline and user-
+    // confirmed C1 map placement. It does NOT assert an official C1-2 sublot.
+    ruleFindings: isUiwang ? getUiwangC1UseFindings() : [],
     webSearch,
     officialDocuments,
     lhNotice,
     missing,
     errors,
     unresolved: [
-      ordinances.length ? "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요" : "관할 지자체 건축·주차장 조례 원문",
+      ordinances.length ? (isUiwang ? "C1 허용용도는 사용자 지도확인 + 2026 원문 적용. 허가용 공식 지적도 중첩확인 및 조례 별표 적용관계 별도 점검" : "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요") : "관할 지자체 건축·주차장 조례 원문",
       ...(isUiwang ? UIWANG_6301.warnings : []),
       ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
       officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
