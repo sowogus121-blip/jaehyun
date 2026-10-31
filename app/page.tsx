@@ -7,6 +7,7 @@ import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRule
 import { screenParking03 } from "@/lib/lh-parking-screen";
 import { getLhParkingReview, type LhParkingReview } from "@/lib/lh-parking-review";
 import { getNoticeMemoryStatus } from "@/lib/lh-notice-memory";
+import { isUiwangChopyeong6301, UIWANG_6301 } from "@/lib/uiwang-chopyeong-6301";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
@@ -598,7 +599,7 @@ export default function Home() {
         ...(addressParts[1] ? { district: addressParts[1] } : {}),
         ...(zoneValue ? { zone: zoneValue } : {}),
         ...(merged?.isMultiple ? {siteArea: merged.totalArea ?? 0,buildingCoverageRatio:automaticOrdinance?.bcr??0,baseFar:automaticOrdinance?.far??0,relaxedFar:automaticOrdinance?Math.round(automaticOrdinance.far*1.2*100)/100:0,useRelaxedFar:false} : review.parcel?.area ? { siteArea: review.parcel.area } : {}),
-        ...(automaticOrdinance ? {
+        ...(automaticOrdinance && !isUiwangChopyeong6301(resolvedAddress) ? {
           buildingCoverageRatio: current.buildingCoverageRatio > 0 ? current.buildingCoverageRatio : automaticOrdinance.bcr,
           baseFar: current.baseFar > 0 ? current.baseFar : automaticOrdinance.far,
           relaxedFar: current.relaxedFar > 0 ? current.relaxedFar : Math.round(automaticOrdinance.far * 1.2 * 100) / 100,
@@ -801,7 +802,7 @@ export default function Home() {
             </div>}
             {lookupDetails && <div className="lookup-result-card">
               <div className="lookup-result-head"><Badge status="verified" /><b>{input.multipleParcels ? "대표 필지 · " : ""}{input.address}</b><span>{lookupDetails.source} · {lookupDetails.confirmedAt} 확인 {input.multipleParcels ? "· 아래 합필 합계와 별도" : ""}</span></div>
-              <div className="lookup-result-grid"><span><small>대지면적</small><b>{lookupDetails.siteArea.toLocaleString()}㎡</b></span><span><small>지목</small><b>{lookupDetails.landCategory}</b></span><span><small>용도지역</small><b>{lookupDetails.zone}</b></span><span><small>개별공시지가</small><b>{lookupDetails.publicPricePerSqm.toLocaleString()}원/㎡</b></span></div>
+              <div className="lookup-result-grid"><span><small>대지면적</small><b>{lookupDetails.siteArea.toLocaleString()}㎡</b></span><span><small>지목</small><b>{lookupDetails.landCategory}</b></span><span><small>용도지역</small><b>{lookupDetails.zone}</b></span><span><small>개별공시지가</small><b>{lookupDetails.publicPricePerSqm > 0 ? lookupDetails.publicPricePerSqm.toLocaleString() + "원/㎡" : "원문 미확인"}</b></span></div>
               <div className="lookup-result-lines"><span><Icon name="site" size={14} /><b>접도</b>{lookupDetails.roads.join(" · ")}</span><span><Icon name="law" size={14} /><b>지역·구역</b>{[...lookupDetails.restrictions, lookupDetails.landscape].join(" · ")}</span></div>
               {lookupDetails.warnings.map((warning) => <div className="lookup-warning" key={warning}><Icon name="alert" size={13} />{warning}</div>)}
             </div>}
@@ -820,6 +821,29 @@ export default function Home() {
           </section>
 
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
+          {isUiwangChopyeong6301(input.address) && <section className="card uiwang-evidence" aria-label="의왕초평 630-1 지구계획 원문 대조">
+            <div className="site-decision-title"><div><span>LH 직접 첨부 원문 · 지구단위계획 제Ⅱ편 제4장</span>
+              <h3>초평동 630-1 · 주거용도 제한 우선 확인</h3>
+              <p>VWorld의 준주거지역 표시는 상위 용도지역이고, 공급촉진지구의 획지별 허용용도는 별도입니다.</p></div>
+              <span className="site-pill problem">LH 매입약정 주거용도 적합성 미확정</span>
+            </div>
+            <div className="site-decision-grid">
+              <div className="site-decision-tile"><span>VWorld 현행 용도지역</span><strong>준주거지역</strong><small>LT_C_UQ111 · 2026.10.31 조회</small></div>
+              <div className="site-decision-tile"><span>C1·C2 상업시설용지 기준</span><strong>70% / 450%</strong><small>최고 7층 · 시행지침 p.38 표Ⅱ-4-2</small></div>
+              <div className="site-decision-tile"><span>C1·C2 주거 허용용도</span><strong>공동주택 미열거</strong><small>오피스텔 명시 제외 · 해당 획지라면 건축제한</small></div>
+              <div className="site-decision-tile"><span>LH 경기남부 3차</span><strong>2026.10.15 마감</strong><small>당시 의왕시 규제지역 최소 10호 · 신규 접수 종료</small></div>
+            </div>
+            <p className="uiwang-evidence-note"><b>핵심:</b> LH의 2023년 동일 필지 공급용도는 일반상업용지입니다.
+              다만 630-1이 현행 도면의 C1 또는 C2 획지와 일치하는지는
+              <a href={UIWANG_6301.controlPlanUrl} target="_blank" rel="noreferrer"> 2026 건축물 결정도</a>를 중첩하여 확정해야 합니다.
+              해당 획지로 확인되면 공동주택·청년형 오피스텔을 법정 가능안으로 제시할 수 없습니다.</p>
+            <div className="lh-latest-links">
+              <a href={UIWANG_6301.districtGuidelineUrl} target="_blank" rel="noreferrer">지구단위계획 시행지침 p.37~40 원문</a>
+              <a href={UIWANG_6301.ministryNoticeUrl} target="_blank" rel="noreferrer">2026-308호 고시</a>
+              <a href={UIWANG_6301.supply2023Url} target="_blank" rel="noreferrer">2023 LH 630-1 공급근거</a>
+              <a href={UIWANG_6301.lhPurchaseThird.officialUrl} target="_blank" rel="noreferrer">경기남부 3차 매입공고</a>
+            </div>
+          </section>}
           {isHanamCommercialSite(reviewData) && (() => {
             const mixed=calculateHanamCommercialMix(input.commercialMixShare||20);
             return <section className="lh-hanam-commercial">
