@@ -599,6 +599,16 @@ export default function Home() {
         ...(addressParts[1] ? { district: addressParts[1] } : {}),
         ...(zoneValue ? { zone: zoneValue } : {}),
         ...(merged?.isMultiple ? {siteArea: merged.totalArea ?? 0,buildingCoverageRatio:automaticOrdinance?.bcr??0,baseFar:automaticOrdinance?.far??0,relaxedFar:automaticOrdinance?Math.round(automaticOrdinance.far*1.2*100)/100:0,useRelaxedFar:false} : review.parcel?.area ? { siteArea: review.parcel.area } : {}),
+        // Verified Uiwang parking annex 5: ordinary dwelling/officetel plans
+        // require >=1 stall per unit. Lower historical hypothetical ratios are
+        // not statutory ratios. Site remains ineligible for housing on C1-2.
+        ...(isUiwangChopyeong6301(resolvedAddress) && !merged?.isMultiple ? {
+          apartmentParkingRatio: Math.max(1, current.apartmentParkingRatio || 0),
+          officetelParkingRatio: Math.max(1, current.officetelParkingRatio || 0),
+          mechanicalMaxRatio: Math.min(30, current.mechanicalMaxRatio),
+          useRelaxedFar: false,
+          relaxedFar: 0,
+        } : {}),
         ...(automaticOrdinance && !isUiwangChopyeong6301(resolvedAddress) ? {
           buildingCoverageRatio: current.buildingCoverageRatio > 0 ? current.buildingCoverageRatio : automaticOrdinance.bcr,
           baseFar: current.baseFar > 0 ? current.baseFar : automaticOrdinance.far,
@@ -834,12 +844,15 @@ export default function Home() {
               <div className="site-decision-tile"><span>LH 경기남부 3차</span><strong>2026.10.15 마감</strong><small>당시 의왕시 규제지역 최소 10호 · 신규 접수 종료</small></div>
             </div>
             <p className="uiwang-evidence-note"><b>재확인 완료:</b> LH 2023년 동일 공급공고에서 초평동 630-1(1,498㎡, 72.8028억원)과 C1-2 획지(1,498㎡, 72.8028억원)가 정확히 일치합니다. 2026년 <a href={UIWANG_6301.controlPlanUrl} target="_blank" rel="noreferrer">지구단위계획 결정도</a>도 C1 블록을 표시합니다. <b>이 필지의 공동주택·오피스텔은 해당 상업시설용지의 허용용도가 아니므로 LH 주거 매입약정 규모를 사업 가능 수량으로 산정해서는 안 됩니다.</b></p>
+            <p className="uiwang-evidence-note"><b>별표 원문 대조:</b> 의왕시 도시계획조례 별표 6에는 준주거지역 공동주택·오피스텔 일반 금지가 없지만, <b>C1-2 지구단위계획 표Ⅱ-4-2에서 둘 다 불허합니다.</b> 의왕시 주차장 조례 별표 5(2026.5.7)는 통상 세대·호실당 <b>최소 1대</b>, 공공주택사업자 매도약정·전용 30㎡ 미만에 한해 <b>0.3대 조건부 특례</b>입니다. 의왕시 기계식주차 상한은 법정주차대수의 30%(주차 20대 이하 설치 불가)이고, LH 경기남부 공고는 0.3대 특례와 기계식주차 병행을 금합니다. 이 완화들은 C1-2의 주거 금지를 변경하지 않습니다.</p>
             <div className="lh-latest-links">
               <a href={UIWANG_6301.districtGuidelineUrl} target="_blank" rel="noreferrer">지구단위계획 시행지침 p.37~40 원문</a>
               <a href={UIWANG_6301.ministryNoticeUrl} target="_blank" rel="noreferrer">2026-308호 고시</a>
               <a href={UIWANG_6301.supply2023Url} target="_blank" rel="noreferrer">2023 LH 지번별 공급공고</a>
               <a href={UIWANG_6301.historicalPamphletUrl} target="_blank" rel="noreferrer">2023 LH C1-2 팸플릿(4p)</a>
               <a href={UIWANG_6301.lhPurchaseThird.officialUrl} target="_blank" rel="noreferrer">경기남부 3차 매입공고</a>
+              <a href={UIWANG_6301.cityZoningAnnex.appendixOriginalUrl} target="_blank" rel="noreferrer">의왕 도시계획조례 별표6 원문</a>
+              <a href={UIWANG_6301.cityParkingAnnex.appendixOriginalUrl} target="_blank" rel="noreferrer">의왕 주차장조례 별표5 원문</a>
             </div>
           </section>}
           {isHanamCommercialSite(reviewData) && (() => {
