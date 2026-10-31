@@ -166,10 +166,18 @@ export function buildLegalReviewReport(
 
   const useArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건축제한", "용도지역 안에서의 건축제한"]);
   add("use", "건축·도시계획", "건축행위 가능 여부",
-    "공동주택 / 오피스텔(업무시설) 용도별 허용여부 별도 판정",
-    citation(useArticle, cityName + " · 건축제한 조항 및 별표"),
-    "조례 본문만으로 적합 확정 불가 · 용도별 별표, 다른 법률에 따른 제한 확인",
-    useArticle ? "conditional" : "unknown", useArticle?.sourceUrl || cityOrdinance, useArticle?.excerpt || null);
+    isUiwangChopyeong6301(place)
+      ? "C1-2 공동주택·오피스텔 불허(상업용지 허용목록에 없음)"
+      : "공동주택 / 오피스텔(업무시설) 용도별 허용여부 별도 판정",
+    isUiwangChopyeong6301(place)
+      ? "의왕초평 2026 지구단위계획 시행지침 제Ⅱ편 제4장 표Ⅱ-4-2"
+      : citation(useArticle, cityName + " · 건축제한 조항 및 별표"),
+    isUiwangChopyeong6301(place)
+      ? "준주거지역의 의왕시 도시계획조례 별표6 일반 허용 가능성과 C1-2 획지의 주거 금지는 다른 제한이며, C1-2 우선."
+      : "조례 본문만으로 적합 확정 불가 · 용도별 별표, 다른 법률에 따른 제한 확인",
+    isUiwangChopyeong6301(place) ? "source" : useArticle ? "conditional" : "unknown",
+    isUiwangChopyeong6301(place) ? UIWANG_6301.districtGuidelineUrl : useArticle?.sourceUrl || cityOrdinance,
+    isUiwangChopyeong6301(place) ? null : useArticle?.excerpt || null);
 
   add("bcr", "건축·도시계획", "건폐율",
     bcr !== null ? bcr + "% 이하 (조례 일반기준)" : "대상 용도지역별 건폐율 조항 확인 필요",
