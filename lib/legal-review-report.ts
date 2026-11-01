@@ -38,7 +38,7 @@ const normalized = (s: string) => s.replace(/\s+/g, "");
 
 type Article = NonNullable<SiteReviewResult["ordinanceArticleCandidates"]>[number];
 
-function findArticle(review: SiteReviewResult | null, ordinance: string, terms: string[]): Article | null {
+function findArticle(review: Pick<SiteReviewResult, "ordinanceArticleCandidates"> | null, ordinance: string, terms: string[]): Article | null {
   const rows=review?.ordinanceArticleCandidates?.filter(a=>a.sourceTitle.includes(ordinance))??[];
   // An unrelated §36 may quote §50 and appear before §50 in the law API.
   // Select the actual article HEADING first, not the earliest substring hit.
@@ -68,7 +68,7 @@ function zoneRatio(article: Article | null, zone: string): number | null {
 }
 
 /** Extract general district ordinance maxima for a single, exactly named zone. Parcel applicability remains conditional. */
-export function getOrdinanceZoneStandards(review: SiteReviewResult, zone: string): {bcr:number;far:number} | null {
+export function getOrdinanceZoneStandards(review: Pick<SiteReviewResult, "ordinanceArticleCandidates">, zone: string): {bcr:number;far:number} | null {
   const bcrArticle=findArticle(review,"도시계획 조례",["용도지역안에서의 건폐율","용도지역 안에서의 건폐율"]);
   const farArticle=findArticle(review,"도시계획 조례",["용도지역안에서의 용적률","용도지역 안에서의 용적률"]);
   const bcr=zoneRatio(bcrArticle,zone);
