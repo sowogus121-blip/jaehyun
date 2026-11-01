@@ -35,9 +35,10 @@ export const METROPOLITAN_MECHANICAL_REFERENCES = [
 /** Require VWorld cadastral confirmation and exact municipal zoning before applying any hard stop. */
 export function getMunicipalMechanicalGuard(review:SiteReviewResult|null,input:ProjectInput):MunicipalMechanicalGuard|null{
  if(!review?.location?.parcelAddress || !review.parcel?.pnu ||
-    review.mixedUseZones || review.parcels?.length!==1 ||
-    !review.ordinances?.some(x=>x.name.includes("주차장") && x.name.includes(input.address.includes("의정부시")?"의정부시":input.address.includes("파주시")?"파주시":"***")))return null;
+    review.mixedUseZones || review.parcels?.length!==1)return null;
  const location=review.location.parcelAddress.replace(/\s+/g,"");
+ const governingCity=location.includes("의정부시")?"의정부시":location.includes("파주시")?"파주시":null;
+ if(!governingCity || !review.ordinances?.some(x=>x.name.includes("주차장")&&x.name.includes(governingCity)))return null;
  const zones=review.landUse.filter(x=>x.category==="용도지역").map(x=>x.name);
  if(zones.length!==1)return null;
  const zone=zones[0].replace(/\s+/g,"");
