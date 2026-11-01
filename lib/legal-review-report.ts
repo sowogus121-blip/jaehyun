@@ -6,6 +6,7 @@ import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANC
 import { ALTERNATIVES } from "./calculator";
 import { UIWANG_6301, isUiwangChopyeong6301 } from "./uiwang-chopyeong-6301";
 import { findMetroOrdinanceSource, findMetroOrdinanceRules } from "./metro-ordinance-catalog";
+import { findMetroAnnexRecords, findLhPurchaseNotice, findLhGuidelines, koreaLocalDay, noticeIsOpen } from "./metro-annex-lh-catalog";
 
 export type LegalRowStatus = "source" | "conditional" | "unknown" | "user";
 export interface LegalReviewRow {
@@ -136,6 +137,51 @@ export function buildLegalReviewReport(
         entry.evidence === "source-indexed" ? "unknown" : "conditional",
         metroSource.url);
     }
+  }
+
+  // Standalone annex index + regional LH notice/guidelines: non-operative
+  // evidence only. An indexed appendix title does NOT verify its numeric cells.
+  for (const item of findMetroAnnexRecords(place)) {
+    add("annex-"+item.id,
+      item.topic.startsWith("주차장") ? "LH·주차 검토" : "건축·도시계획",
+      "[별표] "+item.title,
+      item.appendix ? item.appendix+" · "+item.title : "별표 원문·번호 미추출 · 공식 조례에서 확인",
+      item.city+" · "+item.topic+" · "+(item.appendix??"별표 원문 검색"),
+      item.conditions+" · "+(item.evidence==="direct-excerpt" ? "해당 원문 일부 직접 검토" : item.evidence==="verified-title" ? "공식 별표 제목·조번호 확인; 숫자 미추출" : "원문 링크 색인만 완료; 본문 검증 전")+" · 자동 수치 적용 없음",
+      item.evidence==="lookup-only"?"unknown":"conditional",
+      item.sourceUrl);
+  }
+  const regionalLh=findLhPurchaseNotice(place);
+  if(regionalLh){
+    const accepts=noticeIsOpen(regionalLh,koreaLocalDay());
+    add("lh-regional-notice-"+regionalLh.id,
+      "LH·주차 검토",
+      "지역 LH 민간신축 매입약정 "+(accepts?"공고기간 내":"접수기간 종료"),
+      regionalLh.title+" · "+regionalLh.startDate+" ~ "+regionalLh.closeDate,
+      regionalLh.region+" · "+regionalLh.noticePdfUrl,
+      regionalLh.scopeNote+" · "+regionalLh.revisionNote+" · 공고기간 내 여부와 해당 필지 매입 적합성은 별개; 개별 심의 확인",
+      "conditional",regionalLh.noticeUrl);
+    add("lh-regional-minimum-"+regionalLh.id,
+      "LH·주차 검토","LH 지역본부 최소 매입규모",
+      "일반지역 "+regionalLh.normalMinimumHomes+"호 / 당시 규제지역 "+regionalLh.regulatedMinimumHomes+"호 (공고기준)",
+      regionalLh.title+" · 원문 PDF",
+      "규제지역 여부·주택 유형·해당 공고 범위에 따라 변동. 신규 사업에 종료 공고 자동 적용 금지.",
+      "conditional",regionalLh.noticePdfUrl);
+    add("lh-regional-guide-"+regionalLh.id,
+      "LH·주차 검토","LH 신청서식·설계·시공 가이드라인",
+      "지역본부 첨부 ZIP · 공식 원문 연결",
+      regionalLh.title+" · 첨부파일",
+      "엑셀 체크리스트 및 HWPX/도면 세부 규정은 항목별 재검증 후 적용. 본부별 첨부본 자동 교체 금지.",
+      "conditional",regionalLh.guidelineZipUrl);
+  }
+  for(const guide of findLhGuidelines(place)){
+    add("lh-guide-"+guide.id,
+      "LH·주차 검토","[설계가이드] "+guide.topic,
+      guide.detail,
+      guide.sourceLocation,
+      guide.conditions+" · "+(guide.evidence==="attachment-index"?"원문 목록 확인, 내용 미추출":"공고/체크리스트 해당 부분 직접 확인")+" · 자동 법정기준 적용 없음",
+      guide.evidence==="attachment-index"?"unknown":"conditional",
+      regionalLh?.guidelineZipUrl??null);
   }
 
   if (isUiwangChopyeong6301(place)) {
