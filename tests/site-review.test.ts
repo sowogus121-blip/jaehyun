@@ -368,7 +368,7 @@ describe("site review API", () => {
     const d=await resp.json();
     expect(resp.status).toBe(200);
     expect(d.lhNotice).toEqual(expect.objectContaining({
-      id:"1716",matchedDistrict:"동안구",isCurrent:false,
+      id:"1716",matchedDistrict:"안양시",isCurrent:false,
       pdfUrl:"https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68596216",
       guideUrl:"https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68589951",
       rules:null,
