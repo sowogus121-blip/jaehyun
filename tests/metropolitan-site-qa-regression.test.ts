@@ -39,6 +39,8 @@ describe("live metropolitan LH site review QA regressions",()=>{
     } as unknown as SiteReviewResult;
     const report=buildLegalReviewReport(body,review);
     expect(report.rows.find(x=>x.id==="uiwang-assembled-block-unverified")?.status).toBe("conditional");
+    expect(report.rows.find(x=>x.id==="bcr")?.status).not.toBe("source");
+    expect(report.rows.find(x=>x.id==="far")?.status).not.toBe("source");
     expect(report.rows.some(x=>x.id==="uiwang-use-block")).toBe(false);
     expect(report.rows.some(x=>x.id==="plan-uiwang-chopyeong-2026-308")).toBe(false);
     expect(report.rows.find(x=>x.id==="uiwang-assembled-block-unverified")?.detail).toContain("일괄 적용하지 않음");
