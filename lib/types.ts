@@ -108,6 +108,15 @@ export interface CalculationContext {
   usePermissions: Record<UseType, AlternativeEligibilityStatus>;
   lhPurchaseEligibility: Record<UseType, AlternativeEligibilityStatus>;
   mechanicalParkingEligibility: AlternativeEligibilityStatus;
+  /** Independently sourced municipal upper bound; restricts an LH or user parking percentage. */
+  municipalMechanicalMaxPercent?: number;
+  municipalMechanicalMinStalls?: number;
+  municipalApartmentMechanicalExcluded?: boolean;
+  municipalOfficeMinGrossOrFloors?: {grossSqm:number;floors:number};
+  municipalMechanicalSource?: string;
+  /** Actual notice identification and date are a prerequisite for quantitative LH screening. */
+  regionalLhNoticeId?: string|null;
+  regionalLhNoticeSource?: string;
   lhPurchaseMechanicalRestrictedToOfficetelOrUrban?: boolean;
   /** Maximum mechanical-stall share from the exact verified LH notice; undefined when unverified. */
   lhPurchaseMechanicalMaxPercent?: number;
