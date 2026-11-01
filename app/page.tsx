@@ -1201,7 +1201,7 @@ export default function Home() {
               </details>
             ))}
           </section>
-          <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} />
+          <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} municipal={municipalParkingGuard} />
           <div className="notice navy"><Icon name="lh" /><div><b>{input.businessMode === "purchase" ? "민간 신축매입약정 검토 모드" : input.businessMode === "direct" ? "LH 직접건설 검토 모드" : "사업방식 미정 · 특례 확정 적용 보류"}</b><span>지역본부: {input.regionalOffice} · 최신 공고문 및 설계·시공 가이드라인 원문 연결 필요</span></div></div>
           {lhNotice && <section className="lh-rule-sheet">
             <div><strong>{lhNotice.title}</strong><span>공식 지역본부 공고 · {lhNotice.publishedAt} · <a href={lhNotice.url} target="_blank" rel="noopener noreferrer">원문 ↗</a></span></div>
