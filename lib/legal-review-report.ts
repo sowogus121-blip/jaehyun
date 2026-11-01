@@ -5,6 +5,7 @@ import { getLhParkingReview } from "./lh-parking-review";
 import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANCE_URL } from "./hanam-commercial-mix";
 import { ALTERNATIVES } from "./calculator";
 import { UIWANG_6301, isUiwangChopyeong6301 } from "./uiwang-chopyeong-6301";
+import { findMetroOrdinanceSource, findMetroOrdinanceRules } from "./metro-ordinance-catalog";
 
 export type LegalRowStatus = "source" | "conditional" | "unknown" | "user";
 export interface LegalReviewRow {
@@ -115,6 +116,27 @@ export function buildLegalReviewReport(
   add("zone", "대상지 현황", "용도지역·지구", zone, "VWorld 토지이용정보 / 토지이용계획확인서",
     review?.mixedUseZones ? "혼합 용도지역 · 획지별 가중산정 및 면적 대조 필요" : "다른 용도지구·구역 중첩 제한 확인",
     landUse.length ? "source" : lookup?.zone ? "source" : "unknown");
+
+  // Evidence library: city-matched, dated and cited screening rules ONLY.
+  // They do not change legal FAR, parking, unit count or parcel permission.
+  const metroSource = findMetroOrdinanceSource(place);
+  if (metroSource) {
+    add("metro-catalog-source", "건축·도시계획", "수도권 조례 근거DB · 시행본",
+      metroSource.city + " · " + metroSource.title + " · 시행 " + metroSource.effectiveDate,
+      "국가법령정보센터 " + metroSource.ordinanceNo,
+      "지역별 조례 근거 연결 완료. 개별 필지 지구단위계획·용도제한·특례 승인 여부는 별도로 검증해야 합니다.",
+      "source", metroSource.url);
+    for (const entry of findMetroOrdinanceRules(place)) {
+      add("metro-" + entry.id,
+        entry.kind === "주차·LH" ? "LH·주차 검토" : "건축·도시계획",
+        "[" + entry.kind + "] " + entry.title,
+        entry.detail,
+        metroSource.title + " " + entry.article + " · 시행 " + metroSource.effectiveDate,
+        entry.conditions + " · [" + (entry.evidence === "clause-checked" ? "조문 발췌 확인" : entry.evidence === "needs-current-recheck" ? "최근 개정본문 재대조 필요" : "원문 위치만 확보") + "] · 자동 완화·상한 계산에 미적용",
+        entry.evidence === "source-indexed" ? "unknown" : "conditional",
+        metroSource.url);
+    }
+  }
 
   if (isUiwangChopyeong6301(place)) {
     add("uiwang-c1-2", "대상지 현황", "지도 대조 확인 획지",
