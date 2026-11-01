@@ -87,6 +87,7 @@ export function buildLegalReviewReport(
   const place = review?.location?.parcelAddress || review?.location?.address || input.address || "주소 미입력";
   const isParcelAssembly = Boolean(review?.parcels && review.parcels.length > 1);
   const singleUiwangC1 = isUiwangChopyeong6301(place) && !isParcelAssembly;
+  const unverifiedUiwangAssembly = isUiwangChopyeong6301(place) && isParcelAssembly;
   const siteArea = review?.parcels && review.parcels.length > 1 && !review.parcel?.area
     ? null : review?.parcel?.area || lookup?.siteArea || (input.siteArea > 0 ? input.siteArea : null);
   const landUse = review?.landUse.filter((item) => item.category === "용도지역") ?? [];
@@ -298,14 +299,14 @@ export function buildLegalReviewReport(
   add("bcr", "건축·도시계획", "건폐율",
     bcr !== null ? bcr + "% 이하 (조례 일반기준)" : "대상 용도지역별 건폐율 조항 확인 필요",
     citation(bcrArticle, cityName + " · 건폐율 조항"),
-    "지구단위계획·특별지구·완화·강화 등 우선 적용 기준 확인 전 · 계산 자동반영 안 함",
-    bcr !== null ? "source" : bcrArticle ? "conditional" : "unknown", bcrArticle?.sourceUrl || cityOrdinance, bcrArticle?.excerpt || null);
+    (unverifiedUiwangAssembly ? "630-1의 C1과 추가 필지는 획지별 허용용도·건폐율 미확정 · 합필 전체 값으로 산정 불가. " : "") + "지구단위계획·특별지구·완화·강화 등 우선 적용 기준 확인 전 · 계산 자동반영 안 함",
+    bcr !== null ? (unverifiedUiwangAssembly ? "conditional" : "source") : bcrArticle ? "conditional" : "unknown", bcrArticle?.sourceUrl || cityOrdinance, bcrArticle?.excerpt || null);
 
   add("far", "건축·도시계획", "용적률",
     far !== null ? far + "% 이하 (조례 일반기준)" : "대상 용도지역별 용적률 조항 확인 필요",
     citation(farArticle, cityName + " · 용적률 조항"),
-    "지구단위계획·공공임대 완화 요건 대조 전 · 계산 자동반영 안 함",
-    far !== null ? "source" : farArticle ? "conditional" : "unknown", farArticle?.sourceUrl || cityOrdinance, farArticle?.excerpt || null);
+    (unverifiedUiwangAssembly ? "630-1 C1과 인접획지 허용용도·기준용적률 별도 확인 전 합필용적률 확정 금지. " : "") + "지구단위계획·공공임대 완화 요건 대조 전 · 계산 자동반영 안 함",
+    far !== null ? (unverifiedUiwangAssembly ? "conditional" : "source") : farArticle ? "conditional" : "unknown", farArticle?.sourceUrl || cityOrdinance, farArticle?.excerpt || null);
 
   if(isHanamCommercialSite(review)){
     const mix=calculateHanamCommercialMix(input.commercialMixShare||20);
