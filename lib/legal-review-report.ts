@@ -85,6 +85,8 @@ export function buildLegalReviewReport(
 ): LegalReviewReport {
   const rows: LegalReviewRow[] = [];
   const place = review?.location?.parcelAddress || review?.location?.address || input.address || "주소 미입력";
+  const isParcelAssembly = Boolean(review?.parcels && review.parcels.length > 1);
+  const singleUiwangC1 = isUiwangChopyeong6301(place) && !isParcelAssembly;
   const siteArea = review?.parcels && review.parcels.length > 1 && !review.parcel?.area
     ? null : review?.parcel?.area || lookup?.siteArea || (input.siteArea > 0 ? input.siteArea : null);
   const landUse = review?.landUse.filter((item) => item.category === "용도지역") ?? [];
@@ -120,9 +122,19 @@ export function buildLegalReviewReport(
     review?.mixedUseZones ? "혼합 용도지역 · 획지별 가중산정 및 면적 대조 필요" : "다른 용도지구·구역 중첩 제한 확인",
     landUse.length ? "source" : lookup?.zone ? "source" : "unknown");
 
+  // One parcel's mapped block does not grant a uniform development control
+  // for an entire assembled parcel. The combination is a new planning case.
+  if(isParcelAssembly && isUiwangChopyeong6301(place)){
+    add("uiwang-assembled-block-unverified","건축·도시계획",
+      "의왕초평 630-1+C1 인접 필지 합필: 획지별 규정 재검토",
+      "630-1의 C1 단일필지 주거불허 근거를 합필 전체에 일괄 적용하지 않음",
+      "2026 의왕초평 지구단위계획 결정도·가구획지 결정도",
+      "630-1 외 각 필지의 허용용도·건축한계선·건폐율·용적률 및 실제 합필가능성 미검증.",
+      "conditional",UIWANG_6301.controlPlanUrl);
+  }
   // Parcel vs plan proof: show specific verified/candidate records only,
   // never any generic city plan as applying to an arbitrary address.
-  const districtPlanEvidence=findDistrictPlanEvidence(place);
+  const districtPlanEvidence=isParcelAssembly?[]:findDistrictPlanEvidence(place);
   for(const match of districtPlanEvidence) {
     const plan=match.plan;
     add("plan-"+plan.id,
@@ -220,7 +232,7 @@ export function buildLegalReviewReport(
       regionalLh?.guidelineZipUrl??null);
   }
 
-  if (isUiwangChopyeong6301(place)) {
+  if (singleUiwangC1) {
     add("uiwang-c1-2", "대상지 현황", "지도 대조 확인 획지",
       "초평동 630-1 = C1 상업시설용지 블록(사용자 지도 대조)",
       "2026 LH 지구단위계획 결정도와 현행 필지 위치 사용자 비교",
@@ -270,18 +282,18 @@ export function buildLegalReviewReport(
 
   const useArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건축제한", "용도지역 안에서의 건축제한"]);
   add("use", "건축·도시계획", "건축행위 가능 여부",
-    isUiwangChopyeong6301(place)
+    singleUiwangC1
       ? "C1 상업시설용지: 공동주택·오피스텔 불허(사용자 지도 확인)"
       : "공동주택 / 오피스텔(업무시설) 용도별 허용여부 별도 판정",
-    isUiwangChopyeong6301(place)
+    singleUiwangC1
       ? "의왕초평 2026 지구단위계획 시행지침 제Ⅱ편 제4장 표Ⅱ-4-2"
       : citation(useArticle, cityName + " · 건축제한 조항 및 별표"),
-    isUiwangChopyeong6301(place)
+    singleUiwangC1
       ? "사용자가 현재 필지와 결정도 위치 대조로 C1 블록 확인. C1 표Ⅱ-4-2에는 공동주택 미열거, 오피스텔 제외. C1-2 세부획지 지번변경 이력은 미확정."
       : "조례 본문만으로 적합 확정 불가 · 용도별 별표, 다른 법률에 따른 제한 확인",
-    isUiwangChopyeong6301(place) ? "user" : useArticle ? "conditional" : "unknown",
-    isUiwangChopyeong6301(place) ? UIWANG_6301.districtGuidelineUrl : useArticle?.sourceUrl || cityOrdinance,
-    isUiwangChopyeong6301(place) ? null : useArticle?.excerpt || null);
+    singleUiwangC1 ? "user" : useArticle ? "conditional" : "unknown",
+    singleUiwangC1 ? UIWANG_6301.districtGuidelineUrl : useArticle?.sourceUrl || cityOrdinance,
+    singleUiwangC1 ? null : useArticle?.excerpt || null);
 
   add("bcr", "건축·도시계획", "건폐율",
     bcr !== null ? bcr + "% 이하 (조례 일반기준)" : "대상 용도지역별 건폐율 조항 확인 필요",
