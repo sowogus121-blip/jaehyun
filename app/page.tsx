@@ -983,9 +983,10 @@ export default function Home() {
               <div>
                 <span className="eyebrow">SITE-SPECIFIC LEGAL FEASIBILITY</span>
                 <h3>법규검토 총괄표</h3>
-                <p>주소별 관계 법령과 조례 원문을 모아 실무용 표로 정리했어. <b>원문 확인 ≠ 대지별 적법판정</b>이며 미검증 완화는 계산에 자동 반영하지 않아.</p>
+                <p>주소별 관계 법령·조례·수도권 누적 특례 근거를 함께 보여줘. <b>원문 확인 ≠ 대지별 적법판정</b>이며 미검증 완화는 계산에 자동 반영하지 않아.</p>
               </div>
               <div className="law-report-heading-actions">
+                <a href="/ordinance-library" className="button ghost" title="서울·경기·인천 법규·완화 원문DB 검색">수도권 법규DB 열기</a>
                 <button type="button" className="button ghost" onClick={() => window.print()}>인쇄 / PDF</button>
                 <button type="button" className="button dark" onClick={exportExcel}>엑셀 내려받기</button>
               </div>

@@ -1,0 +1,38 @@
+.metro-root{--ink:#163249;--muted:#657585;--line:#dce4e9;--blue:#155e94;max-width:1180px;margin:0 auto;padding:32px 28px 80px;color:var(--ink);line-height:1.55;font-family:inherit}
+.metro-header{border:1px solid #d9e6ed;background:linear-gradient(123deg,#e6f3f7 0%,#f6fafd 57%,#fff 100%);padding:38px 38px 30px;border-radius:20px}
+.metro-topbar{display:flex;justify-content:space-between;align-items:center;color:#517085;font-size:12px;letter-spacing:.14em;font-weight:800}
+.metro-back{color:#17587e;text-decoration:none;letter-spacing:normal;font-size:14px}
+.metro-header h1{font-weight:800;font-size:34px;margin:24px 0 10px;letter-spacing:-.045em}
+.metro-header p{max-width:900px;font-size:15px;color:#536a78;line-height:1.9;margin:0}
+.metro-header p strong{color:#254b67}
+.metro-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px}
+.metro-stats>div{background:#fff;border:1px solid #e0e7ed;padding:18px 20px;border-radius:13px;display:flex;gap:8px;flex-direction:column}
+.metro-stats strong{font-size:28px;font-weight:800;line-height:1.05}
+.metro-stats span{font-size:12px;color:var(--muted)}
+.metro-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin:28px 0 20px;padding:18px;border-radius:14px;background:#f7fafc;border:1px solid var(--line)}
+.metro-filters label:not(.metro-check){font-weight:700;font-size:12px;display:flex;flex-direction:column;gap:7px;min-width:130px}
+.metro-filters label:first-child{flex:2;min-width:210px}
+.metro-filters input:not([type=checkbox]),.metro-filters select{min-height:40px;border:1px solid #c9d8e0;border-radius:8px;padding:8px 10px;background:#fff;color:#1d3b52;font-size:13px;outline-offset:2px}
+.metro-check{display:flex;gap:6px;align-items:center;font-size:12px;color:#455c6d;padding-bottom:10px}
+.metro-search-line{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:16px 0 12px;font-size:13px;color:var(--muted)}
+.metro-search-line strong{color:var(--ink)}
+.metro-city{border:1px solid var(--line);background:#fff;border-radius:15px;margin-bottom:22px;overflow:hidden}
+.metro-city-heading{background:#f5f9fa;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:23px 24px;border-bottom:1px solid var(--line)}
+.metro-city-heading span{font-size:11px;font-weight:800;letter-spacing:.08em;color:#40819f}
+.metro-city-heading h2{font-size:18px;margin:5px 0;font-weight:800}
+.metro-city-heading p{font-size:12px;margin:0;color:var(--muted)}
+.metro-city-heading a{border:1px solid #bbd0d9;border-radius:8px;background:#fff;color:#19638a;padding:8px 12px;text-decoration:none;font-size:12px;white-space:nowrap;font-weight:700}
+.metro-rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.metro-rule{padding:20px 23px 22px;border-right:1px solid #edf0f2;border-bottom:1px solid #e8eef1}
+.metro-rule-title{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.metro-rule-title span{font-size:10px;color:#21688d;background:#e7f3f8;padding:4px 8px;border-radius:5px;font-weight:800}
+.metro-rule-title h3{font-size:14px;letter-spacing:-.02em;margin:0;flex:1;min-width:150px}
+.metro-rule-title small{font-size:10px;color:#657784;border:1px solid #d5dfe5;padding:3px 7px;border-radius:6px}
+.metro-value{font-weight:700;color:#173f5a;font-size:14px;margin:16px 0 10px}
+.metro-condition{font-size:12px;color:#65727c;line-height:1.8;margin:0 0 16px}
+.metro-condition b{color:#435d6d}
+.metro-rule-source{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;border-top:1px solid #ecf1f3;padding-top:12px;color:#71828e}
+.metro-rule-source a{color:#17638c;text-decoration:none;font-weight:700;white-space:nowrap}
+.metro-empty{text-align:center;padding:50px;background:#f6f8fa;border-radius:10px;color:#607382}
+.metro-footer{padding:20px 24px;background:#f0f5f8;border-radius:12px;font-size:12px;line-height:1.8;color:#556e7d}
+@media(max-width:720px){.metro-root{padding:18px 12px 52px}.metro-header{padding:23px 18px}.metro-header h1{font-size:27px}.metro-topbar span{font-size:9px}.metro-stats{grid-template-columns:repeat(2,1fr)}.metro-rules{grid-template-columns:1fr}.metro-city-heading{flex-direction:column;align-items:flex-start}.metro-city-heading a{white-space:normal}.metro-filters label:first-child{min-width:100%}}
