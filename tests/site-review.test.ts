@@ -384,7 +384,7 @@ describe("site review API", () => {
     const combined=await (await POST(request({},"경기도 의왕시 초평동 630-1",["경기도 의왕시 초평동 630-2"]))).json();
     expect(combined.parcels).toHaveLength(2);
     expect(combined.ruleFindings).toEqual([]);
-    expect(combined.planningStandards?.source??"").not.toContain("C1 상업시설용지");
+    expect(combined.planningStandards).toBeNull();
     expect(combined.unresolved.join(" ")).toContain("합필");
     expect(combined.parcel).toBeNull();
   });
