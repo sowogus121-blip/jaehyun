@@ -39,6 +39,10 @@ const PRECISE:MetroAnnexRecord[]=[
   annex("seoul-building-annex4","서울특별시","서울","건축조례·대지안공지","서울특별시 건축 조례 제30조 대지 안의 공지","별표 4","https://www.law.go.kr/LSW/ordinSideInfoP.do?chrClsCd=010202&docCls=jo&gubun=&joBrNo=00&joNo=0030&ordinSeq=2116749&urlMode=ordinScJoAllRltInfoR","verified-title","2026.3.30 시행 제10083호 제30조가 건축선·인접대지 이격기준을 별표4로 위임. 구체 거리값은 별표 원문 숫자 직접 대조 전까지 미확정."),
   annex("seoul-parking-annex2","서울특별시","서울","주차장조례·부설주차","서울특별시 주차장 설치 및 관리 조례 부설주차장 설치기준","별표 2","https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=2147707","verified-title","2026.7.13 시행 제10142호 제20조 관련 별표2 확인. 2026.10.1 후속 개정 존재 여부는 허가 단계 재대조. 실제 용도별 주차 수치는 미추출."),
   annex("seoul-parking-annex3","서울특별시","서울","주차장조례·설치제한","서울특별시 부설주차장 설치제한지역 시설물별 기준","별표 3","https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=2147707","verified-title","별표3은 설치제한 지역에만 해당하는 별도 기준. 주소별 설치제한구역 포함여부·2026.10 이후 개정본 대조 없이 자동 감면 금지."),
+  annex("paju-building-annex3","파주시","경기","건축조례·대지안공지","파주시 건축 조례 대지 안의 공지 기준","별표 3","https://law.go.kr/LSW/ordinInfoP.do?ordinSeq=2022817","verified-title","2025.3.20 시행 제2205호 별표3 명칭 확인. 용도·층수별 건축선 및 인접대지 이격 수치와 이후 변경은 별도 대조."),
+  annex("hanam-building-annex3","하남시","경기","건축조례·대지안공지","하남시 건축 조례 제31조 대지 안의 공지 기준","별표 3","https://law.go.kr/LSW/ordinInfoP.do?ordinSeq=2076419","verified-title","2025.10.2 시행 제2464호 제31조 관련 별표3 명칭 확인. 건축형태별 이격 수치 및 최신 지구단위 건축한계선은 별도 대조."),
+  annex("bucheon-building-annex4","부천시","경기","건축조례·대지안공지","부천시 건축 조례 대지 안의 공지 기준","별표 4","https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=2095387","verified-title","2025.12.22 시행 제4290호 별표4 명칭 확인. 부천시 최신 개정본의 본문·수치, 특수건축물 등 개별 적용성 확인 필요."),
+  annex("seongnam-building-annex3","성남시","경기","건축조례·대지안공지","성남시 건축 조례 제24조 대지 안의 공지 기준","별표 3","https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=2019919","verified-title","2025.3.10 시행 제4204호 제24조 관련 별표3 명칭 확인. 2026 현재 새 개정 조례가 있는지 재검증 및 이격 수치 미추출."),
   annex("uiwang-zoning-annex6","의왕시","경기","도시계획조례·허용용도/주거복합","의왕시 도시계획조례 준주거지역 건축금지 목록","별표 6","https://www.law.go.kr/LSW/flDownload.do?flSeq=157487925","direct-excerpt","준주거 일반 금지목록에 공동주택·오피스텔 명시가 없어도 개별 지구단위계획의 C1 등 허용용도가 우선."),
   annex("uiwang-parking-annex5","의왕시","경기","주차장조례·부설주차","의왕시 주차장 설치 및 관리 조례 부설주차 설치대상·기준","별표 5","https://www.law.go.kr/LSW/flDownload.do?flSeq=167475619","direct-excerpt","2026.5.7 시행 조례: 통상 전용85㎡ 이하 세대·호실 최소 1대, 공공주택사업자 매도약정 전용30㎡ 미만 0.3대 조건부. 기계식 제20조 최대30% 등 별도."),
 ];
@@ -47,6 +51,10 @@ const REPLACED:Record<string,string>={
   "서울특별시-building-setback":"seoul-building-annex4",
   "서울특별시-parking-general":"seoul-parking-annex2",
   "서울특별시-parking-restricted":"seoul-parking-annex3",
+  "파주시-building-setback":"paju-building-annex3",
+  "하남시-building-setback":"hanam-building-annex3",
+  "부천시-building-setback":"bucheon-building-annex4",
+  "성남시-building-setback":"seongnam-building-annex3",
   "의왕시-planning-use":"uiwang-zoning-annex6",
   "의왕시-parking-general":"uiwang-parking-annex5",
 };
