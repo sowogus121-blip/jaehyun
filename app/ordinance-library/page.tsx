@@ -106,7 +106,7 @@ export default function CapitalAreaOrdinanceCatalogPage() {
       <div className="metro-plan-list">
         {districtPlans.length===0 && <div className="metro-empty">선택한 조건에 등록된 계획 원문이 없습니다.</div>}
         {districtPlans.map(plan=><article className="metro-plan" key={plan.id}>
-          <div className="metro-plan-top"><span>{plan.city} · {plan.type}</span><span className="metro-plan-proof">{plan.planEvidence==="official-notice-and-guidance"?"고시·시행지침 확인":"공식 고시 원문 확인"}</span></div>
+          <div className="metro-plan-top"><span>{plan.city} · {plan.type}</span><span className="metro-plan-proof">{plan.lifecycle==="expired"?"계획 실효 — 과거규정 적용 금지":plan.planEvidence==="official-notice-and-guidance"?"고시·시행지침 확인":"공식 고시 원문 확인"}</span></div>
           <h3>{plan.name}</h3><p className="metro-plan-date">{plan.noticeNo} · {plan.noticeDate}</p>
           <p>{plan.scopeHint}</p>
           <p className="metro-plan-warning"><b>적용 주의:</b> {plan.warnings[0]}</p>
