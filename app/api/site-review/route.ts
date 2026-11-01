@@ -681,7 +681,8 @@ export async function POST(request: NextRequest) {
   // require a separate applicability review.
   const ordinanceMaxima = !mixedUseZones && zoneNames.length === 1
     ? getOrdinanceZoneStandards({ ordinanceArticleCandidates }, zoneNames[0]) : null;
-  const resolvedPlanningStandards = isUiwang ? planningStandards : ordinanceMaxima ? {
+  const unverifiedUiwangAssembly = isUiwangChopyeong6301(address) && additionalAddresses.length > 0;
+  const resolvedPlanningStandards = unverifiedUiwangAssembly ? null : isUiwang ? planningStandards : ordinanceMaxima ? {
     zone: zoneNames[0],
     buildingCoverageRatio: ordinanceMaxima.bcr,
     far: ordinanceMaxima.far,
