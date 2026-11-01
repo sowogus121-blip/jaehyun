@@ -5,6 +5,7 @@ import { ALTERNATIVES, DEFAULT_INPUT, calculateAll, resetSiteDependentInput } fr
 import { calculateReviewCompleteness, deriveCalculationContext } from "@/lib/regulatory-assessment";
 import { activeReviewedRules, applyReviewedRule, confirmReviewedRule, removeRuleForEditedField } from "@/lib/rule-application";
 import { screenParking03 } from "@/lib/lh-parking-screen";
+import { getMunicipalMechanicalGuard, type MunicipalMechanicalGuard } from "@/lib/metropolitan-parking-guards";
 import { getLhParkingReview, type LhParkingReview } from "@/lib/lh-parking-review";
 import { getNoticeMemoryStatus } from "@/lib/lh-notice-memory";
 import { isUiwangChopyeong6301, UIWANG_6301 } from "@/lib/uiwang-chopyeong-6301";
@@ -286,9 +287,9 @@ function DecisionDashboardCard({dashboard,onShowLaw,onShowMassing,onShowLh}:{
 }
 
 
-function LhParkingAudit({analysis,input,results,ready,onLhTab}:{
+function LhParkingAudit({analysis,input,results,ready,municipal,onLhTab}:{
   analysis:LhParkingReview;input:ProjectInput;results:AlternativeResult[];
-  ready:boolean;onLhTab?:()=>void;
+  ready:boolean;municipal:MunicipalMechanicalGuard|null;onLhTab?:()=>void;
 }) {
   const groups=["기계식 주차","0.3대 특례","기본 주차","설계·운영"] as const;
   const youth=results.find(r=>r.definition.id==="B-1");
@@ -299,6 +300,10 @@ function LhParkingAudit({analysis,input,results,ready,onLhTab}:{
       <p>{analysis.noticeTitle??"해당 지역 LH 공식 공고 미확인"}</p></div>
       <span className="lh-parking-audit-state">{analysis.verifiedOriginal?"공고 원문 "+analysis.clauses.length+"개 조건 확인":
         analysis.noticeTitle?"PDF 문구 "+analysis.clauses.length+"개 · 검증 전":"공고 확인 필요"}</span></div>
+    {municipal&&<div className="notice amber"><Icon name="alert" size={16}/><div><b>{municipal.city} 기계식주차 별도 제한 · {municipal.maxMechanicalPercent}% 이하</b>
+      <span>{municipal.note} · LH 공고가 더 완화돼도 시 조례의 엄격한 기준을 초과하지 않고 계산합니다.</span>
+      <a href={municipal.sourceUrl} target="_blank" rel="noopener noreferrer">시 조례 {municipal.sourceArticle} 원문 ↗</a>
+      <small>기계식 비율 상한은 계산에 반영되지만, 별표 법정주차계수·실제 허용 여부 및 LH 인수 승인은 별도 검증이 필요합니다.</small></div></div>}
     {analysis.verifiedOriginal&&<div className="lh-parking-highlights">
       <div><small>기계식 주차 한도</small><strong>50% 이하</strong><span>역 출구 500m · 허용 주택유형 조건부</span></div>
       <div><small>150세대 미만</small><strong>20대 미만 우대</strong><span>무조건 금지선 아님</span></div>
@@ -429,6 +434,7 @@ export default function Home() {
   const lhNotice = reviewData?.lhNotice ?? null;
   const lhRules = lhNotice?.rules ?? null;
   const lhParkingAudit=useMemo(()=>getLhParkingReview(lhNotice,input),[lhNotice,input]);
+  const municipalParkingGuard=useMemo(()=>getMunicipalMechanicalGuard(reviewData,input),[reviewData,input]);
   const exampleRelaxedFar = preliminaryLimits ? Math.round(preliminaryLimits.far * 1.2 * 100) / 100 : null;
   const readiness = getMassingReadiness(input);
   const formattedReviewDate = new Date().toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -877,7 +883,7 @@ export default function Home() {
             </section>;
           })()}
           {reviewData && <DecisionDashboardCard dashboard={decisionDashboard} onShowLaw={()=>setActiveTab(1)} onShowMassing={()=>setActiveTab(3)} onShowLh={()=>setActiveTab(2)} />}
-          {reviewData && <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} onLhTab={()=>setActiveTab(2)} />}
+          {reviewData && <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} municipal={municipalParkingGuard} onLhTab={()=>setActiveTab(2)} />}
           <div className="summary-strip">
             <Metric label="대지면적" value={input.siteArea > 0 ? f(input.siteArea) : "—"} suffix="㎡" sub="사용자 입력" />
             <Metric label="적용 용적률" value={appliedFar > 0 ? appliedFar : "—"} suffix="%" sub={input.useRelaxedFar ? "완화안 · 조건부" : "기본안"} tone="navy" />
@@ -1195,7 +1201,7 @@ export default function Home() {
               </details>
             ))}
           </section>
-          <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} />
+          <LhParkingAudit analysis={lhParkingAudit} input={input} results={results} ready={readiness.canEstimateUnits} municipal={municipalParkingGuard} />
           <div className="notice navy"><Icon name="lh" /><div><b>{input.businessMode === "purchase" ? "민간 신축매입약정 검토 모드" : input.businessMode === "direct" ? "LH 직접건설 검토 모드" : "사업방식 미정 · 특례 확정 적용 보류"}</b><span>지역본부: {input.regionalOffice} · 최신 공고문 및 설계·시공 가이드라인 원문 연결 필요</span></div></div>
           {lhNotice && <section className="lh-rule-sheet">
             <div><strong>{lhNotice.title}</strong><span>공식 지역본부 공고 · {lhNotice.publishedAt} · <a href={lhNotice.url} target="_blank" rel="noopener noreferrer">원문 ↗</a></span></div>

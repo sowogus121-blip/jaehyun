@@ -8,6 +8,7 @@ import type {
   ProjectInput,
 } from "./types";
 import { screenParking03 } from "./lh-parking-screen";
+import { screenRegionalLhHomes } from "./metropolitan-parking-guards";
 
 export const ALTERNATIVES: AlternativeDefinition[] = [
   { id: "A-1", name: "공동주택 · 신혼형 · 자주식", shortName: "공동주택 자주식", useType: "apartment", parkingMode: "self", exclusiveArea: 46, efficiency: 0.75 },
@@ -202,19 +203,28 @@ export function calculateParking(input: ProjectInput, definition: AlternativeDef
   const legalCount = specialApplied && relaxedCount !== null ? relaxedCount : originalLegalCount;
   const appliedRatio = units > 0 ? finalCount / units : 0;
   const mechanicalUsable = definition.parkingMode === "mechanical" && input.mechanicalAllowed &&
-    !(context.lhPurchaseMechanicalRestrictedToOfficetelOrUrban && definition.useType === "apartment");
+    !(context.lhPurchaseMechanicalRestrictedToOfficetelOrUrban && definition.useType === "apartment") &&
+    !(context.municipalApartmentMechanicalExcluded && definition.useType === "apartment");
   const accessibleCount = finalCount > 0 ? Math.max(1, ceil(finalCount * 0.03)) : 0;
   const evCount = finalCount > 0 ? Math.max(1, ceil(finalCount * 0.05)) : 0;
   // An LH-verified maximum always overrides a looser manual slider when
   // the purchase-agreement mode is active, regardless of input order.
   const lhMechanicalCap = context.lhPurchaseMechanicalMaxPercent;
-  const appliedMechanicalMaxPercent = input.businessMode === "purchase" &&
-    typeof lhMechanicalCap === "number" && Number.isFinite(lhMechanicalCap)
-      ? Math.min(input.mechanicalMaxRatio, Math.max(0, lhMechanicalCap))
-      : input.mechanicalMaxRatio;
-  const mechanicalCount = mechanicalUsable
-    ? Math.min(finalCount - accessibleCount, Math.floor(finalCount * appliedMechanicalMaxPercent / 100))
+  const municipalMechanicalCap=context.municipalMechanicalMaxPercent;
+  const appliedMechanicalMaxPercent=Math.min(
+    input.mechanicalMaxRatio,
+    input.businessMode==="purchase" && typeof lhMechanicalCap==="number" && Number.isFinite(lhMechanicalCap)
+      ? Math.max(0,lhMechanicalCap) : 100,
+    typeof municipalMechanicalCap==="number" && Number.isFinite(municipalMechanicalCap)
+      ? Math.max(0,municipalMechanicalCap) : 100,
+  );
+  const mechanicalCandidate = mechanicalUsable
+    ? Math.max(0,Math.min(finalCount-accessibleCount,Math.floor(finalCount*appliedMechanicalMaxPercent/100)))
     : 0;
+  // Some municipalities require a MINIMUM number of machine spaces to
+  // install mechanical parking at all. 1-19 spaces are NOT a valid result.
+  const mechanicalCount=mechanicalCandidate>=Math.max(0,context.municipalMechanicalMinStalls??0)
+    ? mechanicalCandidate : 0;
   const selfCount = finalCount - mechanicalCount;
   const stagingArea = mechanicalCount > 0 ? 60 : 0;
   const area = selfCount * input.selfParkingAreaPerCar + mechanicalCount * input.mechanicalAreaPerCar + stagingArea;
@@ -311,6 +321,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const recommendedFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / plannedBuildingArea)) : 0;
   const estimatedHeight = recommendedFloors > 0 ? 1.2 + recommendedFloors * floorHeight : 0;
   const parking = calculateParking(input, definition, unitCount, context);
+  const regionalLh = input.businessMode==="purchase" ? screenRegionalLhHomes(input.address,context.regionalLhNoticeId??null,unitCount):null;
   const belowGroundArea = farCountedArea > 0 ? parking.area + Math.max(60, residentialFarArea * 0.025) : 0;
   const totalFloorArea = farCountedArea + belowGroundArea;
   const physicalMaxFloors = housingFloorPlate > 0 ? Math.min(legalMaxFloors, ceil(envelopeArea / housingFloorPlate)) : 0;
@@ -326,8 +337,20 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   if (lhEligibility === "ineligible") blockingReasons.push("LH 사업·매입 대상 부적합");
   else if (lhEligibility === "unknown") conditionalReasons.push("LH 사업·매입 가능 여부 미확인");
   else if (lhEligibility === "conditional") conditionalReasons.push("LH 사업·매입 조건부");
+  if (regionalLh?.status==="below-smallest-threshold") conditionalReasons.push("LH 해당 지역 공고 최소 "+regionalLh.minRegulated+"호 미달: 유형·예외 검토 필요");
+  if (regionalLh?.status==="regulated-area-check") conditionalReasons.push("LH 일반지역 최소 "+regionalLh.minGeneral+"호 미달: 규제지역 여부·최소 호수 확인 필요");
+  if (input.businessMode==="purchase" && regionalLh?.status==="reference-only" && context.regionalLhNoticeId)
+    conditionalReasons.push("해당 LH 매입공고 기간 종료 또는 현행 공고 미확인: 신규 신청 적합성 보류");
   if (definition.parkingMode === "mechanical") {
     if (context.lhPurchaseMechanicalRestrictedToOfficetelOrUrban && definition.useType === "apartment") blockingReasons.push("LH 현행 경기북부 4차 공고: 기계식은 주거용 오피스텔·도시형생활주택 요건이며 일반 공동주택 A-2는 대상이 아님");
+    if(context.municipalApartmentMechanicalExcluded && definition.useType==="apartment")
+      blockingReasons.push("의정부시 제2·3종일반주거지역 공동주택 기계식주차 제외(주차장조례 제11조의2)");
+    if(context.municipalMechanicalMinStalls && parking.finalCount>0 && parking.mechanicalCount===0)
+      blockingReasons.push("조례상 기계식 "+context.municipalMechanicalMinStalls+"대 미만 설치 불가 · 현 검토대수로 기계식 계획 성립 불가");
+    if(context.municipalOfficeMinGrossOrFloors && definition.useType==="officetel" &&
+      farCountedArea<context.municipalOfficeMinGrossOrFloors.grossSqm &&
+      recommendedFloors<context.municipalOfficeMinGrossOrFloors.floors)
+      conditionalReasons.push("의정부시 기계식 입지: 연면적 1,000㎡ 이상 또는 5층 이상 확인 필요(지하 포함 최종 연면적 미확정)");
     if (context.mechanicalParkingEligibility === "ineligible") blockingReasons.push("기계식주차 적용 불가");
     else if (context.mechanicalParkingEligibility !== "eligible") conditionalReasons.push("기계식주차 법적 허용·LH 인수기준 미확인");
   }
@@ -353,6 +376,10 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
       typeof context.lhPurchaseMechanicalMaxPercent === "number" &&
       input.mechanicalMaxRatio > context.lhPurchaseMechanicalMaxPercent)
     warnings.push(`공고 확인 기계식주차 상한 ${context.lhPurchaseMechanicalMaxPercent}%를 사용자 가정 ${input.mechanicalMaxRatio}%보다 우선 적용했습니다.`);
+  if(definition.parkingMode==="mechanical" && typeof context.municipalMechanicalMaxPercent==="number"){
+    warnings.push(`관할 조례 기계식 상한 ${context.municipalMechanicalMaxPercent}%가 LH 공고·사용자 가정보다 엄격하면 그 값을 우선 적용. 원문: ${context.municipalMechanicalSource??"지자체 주차장조례"}`);
+    if(context.municipalMechanicalMinStalls)warnings.push(`기계식 최소 설치대수 ${context.municipalMechanicalMinStalls}대 미만이면 기계식 0대로 재산정합니다.`);
+  }
   if (definition.parkingMode === "mechanical") warnings.push("기계식 면적은 개략값이며 제조사 형식·대기공간·LH 인수기준 검토가 필요합니다.");
   if (unitCountByFar > unitCountByEnvelope) warnings.push("용적률상 가능 수량보다 높이·기준층 제약에 따른 배치 가능 수량이 작습니다.");
   if (parking.conditionalCount !== null && !parking.specialApplied) warnings.push(`0.3대 특례는 미승인 상태입니다. 기본 ${parking.fallbackCount}대와 조건부 ${parking.conditionalCount}대를 분리했습니다.`);

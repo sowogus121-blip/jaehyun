@@ -9,6 +9,7 @@ import { findMetroOrdinanceSource, findMetroOrdinanceRules } from "./metro-ordin
 import { findMetroAnnexRecords, findLhPurchaseNotice, findLhGuidelines, koreaLocalDay, noticeIsOpen } from "./metro-annex-lh-catalog";
 import { findDistrictPlanEvidence } from "./district-plan-sources";
 import { NATIONAL_SCREENING_RULES } from "./national-screening-rules";
+import { getMunicipalMechanicalGuard } from "./metropolitan-parking-guards";
 
 export type LegalRowStatus = "source" | "conditional" | "unknown" | "user";
 export interface LegalReviewRow {
@@ -383,6 +384,34 @@ export function buildLegalReviewReport(
     citation(mechanical, "주차장법령 · 관할 주차장 조례"),
     "공동주택·오피스텔별 허용여부와 주차장법 시행규칙 대조 필요",
     mechanical ? "conditional" : "unknown", mechanical?.sourceUrl || parkingOrdinance, mechanical?.excerpt || null);
+  const municipalityMachine=getMunicipalMechanicalGuard(review,input);
+  if(municipalityMachine){
+    const cityLimit=municipalityMachine;
+    const lhCap=review?.lhNotice?.rules && input.businessMode==="purchase"
+      ? review.lhNotice.rules.mechanicalMaxPercent : null;
+    const cap=lhCap===null?cityLimit.maxMechanicalPercent:Math.min(cityLimit.maxMechanicalPercent,lhCap);
+    add("municipal-machine-cap","LH·주차 검토","지자체 조례 기계식주차 최대비율",
+      "조례 "+cityLimit.maxMechanicalPercent+"% 이하"+(lhCap===null?" · LH 별도 확인":" · LH "+lhCap+"% → 더 엄격한 "+cap+"% 이하")+" · 최소 기계식 "+cityLimit.minMechanicalStalls+"대",
+      cityLimit.sourceArticle,
+      cityLimit.note+" · 주민공동/업무시설 용도·법정주차대수·최신 별표3과 LH 인수 심사 별도 확인. 비율 상한만 자동 제한하며 기계식주차를 자동 승인하지 않음.",
+      "conditional",cityLimit.sourceUrl);
+    if(cityLimit.apartmentProhibited)add("municipal-machine-apartment","LH·주차 검토","공동주택 기계식주차 허용 여부",
+      "제2·3종일반주거지역 공동주택 기계식 불가(관할 시 조례)",
+      cityLimit.sourceArticle,
+      "오피스텔은 공동주택과 다른 허용조건이며 연면적·층수·최소 기계식 대수 확인 필요. LH 신혼형 일반 공동주택 기계식 대안은 부적합.",
+      "source",cityLimit.sourceUrl);
+  }
+  // LH min-home standards screen only; never treat a municipality listing as
+  // a purchase acceptance decision.
+  const regionLh=findLhPurchaseNotice(place);
+  if(regionLh){
+    const current=noticeIsOpen(regionLh,koreaLocalDay());
+    add("regional-lh-min-homes","LH·주차 검토","LH 지역본부 최소 매입 호수",
+      (current?"공고기간 기준 ":"접수 종료 공고 참고값: ")+"일반 "+regionLh.normalMinimumHomes+"호 / 규제지역 "+regionLh.regulatedMinimumHomes+"호",
+      regionLh.title+" · 원문 PDF",
+      "규제지역 지정일·지역별 제외지·공급유형·약정/인수 요건 미확정. 호수 충족만으로 매입 승인 불가.",
+      "conditional",regionLh.noticePdfUrl);
+  }
   add("mechanical-lh", "LH·주차 검토", "기계식주차 (LH 공고 인수기준)",
     verifiedParking ? "총 주차대수 50% 이하 · 도시철도역 출구 직선 500m 이내 · 주거용 오피스텔/도시형생활주택" :
       parkingExtracted.length ? "해당 지역 LH PDF 주차 관련 문구 "+parkingExtracted.length+"건 추출 · 적용 검증 전" :
