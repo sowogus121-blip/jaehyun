@@ -7,8 +7,8 @@ import { buildLegalReviewReport } from "../lib/legal-review-report";
 import { DEFAULT_INPUT } from "../lib/calculator";
 
 describe("source-backed municipal district and special-plan evidence",()=>{
- it("indexes precisely three official district/special plan declarations and never invents polygon matches",()=>{
-   expect(DISTRICT_PLAN_SOURCES).toHaveLength(3);
+ it("indexes 10 official district/special-plan notices with cautious boundary matching",()=>{
+   expect(DISTRICT_PLAN_SOURCES).toHaveLength(10);
    expect(new Set(DISTRICT_PLAN_SOURCES.map(p=>p.id)).size).toBe(DISTRICT_PLAN_SOURCES.length);
    expect(DISTRICT_PLAN_DISCOVERY).toHaveLength(11);
    for (const p of DISTRICT_PLAN_SOURCES){
@@ -21,6 +21,8 @@ describe("source-backed municipal district and special-plan evidence",()=>{
    expect(DISTRICT_PLAN_SOURCES.find(x=>x.id==="uiwang-chopyeong-2026-308")?.documents.some(d=>d.kind==="획지 결정도")).toBe(true);
    expect(DISTRICT_PLAN_SOURCES.find(x=>x.id==="bucheon-eunha-2026-107")?.noticeNo).toContain("2026-107");
    expect(DISTRICT_PLAN_SOURCES.find(x=>x.id==="bucheon-sangdong-2026-124")?.documents).toHaveLength(3);
+   expect(DISTRICT_PLAN_SOURCES.find(x=>x.id==="hanam-antergol2-expired-2026-121")?.lifecycle).toBe("expired");
+   expect(DISTRICT_PLAN_SOURCES.find(x=>x.id==="suwon-gwanggyo-2026-432")?.noticeNo).toContain("2026-432");
  });
  it("Uiwang 630-1 has user-confirmed C1 block but NOT official C1-2 sublot",()=>{
    const r=findDistrictPlanEvidence("경기도 의왕시 초평동 630-1");
@@ -38,6 +40,9 @@ describe("source-backed municipal district and special-plan evidence",()=>{
    expect(findDistrictPlanEvidence("경기도 부천시 원미구 중동 999")).toEqual([]);
    expect(findDistrictPlanEvidence("경기도 파주시 봉암리 1343-2")).toEqual([]);
    expect(findDistrictPlanEvidence("경기도 파주시 봉암리 1343-2",{includeCitySources:true})).toEqual([]);
+   expect(findDistrictPlanEvidence("경기도 수원시 광교동 10")[0]?.level).toBe("district-name-candidate");
+   expect(findDistrictPlanEvidence("경기도 하남시 덕풍동 376-9")[0]?.plan.lifecycle).toBe("expired");
+   expect(findDistrictPlanEvidence("경기도 하남시 덕풍동 419-32")).toEqual([]);
  });
  it("avoids locality collision even when names coincide in other provinces",()=>{
    expect(findDistrictPlanEvidence("인천광역시 남동구 1036번지 은하마을")).toEqual([]);
