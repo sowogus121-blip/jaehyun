@@ -5,6 +5,7 @@ import type {
   SiteReviewResult,
   UseType,
 } from "./types";
+import { getMunicipalMechanicalGuard } from "./metropolitan-parking-guards";
 
 function findingOutcome(review: SiteReviewResult | null, topic: string, useType?: UseType): AlternativeEligibilityStatus {
   const findings = review?.ruleFindings ?? [];
@@ -29,6 +30,7 @@ export function deriveCalculationContext(review: SiteReviewResult | null, input:
     officetel: findingOutcome(review, "LH 매입", "officetel"),
   };
   const mechanicalFinding = findingOutcome(review, "기계식주차");
+  const municipal = getMunicipalMechanicalGuard(review,input);
 
   return {
     // Never mark all planning limits verified from a single verified clause.
@@ -40,6 +42,15 @@ export function deriveCalculationContext(review: SiteReviewResult | null, input:
     usePermissions,
     lhPurchaseEligibility,
     mechanicalParkingEligibility: input.mechanicalAllowed ? mechanicalFinding : "ineligible",
+    ...(municipal ? {
+      municipalMechanicalMaxPercent:municipal.maxMechanicalPercent,
+      municipalMechanicalMinStalls:municipal.minMechanicalStalls,
+      municipalApartmentMechanicalExcluded:municipal.apartmentProhibited,
+      municipalOfficeMinGrossOrFloors:municipal.officeMinimumGrossSqmOrFloors??undefined,
+      municipalMechanicalSource:municipal.sourceUrl,
+    }:{}),
+    regionalLhNoticeId:review?.lhNotice?.id??null,
+    regionalLhNoticeSource:review?.lhNotice?.pdfUrl??undefined,
     lhPurchaseMechanicalRestrictedToOfficetelOrUrban: Boolean(review?.lhNotice?.rules && input.businessMode === "purchase"),
     lhPurchaseMechanicalMaxPercent: input.businessMode === "purchase" ? review?.lhNotice?.rules?.mechanicalMaxPercent : undefined,
     lhCommunityMinimumHomes: input.businessMode === "purchase" ? review?.lhNotice?.rules?.communityThreshold : undefined,
