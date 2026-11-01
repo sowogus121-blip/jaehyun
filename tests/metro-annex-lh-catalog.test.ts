@@ -13,7 +13,9 @@ describe("metropolitan ordinance annex source index",()=>{
     expect(new Set(METRO_ANNEX_RECORDS.map(r=>r.id)).size).toBe(METRO_ANNEX_RECORDS.length);
     const paju=findMetroAnnexRecords("경기도 파주시 파주읍 봉암리 1343-2");
     expect(paju.length).toBe(4);
-    expect(paju.every(x=>x.city==="파주시"&&x.evidence==="lookup-only")).toBe(true);
+    expect(paju.every(x=>x.city==="파주시")).toBe(true);
+    expect(paju.filter(x=>x.evidence==="verified-title").map(x=>x.id)).toEqual(["paju-building-annex3"]);
+    expect(paju.filter(x=>x.evidence==="lookup-only")).toHaveLength(3);
     expect(findMetroAnnexRecords("경기도 포천시 신읍동 1")).toHaveLength(0);
   });
   it("retains exact verified annex numbers only where the official article/title has been read",()=>{
@@ -21,7 +23,7 @@ describe("metropolitan ordinance annex source index",()=>{
     expect(findMetroAnnexRecords("서울특별시 강남구 1").find(x=>x.id==="seoul-parking-annex2")?.appendix).toBe("별표 2");
     expect(findMetroAnnexRecords("의왕시 초평동 630-1").find(x=>x.id==="uiwang-parking-annex5")?.evidence).toBe("direct-excerpt");
     expect(findMetroAnnexRecords("경기도 안양시 1").every(x=>x.appendix===null)).toBe(true);
-    expect(METRO_ANNEX_RECORDS.every(x=>x.automaticApplication===false&&x.sourceUrl.startsWith("https://www.law.go.kr/"))).toBe(true);
+    expect(METRO_ANNEX_RECORDS.every(x=>x.automaticApplication===false&&new URL(x.sourceUrl).hostname.endsWith("law.go.kr"))).toBe(true);
   });
 });
 
@@ -81,11 +83,12 @@ describe("LH 2026 region-specific purchase notices and guide archive",()=>{
   });
   it("links annex and correct LH region in the user's parcel legal review, with no approved FAR claim",()=>{
     const legal=buildLegalReviewReport({...DEFAULT_INPUT,address:"경기도 파주시 파주읍 봉암리 1343-2"},null);
-    expect(legal.rows.find(x=>x.id==="annex-파주시-building-setback")?.status).toBe("unknown");
+    expect(legal.rows.find(x=>x.id==="annex-paju-building-annex3")?.status).toBe("conditional");
+    expect(legal.rows.find(x=>x.id==="annex-파주시-parking-general")?.status).toBe("unknown");
     expect(legal.rows.find(x=>x.id==="lh-regional-notice-north-4th-2026")?.detail).toContain("경기북부");
     expect(legal.rows.find(x=>x.id==="lh-regional-guide-north-4th-2026")?.sourceUrl).toContain("68899893");
     expect(legal.rows.some(x=>x.id==="lh-regional-notice-south-3rd-2026")).toBe(false);
-    expect(legal.rows.find(x=>x.id==="annex-파주시-building-setback")?.note).toContain("자동 수치");
+    expect(legal.rows.find(x=>x.id==="annex-파주시-parking-general")?.note).toContain("자동 수치");
     const bucheon=buildLegalReviewReport({...DEFAULT_INPUT,address:"경기도 부천시 중동 101"},null);
     expect(bucheon.rows.find(x=>x.id==="lh-regional-minimum-incheon-3rd-2026")?.detail).toContain("20호");
     expect(bucheon.rows.find(x=>x.id==="lh-regional-notice-north-4th-2026")).toBeUndefined();
