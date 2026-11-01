@@ -13,7 +13,7 @@ function mockSite(address:string,zone:string,pnu:string,city:string):SiteReviewR
   ordinances:[{name:city+" 주차장 설치 및 관리 조례",link:"https://www.law.go.kr",localGovernment:"경기도 "+city,promulgationDate:null,enforcementDate:null,retrievalStatus:"full-text",applicationStatus:"not-assessed"}],
   parcels:[{inputAddress:address,location:null,parcel:null,landUse:[],errors:[]}],
   ruleFindings:[],mixedUseZones:false,
-  lhNotice:{id:"1730",isCurrent:true,official:true,rules:null},
+  lhNotice:{id:"1730",isCurrent:true,official:true,rules:null,warnings:[],title:"LH 2026 경기북부",url:"https://apply.lh.or.kr",pdfUrl:null,guideUrl:null,publishedAt:"2026.10.07",closesAt:"2026.11.06",matchedDistrict:city},
  } as unknown as SiteReviewResult;
 }
 describe("municipal statute x LH purchase parking strictness",()=>{
