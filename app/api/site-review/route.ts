@@ -482,7 +482,7 @@ export async function POST(request: NextRequest) {
         getLandUse(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
         getParcelInfo(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
       ]);
-      additionalLandUse = [...additionalLandUse, ...additionalUse.items].filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+      additionalLandUse = [...additionalUse.items, ...additionalLandUse].filter((item, index, all) => all.findIndex((candidate) => `${candidate.category}-${candidate.name}` === `${item.category}-${item.name}`) === index);
       if (!parcelPreset && cadastral) additionalParcel = cadastral;
       else if (additionalParcel && cadastral?.pnu) additionalParcel.pnu = cadastral.pnu;
       return { inputAddress: parcelAddress, location: additionalLocation, parcel: additionalParcel, landUse: additionalLandUse, errors: additionalUse.errors };
@@ -499,7 +499,7 @@ export async function POST(request: NextRequest) {
   }
   parcels.push(...additionalReviews);
   if (additionalReviews.length) {
-    landUse = parcels.flatMap((item) => item.landUse).filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+    landUse = parcels.flatMap((item) => item.landUse).filter((item, index, all) => all.findIndex((candidate) => `${candidate.category}-${candidate.name}` === `${item.category}-${item.name}`) === index);
     const seenPnus = new Set<string>();
     let duplicatePnu = false;
     for (const item of parcels) {
