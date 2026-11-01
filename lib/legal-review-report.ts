@@ -7,6 +7,8 @@ import { ALTERNATIVES } from "./calculator";
 import { UIWANG_6301, isUiwangChopyeong6301 } from "./uiwang-chopyeong-6301";
 import { findMetroOrdinanceSource, findMetroOrdinanceRules } from "./metro-ordinance-catalog";
 import { findMetroAnnexRecords, findLhPurchaseNotice, findLhGuidelines, koreaLocalDay, noticeIsOpen } from "./metro-annex-lh-catalog";
+import { findDistrictPlanEvidence } from "./district-plan-sources";
+import { NATIONAL_SCREENING_RULES } from "./national-screening-rules";
 
 export type LegalRowStatus = "source" | "conditional" | "unknown" | "user";
 export interface LegalReviewRow {
@@ -117,6 +119,40 @@ export function buildLegalReviewReport(
   add("zone", "대상지 현황", "용도지역·지구", zone, "VWorld 토지이용정보 / 토지이용계획확인서",
     review?.mixedUseZones ? "혼합 용도지역 · 획지별 가중산정 및 면적 대조 필요" : "다른 용도지구·구역 중첩 제한 확인",
     landUse.length ? "source" : lookup?.zone ? "source" : "unknown");
+
+  // Parcel vs plan proof: show specific verified/candidate records only,
+  // never any generic city plan as applying to an arbitrary address.
+  const districtPlanEvidence=findDistrictPlanEvidence(place);
+  for(const match of districtPlanEvidence) {
+    const plan=match.plan;
+    add("plan-"+plan.id,
+      "건축·도시계획", "[지구단위·특별계획] "+plan.name,
+      plan.noticeNo+" · "+plan.noticeDate+" · "+match.message,
+      "토지이음 등 공식 결정고시",
+      plan.scopeHint+" · "+plan.warnings.join(" ")+" · 고시문 확인과 지번별 적용은 별개.",
+      match.level==="user-map-confirmed-block"?"user":"conditional",
+      plan.officialNoticeUrl);
+    for (let i=0;i<plan.documents.length;i++){
+      const doc=plan.documents[i];
+      add("plan-"+plan.id+"-document-"+i,
+        "건축·도시계획","[원문자료] "+doc.kind,
+        doc.note,
+        plan.noticeNo+" · "+doc.kind,
+        "이 자료에 개별 필지의 획지/건축선/허용용도 등이 명확히 지정되는지 추가 대조. 지도·고시문만으로 용적률 완화 승인 판정 불가.",
+        "conditional",doc.url);
+    }
+  }
+  // National screening applies as CHECKLIST, never as automatic numerical
+  // assumptions for building scale/parking/LH purchase.
+  for(const rule of NATIONAL_SCREENING_RULES){
+    add("national-"+rule.id,
+      rule.category==="주차·피난·방화" || rule.category==="주택·주민공동시설"?"LH·주차 검토":"건축·도시계획",
+      "[국가법규 필수점검] "+rule.title,
+      rule.description,
+      rule.law+" "+rule.article,
+      rule.screeningQuestion+" · "+rule.screeningPriority+" · 지자체 별표·지구단위계획·LH 매입유형 적용성 확인 전 자동 계산 금지",
+      "conditional",rule.sourceUrl);
+  }
 
   // Evidence library: city-matched, dated and cited screening rules ONLY.
   // They do not change legal FAR, parking, unit count or parcel permission.
