@@ -72,3 +72,26 @@
 .metro-guides>div small{display:block;color:#768994;margin-top:3px}
 .metro-guides>div p{font-size:11px;color:#667783;margin:6px 0 0}
 @media(max-width:840px){.metro-annex-list,.metro-notices{grid-template-columns:1fr}.metro-notice-facts{grid-template-columns:1fr}.metro-extra-heading{padding:18px;align-items:flex-start}.metro-extra-heading>strong{font-size:11px}.metro-annex,.metro-notice{padding:17px}}
+
+/* Source-first planning area and cross-cutting national legal checklist */
+.metro-plan-list,.metro-national-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.metro-plan,.metro-national{padding:24px 26px;border-right:1px solid #e8eff2;border-bottom:1px solid #e8eff2;min-width:0}
+.metro-plan-top,.metro-national-label{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:11px;font-weight:750;color:#2c6b8d}
+.metro-plan-proof,.metro-national-label small{font-size:10px;background:#edf4f7;color:#566f7d;border-radius:6px;padding:4px 7px;font-weight:700}
+.metro-plan h3,.metro-national h3{font-size:16px;letter-spacing:-.03em;margin:10px 0 6px;line-height:1.5}
+.metro-plan p,.metro-national p{font-size:12px;color:#627889;line-height:1.8;margin:10px 0}
+.metro-plan-date{font-size:11px!important;color:#6c8490!important}
+.metro-plan-warning{background:#f4f7f9;border-left:3px solid #a7c3d1;padding:9px 11px;border-radius:4px}
+.metro-plan-docs{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px}
+.metro-plan-docs a{padding:6px 8px;border:1px solid #cbdde5;border-radius:6px;font-size:11px;font-weight:700;color:#17658e;text-decoration:none;background:#fafcfd}
+.metro-discovery{padding:17px 23px;font-size:12px;color:#5e7181;border-top:1px solid #e5edf2}
+.metro-discovery summary{cursor:pointer;color:#276684;font-size:12px;font-weight:750}
+.metro-discovery p{font-size:12px;line-height:1.9}
+.metro-discovery>div{display:flex;gap:8px;flex-wrap:wrap}
+.metro-discovery a{font-size:11px;text-decoration:none;padding:6px 9px;border:1px solid #d1dce3;color:#2b6788;border-radius:6px}
+.metro-national-label>span{font-size:11px;color:#286788}
+.metro-national-question{background:#f2f6f8;color:#3e5d71;line-height:1.8;font-size:12px;padding:11px 13px;border-radius:7px;margin:15px 0}
+.metro-national-question>b{display:block;color:#1f4d68;margin-bottom:3px}
+.metro-national-link{border-top:1px solid #eaf0f3;padding-top:11px;display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:11px;color:#6e7d87}
+.metro-national-link a{color:#13658e;font-weight:700;text-decoration:none}
+@media(max-width:840px){.metro-plan-list,.metro-national-list{grid-template-columns:1fr}.metro-plan,.metro-national{padding:18px}}
