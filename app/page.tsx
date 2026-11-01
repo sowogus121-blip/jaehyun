@@ -411,6 +411,7 @@ export default function Home() {
   const assembly = useMemo(() => assessParcelAssembly(reviewData), [reviewData]);
   const assemblyEntryRows = input.parcelList.split(/\r?\n/);
   const normalizedExtras = normalizeAssemblyAddresses(input.address, assemblyEntryRows);
+  const singleUiwangC1 = isUiwangChopyeong6301(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
   const tooManyExtras = normalizedExtras.length > MAX_EXTRA_PARCELS;
   const updateAssemblyRow = (index: number, value: string) => {
     const updated = [...assemblyEntryRows]; updated[index] = value;
@@ -611,7 +612,7 @@ export default function Home() {
           useRelaxedFar: false,
           relaxedFar: 0,
         } : {}),
-        ...(automaticOrdinance && !isUiwangChopyeong6301(resolvedAddress) ? {
+        ...(automaticOrdinance && (!isUiwangChopyeong6301(resolvedAddress) || Boolean(merged?.isMultiple)) ? {
           buildingCoverageRatio: current.buildingCoverageRatio > 0 ? current.buildingCoverageRatio : automaticOrdinance.bcr,
           baseFar: current.baseFar > 0 ? current.baseFar : automaticOrdinance.far,
           relaxedFar: current.relaxedFar > 0 ? current.relaxedFar : Math.round(automaticOrdinance.far * 1.2 * 100) / 100,
@@ -833,7 +834,7 @@ export default function Home() {
           </section>
 
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
-          {isUiwangChopyeong6301(input.address) && <section className="card uiwang-evidence" aria-label="의왕초평 630-1 지구계획 원문 대조">
+          {singleUiwangC1 && <section className="card uiwang-evidence" aria-label="의왕초평 630-1 지구계획 원문 대조">
             <div className="site-decision-title"><div><span>LH 직접 첨부 원문 · 지구단위계획 제Ⅱ편 제4장</span>
               <h3>초평동 630-1 · C1 상업시설용지 확인</h3>
               <p>사용자가 현재 지번의 지도 위치와 2026년 결정도를 대조해 C1 블록을 확인했습니다. 법정 용도지역은 준주거지역이지만 건축 허용용도는 지구단위계획을 따릅니다.</p></div>
@@ -1000,13 +1001,13 @@ export default function Home() {
                 <small>최고층수는 직접 가정하는 값이며 지구단위계획·일조·주차·LH 인수 조건을 확정하지 않아.</small>
               </div>
               <label>가정 층수 <input type="number" aria-label="예비 계획 층수" min="1" max="60" step="1" value={scenarioFloors} onChange={(e) => setScenarioFloors(Number(e.target.value) || 0)} />층</label>
-              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData || isUiwangChopyeong6301(input.address)} onClick={() => startPreliminaryScenario("base")}>{isUiwangChopyeong6301(input.address) ? "C1 주거 불허 · LH 규모검토 제외" : "기본안 4개 비교"} <Icon name="chevron" size={15}/></button>
+              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData || singleUiwangC1} onClick={() => startPreliminaryScenario("base")}>{singleUiwangC1 ? "C1 주거 불허 · LH 규모검토 제외" : "기본안 4개 비교"} <Icon name="chevron" size={15}/></button>
             </div>
             {preliminaryLimits && <div className="far-compare-strip">
               <div><span>조례 일반 용적률</span><b>{preliminaryLimits.far}%</b><small>조문 일반기준 · 지구단위 검증 전</small></div>
               <div className="far-compare-arrow">→</div>
               <div><span>120% 완화 가정안</span><b>{exampleRelaxedFar}%</b><small>완화요건 미확인 · 승인값 아님</small></div>
-              <button type="button" className="button ghost" onClick={() => startPreliminaryScenario("example")} disabled={!reviewData || isUiwangChopyeong6301(input.address)}>완화 가정 비교</button>
+              <button type="button" className="button ghost" onClick={() => startPreliminaryScenario("example")} disabled={!reviewData || singleUiwangC1}>완화 가정 비교</button>
             </div>}
             <div className="parking-inline-settings"><div><b>주차대수 바로 계산</b><small>현재 미확정 법정계수 대신 입력하는 계획 가정값이야. 입력 즉시 4개 대안이 갱신돼.</small></div>
               <label>공동주택 <input aria-label="공동주택 주차계수 빠른 입력" type="number" min="0" step="0.1" value={input.apartmentParkingRatio || ""} placeholder="대/세대" onChange={e => update("apartmentParkingRatio", Number(e.target.value))} /></label>
