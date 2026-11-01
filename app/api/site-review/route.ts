@@ -7,6 +7,8 @@ import { collectOfficialDocuments } from "../../../lib/server/official-document-
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
 import { extractOrdinanceArticles, type OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
+import { getOrdinanceZoneStandards } from "../../../lib/legal-review-report";
+import { findLhPurchaseNotice, noticeIsOpen, koreaLocalDay } from "../../../lib/metro-annex-lh-catalog";
 
 type LawRecord = {
   name: string;
@@ -480,7 +482,7 @@ export async function POST(request: NextRequest) {
         getLandUse(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
         getParcelInfo(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
       ]);
-      additionalLandUse = [...additionalLandUse, ...additionalUse.items].filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+      additionalLandUse = [...additionalUse.items, ...additionalLandUse].filter((item, index, all) => all.findIndex((candidate) => `${candidate.category}-${candidate.name}` === `${item.category}-${item.name}`) === index);
       if (!parcelPreset && cadastral) additionalParcel = cadastral;
       else if (additionalParcel && cadastral?.pnu) additionalParcel.pnu = cadastral.pnu;
       return { inputAddress: parcelAddress, location: additionalLocation, parcel: additionalParcel, landUse: additionalLandUse, errors: additionalUse.errors };
@@ -497,7 +499,7 @@ export async function POST(request: NextRequest) {
   }
   parcels.push(...additionalReviews);
   if (additionalReviews.length) {
-    landUse = parcels.flatMap((item) => item.landUse).filter((item, index, all) => all.findIndex((candidate) => `${candidate.code}-${candidate.name}` === `${item.code}-${item.name}`) === index);
+    landUse = parcels.flatMap((item) => item.landUse).filter((item, index, all) => all.findIndex((candidate) => `${candidate.category}-${candidate.name}` === `${item.category}-${item.name}`) === index);
     const seenPnus = new Set<string>();
     let duplicatePnu = false;
     for (const item of parcels) {
@@ -529,9 +531,13 @@ export async function POST(request: NextRequest) {
 
   const zoneNames = [...new Set(landUse.filter((item) => item.category === "용도지역").map((item) => item.name))];
   const mixedUseZones = zoneNames.length > 1;
+  // A map-confirmed C1 result is proved for ONE lot only. Merging another
+  // parcel must never transfer the C1 residential prohibition or 450% cap
+  // onto unverified adjoining land.
+  const isUiwang = isUiwangChopyeong6301(address) && additionalAddresses.length === 0;
   // C1 block placement was user-confirmed by map overlay. Apply C1's general
   // commercial block envelope (70/450/7 floors), NOT an unverified C1-2 sublot.
-  const isUiwangC1 = isUiwangChopyeong6301(address);
+  const isUiwangC1 = isUiwang;
   const planningStandards = isUiwangC1
     ? {
       zone: "준주거지역 · C1 상업시설용지(위치 사용자 지도 대조)",
@@ -614,7 +620,6 @@ export async function POST(request: NextRequest) {
     ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   }
   const webSearch = await webSearchPromise;
-  const isUiwang = isUiwangChopyeong6301(address);
   const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
   // Replace an irrelevant old local-government search hit with the exact 2026
   // official LH district guideline already examined from the source PDF.
@@ -644,27 +649,44 @@ export async function POST(request: NextRequest) {
     ],
   } : discoveredDocuments;
   const lhNoticeResult = await lhNoticePromise;
-  // Historical, city-matched notice is only a source/reference when the latest
-  // live LH board does not return a candidate. Its October deadline has passed.
-  const lhNotice = lhNoticeResult.notice ?? (isUiwang ? {
-    id: "1716",
-    title: UIWANG_6301.lhPurchaseThird.title + " (접수 종료 · 기준 참고용)",
-    url: UIWANG_6301.lhPurchaseThird.officialUrl,
-    pdfUrl: UIWANG_6301.lhPurchaseThird.pdfUrl,
-    guideUrl: null,
-    publishedAt: UIWANG_6301.lhPurchaseThird.publishedAt,
-    closesAt: UIWANG_6301.lhPurchaseThird.closesAt,
-    matchedDistrict: "의왕시",
+  // The live LH board search can miss closed South notices or an abbreviated
+  // municipality list. Fall back only to a municipality-matched, exact official
+  // PDF and ZIP in the verified archival catalog. Never inherit detailed rules.
+  const regionalArchivedNotice = findLhPurchaseNotice(preset?.address ?? address);
+  const archivedNoticeOpen = regionalArchivedNotice ? noticeIsOpen(regionalArchivedNotice, koreaLocalDay()) : false;
+  const archivalNotice = regionalArchivedNotice ? {
+    id: new URL(regionalArchivedNotice.noticeUrl).searchParams.get("pchPanSn") ?? regionalArchivedNotice.id,
+    title: regionalArchivedNotice.title + (archivedNoticeOpen ? " (공고기간 내 · 지역별 자격 별도확인)" : " (접수 종료 · 기준 참고용)"),
+    url: regionalArchivedNotice.noticeUrl,
+    pdfUrl: regionalArchivedNotice.noticePdfUrl,
+    guideUrl: regionalArchivedNotice.guidelineZipUrl,
+    publishedAt: regionalArchivedNotice.publishedAt.replaceAll("-", "."),
+    closesAt: regionalArchivedNotice.closeDate.replaceAll("-", "."),
+    matchedDistrict: districtForLh,
     official: true as const,
-    isCurrent: false,
+    isCurrent: archivedNoticeOpen,
     rules: null,
     textAnalysisStatus: "not-extracted" as const,
     warnings: [
-      "2026년 경기남부 3차 공고는 2026.10.15 접수 마감되어 신규 신청에 적용할 수 없습니다.",
-      "원문 p.1 당시 의왕시 규제지역 최소 10호, 비규제 30호; 신규 공고 및 지정 현황의 별도 확인 필요.",
-      "원문 p.4 공동주택·주거용 오피스텔 매입대상 유형이라도 지구단위계획이 금지한 건축물은 허용되지 않습니다.",
+      "LH 공식 지역본부 공고 PDF/ZIP를 확인한 참고자료입니다. 이 필지의 LH 실제 매입 적합성 또는 시·군별 세부 공고 포함은 미확인.",
+      archivedNoticeOpen ? "접수기간 중이어도 가구유형·매입가능 지역·완화조건은 원문 검토 대상입니다."
+        : regionalArchivedNotice.closeDate+" 접수 종료: 이 공고를 신규 신청에 자동 적용할 수 없습니다.",
+      regionalArchivedNotice.revisionNote,
     ],
-  } : null);
+  } : null;
+  const lhNotice = lhNoticeResult.notice ?? archivalNotice;
+  // The official municipality ordinance is more restrictive than the
+  // national zoning ceiling. Prefer its extracted BCR/FAR only as a clearly
+  // labelled city-wide screening maximum; parcel plans/mixed housing still
+  // require a separate applicability review.
+  const ordinanceMaxima = !mixedUseZones && zoneNames.length === 1
+    ? getOrdinanceZoneStandards({ ordinanceArticleCandidates }, zoneNames[0]) : null;
+  const resolvedPlanningStandards = isUiwang ? planningStandards : ordinanceMaxima ? {
+    zone: zoneNames[0],
+    buildingCoverageRatio: ordinanceMaxima.bcr,
+    far: ordinanceMaxima.far,
+    source: localGovernment + " 도시계획조례 원문 용도지역 일반기준 (지구단위계획·용도별 주거복합 별표·완화 심의는 미확정)",
+  } : planningStandards;
   if (lhNoticeResult.error) errors.push("LH 지역별 공식 공고 조사: " + lhNoticeResult.error);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
@@ -678,7 +700,7 @@ export async function POST(request: NextRequest) {
     location,
     landUse,
     parcel,
-    planningStandards,
+    planningStandards: resolvedPlanningStandards,
     districtPlan,
     mixedUseZones,
     parcels,
@@ -695,7 +717,8 @@ export async function POST(request: NextRequest) {
     missing,
     errors,
     unresolved: [
-      ordinances.length ? (isUiwang ? "C1 허용용도는 사용자 지도확인 + 2026 원문 적용. 허가용 공식 지적도 중첩확인 및 조례 별표 적용관계 별도 점검" : "관할 자치법규 조문 후보는 확보했으나 대상 필지별 적용 여부·별표 검증 필요") : "관할 지자체 건축·주차장 조례 원문",
+      ordinances.length ? (isUiwang ? "C1 허용용도는 사용자 지도확인 + 2026 원문 적용. 허가용 공식 지적도 중첩확인 및 조례 별표 적용관계 별도 점검" : "관할 조례 일반 용도지역 수치 확인 여부와 별개로 대상 필지 지구단위계획·주거복합 별표·특례 승인 검토 필요") : "관할 지자체 건축·주차장 조례 원문",
+      ...(additionalAddresses.length && isUiwangChopyeong6301(address) ? ["초평동 630-1 C1 확인은 단일 필지에 한정. 추가 필지가 포함된 합필은 획지별 허용용도·용적률을 별도로 검증해야 합니다."] : []),
       ...(isUiwang ? UIWANG_6301.warnings : []),
       ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
       officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")

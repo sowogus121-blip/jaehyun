@@ -363,4 +363,40 @@ describe("site review API", () => {
     expect(data.ruleFindings).toEqual([]);
     expect(data.applicationAssessmentComplete).toBe(false);
   });
+  it("maps a missing live South LH board result to the exact archived official notice, clearly expired",async()=>{
+    const resp=await POST(request({},"경기도 안양시 동안구 비산동 1101"));
+    const d=await resp.json();
+    expect(resp.status).toBe(200);
+    expect(d.lhNotice).toEqual(expect.objectContaining({
+      id:"1716",matchedDistrict:"안양시",isCurrent:false,
+      pdfUrl:"https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68596216",
+      guideUrl:"https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68589951",
+      rules:null,
+    }));
+    expect(d.lhNotice.title).toContain("접수 종료");
+    expect(d.lhNotice.warnings.join(" ")).toContain("신규 신청");
+  });
+
+  it("does not apply user-mapped Uiwang C1 single-lot prohibition to neighboring assembled parcels",async()=>{
+    const single=await (await POST(request({},"경기도 의왕시 초평동 630-1"))).json();
+    expect(single.ruleFindings.map((f:{value:string})=>f.value)).toEqual(["공동주택","오피스텔"]);
+    expect(single.planningStandards).toEqual(expect.objectContaining({far:450,buildingCoverageRatio:70}));
+    const combined=await (await POST(request({},"경기도 의왕시 초평동 630-1",["경기도 의왕시 초평동 630-2"]))).json();
+    expect(combined.parcels).toHaveLength(2);
+    expect(combined.ruleFindings).toEqual([]);
+    expect(combined.planningStandards?.source??"").not.toContain("C1 상업시설용지");
+    expect(combined.unresolved.join(" ")).toContain("합필");
+    expect(combined.parcel).toBeNull();
+  });
+
+  it("uses a municipality-specific source only for that municipality, not arbitrary LH district matches",async()=>{
+    const paju=await (await POST(request({},"경기도 파주시 파주읍 봉암리 1343-2"))).json();
+    expect(paju.lhNotice.id).toBe("1730");
+    expect(paju.lhNotice.rules).toBeNull();
+    const bucheon=await (await POST(request({},"경기도 부천시 원미구 중동 1036"))).json();
+    expect(bucheon.lhNotice.id).toBe("1741");
+    expect(bucheon.lhNotice.pdfUrl).toContain("69011056");
+    expect(bucheon.lhNotice.rules).toBeNull();
+  });
+
 });
