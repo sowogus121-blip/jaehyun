@@ -9,6 +9,8 @@ import {
   type MetroRegion,
 } from "@/lib/metro-ordinance-catalog";
 import { METRO_ANNEX_RECORDS, LH_PURCHASE_NOTICES, LH_GUIDELINE_EVIDENCE, matchLhRegion, noticeIsOpen, koreaLocalDay } from "@/lib/metro-annex-lh-catalog";
+import { DISTRICT_PLAN_SOURCES, DISTRICT_PLAN_DISCOVERY } from "@/lib/district-plan-sources";
+import { NATIONAL_SCREENING_RULES } from "@/lib/national-screening-rules";
 import "./catalog.css";
 
 const kinds: MetroRuleKind[] = ["일반용적률", "임대주택완화", "역세권·접도완화", "주상복합", "지구단위", "주차·LH", "용도제한", "특별조건", "자료연결"];
@@ -36,6 +38,20 @@ export default function CapitalAreaOrdinanceCatalogPage() {
     source, items: entries.filter(item=>item.city===source.city),
   })).filter(item=>item.items.length>0),[cities,entries]);
   const verified = METRO_ORDINANCE_RULES.filter(r=>r.evidence==="clause-checked").length;
+  const districtPlans=useMemo(()=>DISTRICT_PLAN_SOURCES.filter(plan=>{
+    if(region!=="전체"&&plan.region!==region)return false;
+    if(city!=="전체"&&plan.city!==city)return false;
+    const q=keyword.replace(/\s/g,"").toLowerCase();
+    return !q || [plan.city,plan.name,plan.noticeNo,plan.scopeHint,plan.documents.map(d=>d.kind).join(" ")].join(" ").replace(/\s/g,"").toLowerCase().includes(q);
+  }),[region,city,keyword]);
+  const discoverPlans=useMemo(()=>DISTRICT_PLAN_DISCOVERY.filter(entry=>
+    (region==="전체"||entry.region===region) && (city==="전체"||entry.city===city)
+  ),[region,city]);
+  const nationalChecks=useMemo(()=>NATIONAL_SCREENING_RULES.filter(rule=>{
+    const q=keyword.replace(/\s/g,"").toLowerCase();
+    return !q || [rule.category,rule.title,rule.law,rule.article,rule.description,rule.screeningQuestion].join(" ").replace(/\s/g,"").toLowerCase().includes(q);
+  }),[keyword]);
+
   const annexes = useMemo(()=>METRO_ANNEX_RECORDS.filter(x=>{
     if(region!=="전체" && x.region!==region)return false;
     if(city!=="전체" && x.city!==city)return false;
@@ -57,7 +73,7 @@ export default function CapitalAreaOrdinanceCatalogPage() {
     <header className="metro-header">
       <div className="metro-topbar"><a href="/" className="metro-back">← LH Plan Lab 돌아가기</a><span>LEGAL EVIDENCE LIBRARY</span></div>
       <h1>수도권 법규·특례 근거DB</h1>
-      <p>서울·인천·경기도의 조례·별표와 LH 지역별 매입공고·설계가이드를 누적했습니다. 시행일·조문·완화요건·원문을 함께 관리하며, <strong>지구단위계획과 필지별 적법성 확인 전 자동 적용하지 않습니다.</strong></p>
+      <p>서울·인천·경기도의 지구단위계획·조례·별표, 공통 건축법규와 LH 지역별 매입공고·설계가이드를 누적했습니다. 시행일·조문·완화요건·원문을 함께 관리하며, <strong>지구단위계획과 필지별 적법성 확인 전 자동 적용하지 않습니다.</strong></p>
       <div className="metro-stats">
         <div><strong>{METRO_ORDINANCE_SOURCES.length}</strong><span>지역 원문</span></div>
         <div><strong>{METRO_ORDINANCE_RULES.length}</strong><span>법규·완화 항목</span></div>
@@ -84,6 +100,36 @@ export default function CapitalAreaOrdinanceCatalogPage() {
           <div className="metro-rule-source"><span>{rule.article}</span><a href={source.url} target="_blank" rel="noopener noreferrer">원문 확인 ↗</a></div>
         </div>)}</div>
       </article>)}
+    </section>
+    <section className="metro-extra" aria-label="지구단위계획 및 특별정비계획 공식 고시">
+      <div className="metro-extra-heading"><div><span>OFFICIAL PLAN DOCUMENTS</span><h2>지구단위계획·특별정비계획 원문</h2><p>결정고시·지형도면·획지 결정도·시행지침까지 자료를 연결합니다. 정확한 획지/건축선 적용은 필지별 지도 중첩 확인 후 판단해야 합니다.</p></div><strong>{districtPlans.length}건</strong></div>
+      <div className="metro-plan-list">
+        {districtPlans.length===0 && <div className="metro-empty">선택한 조건에 등록된 계획 원문이 없습니다.</div>}
+        {districtPlans.map(plan=><article className="metro-plan" key={plan.id}>
+          <div className="metro-plan-top"><span>{plan.city} · {plan.type}</span><span className="metro-plan-proof">{plan.planEvidence==="official-notice-and-guidance"?"고시·시행지침 확인":"공식 고시 원문 확인"}</span></div>
+          <h3>{plan.name}</h3><p className="metro-plan-date">{plan.noticeNo} · {plan.noticeDate}</p>
+          <p>{plan.scopeHint}</p>
+          <p className="metro-plan-warning"><b>적용 주의:</b> {plan.warnings[0]}</p>
+          <div className="metro-plan-docs">
+            <a href={plan.officialNoticeUrl} target="_blank" rel="noopener noreferrer">공식 결정고시 ↗</a>
+            {plan.documents.map(doc=><a key={doc.kind+doc.url} href={doc.url} target="_blank" rel="noopener noreferrer" title={doc.note}>{doc.kind} ↗</a>)}
+          </div>
+        </article>)}
+      </div>
+      <details className="metro-discovery"><summary>수도권 {discoverPlans.length}개 지자체 지구단위계획 추가 조사 절차</summary>
+        <p>자료가 아직 없는 지역은 계획이 없다는 뜻이 아닙니다. 해당 시·군의 최신 결정고시→지형도면→획지별 허용용도 및 시행지침을 조사해야 합니다.</p>
+        <div>{discoverPlans.map(item=><a href={item.searchUrl} target="_blank" rel="noopener noreferrer" key={item.city}>{item.city} · 토지이음 공식 고시 검색 ↗</a>)}</div>
+      </details>
+    </section>
+    <section className="metro-extra" aria-label="전국 공통 건축 법규 필수 검토">
+      <div className="metro-extra-heading"><div><span>LEGAL DUE DILIGENCE</span><h2>건축 규모검토 필수 법규 체크리스트</h2><p>용도·도로부터 일조·인동거리·면적·피난·주민공동시설·에너지까지 공식 조문과 확인 질문을 묶었습니다.</p></div><strong>{nationalChecks.length}항목</strong></div>
+      <div className="metro-national-list">{nationalChecks.length===0 && <div className="metro-empty">해당 검색어의 공통 법규가 없습니다.</div>}
+        {nationalChecks.map(rule=><article className="metro-national" key={rule.id}>
+          <div className="metro-national-label"><span>{rule.category}</span><small>{rule.screeningPriority}</small></div>
+          <h3>{rule.title}</h3><p>{rule.description}</p><div className="metro-national-question"><b>검토 질문</b> {rule.screeningQuestion}</div>
+          <div className="metro-national-link"><span>{rule.law} {rule.article}</span><a href={rule.sourceUrl} target="_blank" rel="noopener noreferrer">법제처 원문 ↗</a></div>
+        </article>)}
+      </div>
     </section>
     <section className="metro-extra" aria-label="별표 원문 색인 및 검증">
       <div className="metro-extra-heading"><div><span>ANNEX INDEX</span><h2>건축·주차·도시계획조례 별표</h2><p>해당 지자체의 별표 원문 위치를 연결했습니다. 번호·표 수치 미확인 항목은 '원문 검색'으로 구분합니다.</p></div><strong>{annexes.length}건</strong></div>
