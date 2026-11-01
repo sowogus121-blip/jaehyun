@@ -83,7 +83,7 @@ export const METRO_ORDINANCE_RULES:MetroRule[] = [
   // Bucheon: current July 2026 is indexed; restrictions below located in early-2026 texts.
   rule("bucheon-rental-120","부천시","임대주택완화","용도지역별 용적률 제10항제1호","장기 임대주택 120% 완화","제1항제1호~제6호 범위에서 8년 이상 공공·민간임대의 용도지역별 상한 120% 이내","2026.2 확인된 문구를 2026.7.6 개정 원문과 대조 필요. 해당 사업·공고의 임대기간과 심의 요건 미확정; 자동 적용 금지",["제2종일반주거지역","제3종일반주거지역","준주거지역"],"needs-current-recheck"),
   rule("bucheon-semi-apartment-360","부천시","용도제한","용도지역별 용적률 제3항·제10항제1호","준주거 공동주택 용적률 300/360 별도제한","준주거 공동주택은 일반 준주거 최대용적률과 다르며, 8년 이상 임대 완화 적용 시 공동주택 부분 360% 이하","2026.7.6 시행본의 상세 조문 재대조 필요. 지구단위/특별정비구역 고시 우선 검토",["준주거지역"],"needs-current-recheck"),
-  rule("bucheon-district-plan-priority","부천시","지구단위","용도지역별 용적률 제8항","지구단위계획 우선","지구단위계획을 수립·결정한 경우 해당 계획에 따른다는 조항 확인","최신 2026.7 개정 내용·지구단위/특별정비구역 개별고시 대조가 필요","needs-current-recheck".split(":").slice(1), "needs-current-recheck"),
+  rule("bucheon-district-plan-priority","부천시","지구단위","용도지역별 용적률 제8항","지구단위계획 우선","지구단위계획을 수립·결정한 경우 해당 계획에 따른다는 조항 확인","최신 2026.7 개정 내용·지구단위/특별정비구역 개별고시 대조가 필요",[], "needs-current-recheck"),
   // Goyang: 2026.09 revised law; 2025 version's substantive clauses need rechecking.
   rule("goyang-semi-far","고양시","일반용적률","제61조제1항제6호","준주거 일반 380%, 리모델링 400%","2025 조례 본문 준주거 380%, 주택법상 리모델링 400%","2026.9.22 개정 시행본 동일조항 유지 재확인. 리모델링은 신축의 일반 상한이 아님",["준주거지역"],"needs-current-recheck"),
   rule("goyang-rental-120","고양시","임대주택완화","제61조 임대주택 특례","공공·장기 민간임대 120%","2025 조례에는 공공임대 또는 임대의무 8년 이상 민간임대의 해당지역 용적률 120% 규정","2026.9.22 시행본 재확인 필요. 해당 조문·사업 인허가·지구단위계획·일반 상한의 중복 적용 불가",[],"needs-current-recheck"),
