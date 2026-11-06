@@ -5,6 +5,7 @@ import { getLhParkingReview } from "./lh-parking-review";
 import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANCE_URL } from "./hanam-commercial-mix";
 import { ALTERNATIVES } from "./calculator";
 import { UIWANG_6301, isUiwangChopyeong6301 } from "./uiwang-chopyeong-6301";
+import { MASOK_555, isMasok555 } from "./masok-555";
 import { findMetroOrdinanceSource, findMetroOrdinanceRules } from "./metro-ordinance-catalog";
 import { findMetroAnnexRecords, findLhPurchaseNotice, findLhGuidelines, koreaLocalDay, noticeIsOpen } from "./metro-annex-lh-catalog";
 import { findDistrictPlanEvidence } from "./district-plan-sources";
@@ -458,6 +459,44 @@ export function buildLegalReviewReport(
     missingChecks.length ? "미확인: " + missingChecks.join(", ") : "사용자 확인값으로 계산 · 허가권자 적용 근거 확인",
     !input.specialParkingEnabled ? "unknown" : screening.canApply ? "user" : screening.status === "conditional" ? "conditional" : "unknown",
     verifiedParking ? lhParking.sourceUrl : screening.sourceUrl);
+
+  // Only the exact cadastral lot 555 (not its neighbors) gets A14 rules.
+  // General first-residential zoning maxima (60/200) must not be shown
+  // as the site's buildable 50/150 constraints.
+  if (isMasok555(place) && !isParcelAssembly) {
+    const src = MASOK_555.sources;
+    const planCitation = "남양주시 고시 제2025-314호 · 마석택지지구 단독2-A14 결정조서 p.43~44";
+    const overrides: Record<string, { detail:string; note:string; citation:string; sourceUrl:string; status:LegalRowStatus }> = {
+      use: {
+        detail: "3층 이하 공동주택 허용(기숙사 제외) · 단독·단독형 집합주택 허용 · 다중·다가구 제외 · 오피스텔 불허",
+        note: "2025.7.29 이전 승인·조성 완료 필지의 종전 허용용도 경과규정 및 기존 34필지 사업계획 변경 필요. 용도 허용은 사업승인 보장이 아님.",
+        citation: planCitation,
+        sourceUrl: src.officialPlanPdf, status: "conditional"
+      },
+      bcr: {detail:"50% 이하 (단독2-A14 지구단위계획)",note:"조례 일반 제1종주거 60%와 구별해야 함.",citation:planCitation,sourceUrl:src.officialPlanPdf,status:"source"},
+      far: {detail:"150% 이하 (단독2-A14 지구단위계획)",note:"조례 일반 제1종주거 200%와 구별해야 함.",citation:planCitation,sourceUrl:src.officialPlanPdf,status:"source"},
+      height: {detail:"지상 3층 이하 (단독2-A14 지구단위계획)",note:"지구단위계획 제34조·제36조. 건축법상 별도 높이/일조 추가검토.",citation:planCitation,sourceUrl:src.officialGuidelinePdf,status:"source"},
+      plan: {detail:"단독2-A14 · 원칙 50세대 / 주택법 사업계획승인 등 조건부 115세대",note:"759.4㎡ 공공주차장 결정·준공·기부채납, 소로 화도1-4호선 2.5m 보행공지, 블록 내 기반시설 20% 이상, 기존 조성사업 준공/경과규정 재확인.",citation:"마석지구 시행지침 제36조제1~4항 · 결정조서 p.43~44",sourceUrl:src.officialGuidelinePdf,status:"conditional"}
+    };
+    for (const row of rows) {
+      const override=overrides[row.id];
+      if (override) Object.assign(row, {...override,excerpt:override.note});
+    }
+    add("masok-approval", "대상지 현황", "대지조성사업 승인 현황",
+      "2024 승인 11,776.2㎡ (주택용지 9,228.4㎡/34필지 · 도로 2,319.7㎡)",
+      "남양주시 고시 2024-417 · 2025-20", "2025 변경승인은 사업주체 변경; 준공·분할 여부 확인 전. 전체 사업면적을 주택 건축대지로 사용하면 안 됨.",
+      "source", src.changeApprovalPdf);
+    add("masok-115", "건축·도시계획", "115세대 특례 조건",
+      "115세대는 조건부 · 주차장 759.4㎡ 기부채납 + 도로변 2.5m 공지",
+      "마석지구 시행지침 제36조제4항",
+      "2025.7.29 신설. 계획 대지면적·공공주차장 시설결정 및 승인 전 115세대를 현재 건축 가능 세대로 확정 금지.",
+      "conditional", src.officialGuidelinePdf);
+    add("masok-lh", "LH·주차 검토", "경기북부 26-4차 매입약정",
+      "남양주시 포함 · 원칙 30호 이상 · 신혼·신생아Ⅰ형 전용 36~85㎡",
+      "LH 2026-11-06 정정공고 p.1·3·9·26",
+      "LH 지역·규모요건은 건축허용과 인수심의가 아님. 50세대 이상 LH 커뮤니티 세대당 1㎡, 신혼형 전용46㎡ 0.3대 주차특례 적용 불가.",
+      "conditional", src.lhNoticePdf);
+  }
 
   const calculatedLimits: LegalReviewReport["calculatedLimits"] = [
     { label: "건폐율 · 계산 입력", value: input.buildingCoverageRatio > 0 ? input.buildingCoverageRatio + "%" : "미입력",
