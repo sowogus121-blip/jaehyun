@@ -21,6 +21,10 @@ export interface ProjectInput {
   regionalOffice: string;
   userPlanNotes: string;
   siteArea: number;
+  /** Optional separately verified/screened housing plot used for massing (gross project area stays in siteArea). */
+  massingSiteArea?: number;
+  /** Whole-block dwelling cap; site-specific 50/115 uses conditional plan approval. */
+  maxHomes?: number;
   buildableSiteRatio: number;
   siteWidth: number;
   siteDepth: number;
