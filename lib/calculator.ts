@@ -333,6 +333,8 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const totalFloorArea = farCountedArea + belowGroundArea;
   const physicalMaxFloors = housingFloorPlate > 0 ? Math.min(legalMaxFloors, ceil(envelopeArea / housingFloorPlate)) : 0;
   const warnings: string[] = [];
+  if (input.maxHomes && input.maxHomes > 0) warnings.push(`블록 전체 수용세대수 ${Math.floor(input.maxHomes)}세대 상한을 반영했으며 건축배치·LH 인수 가능 세대수 확정이 아닙니다.`);
+  if (input.massingSiteArea && input.massingSiteArea < input.siteArea) warnings.push(`사업 전체면적 ${input.siteArea}㎡와 규모 산정 대상 가정면적 ${input.massingSiteArea}㎡를 분리 적용했습니다. 확정 획지는 원문 대조가 필요합니다.`);
   const blockingReasons: string[] = [];
   const conditionalReasons: string[] = [];
 
@@ -423,9 +425,9 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
     physicalMaxFloors,
     recommendedFloors,
     estimatedHeight: round(estimatedHeight, 1),
-    plannedBcr: input.siteArea > 0 ? round(plannedBuildingArea / input.siteArea * 100, 2) : 0,
-    plannedFar: input.siteArea > 0 ? round(farCountedArea / input.siteArea * 100, 2) : 0,
-    landscapeArea: round(input.siteArea * input.landscapeRatio / 100),
+    plannedBcr: massingSiteArea > 0 ? round(plannedBuildingArea / massingSiteArea * 100, 2) : 0,
+    plannedFar: massingSiteArea > 0 ? round(farCountedArea / massingSiteArea * 100, 2) : 0,
+    landscapeArea: round(massingSiteArea * input.landscapeRatio / 100),
     facilities,
     parking,
     warnings,
@@ -433,9 +435,9 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
       `세대당 계약·공급 참고면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.efficiency * 100).toFixed(0)}% = ${grossAreaPerUnit.toFixed(2)}㎡`,
       `세대당 지상 용적률 산정면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.useType === "officetel" ? officeFarEfficiency * 100 : definition.efficiency * 100).toFixed(0)}% = ${farGrossAreaPerUnit.toFixed(2)}㎡`,
       `지상 주거 ${residentialFarArea.toFixed(1)}㎡ + 비주거 ${nonResidentialFarArea.toFixed(1)}㎡ = 용적률 산정 총 ${farCountedArea.toFixed(1)}㎡`,
-      `주거용 연면적 한도 = ${input.siteArea.toLocaleString()}㎡ × 전체 계획용적률 ${appliedFar}% × 주거비율 ${(residentialPortion*100).toFixed(0)}% = ${farLimitArea.toFixed(1)}㎡`,
+      `주거용 연면적 한도 = ${massingSiteArea.toLocaleString()}㎡ × 전체 계획용적률 ${appliedFar}% × 주거비율 ${(residentialPortion*100).toFixed(0)}% = ${farLimitArea.toFixed(1)}㎡`,
       `계획 기준층 = min(대지×건폐율, 건축가능대지) × ${input.floorPlateRatio}% = ${plannedBuildingArea.toFixed(1)}㎡`,
-      `계획 용적률 = ${farCountedArea.toFixed(1)}㎡ ÷ ${input.siteArea.toLocaleString()}㎡ × 100 = ${(farCountedArea / input.siteArea * 100).toFixed(2)}%`,
+      `계획 용적률 = ${farCountedArea.toFixed(1)}㎡ ÷ ${massingSiteArea.toLocaleString()}㎡ × 100 = ${(farCountedArea / massingSiteArea * 100).toFixed(2)}%`,
       `기본 법정주차 = ceil(${unitCount} × ${parking.originalLegalRatio}) = ${parking.originalLegalCount}대`,
       ...(parking.conditionalCount !== null ? [`0.3대 조건부 주차 = ceil(${unitCount} × 0.3) = ${parking.conditionalCount}대 · 승인상태 ${parking.relaxationStatus}`] : []),
       `최종 적용주차 = ${parking.finalCount}대${parking.lhRequirementVerified ? " · 검증된 LH 기준 포함" : " · 미검증 LH 가정은 강제하지 않음"}`,
