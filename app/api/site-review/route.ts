@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findSitePreset } from "../../../lib/site-presets";
+import { MASOK_555, isMasok555, getMasok555RuleFindings } from "../../../lib/masok-555";
 import { isUiwangChopyeong6301, UIWANG_6301, getUiwangC1UseFindings } from "../../../lib/uiwang-chopyeong-6301";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
@@ -452,6 +453,7 @@ export async function POST(request: NextRequest) {
   const rawAdditional = Array.isArray(body?.parcelAddresses) ? body.parcelAddresses : [];
   if (rawAdditional.some(item => typeof item !== "string")) return NextResponse.json({error:"합필 대상 주소는 문자열 목록이어야 합니다."},{status:400});
   const additionalAddresses = normalizeAssemblyAddresses(address, rawAdditional);
+  const singleMasok = isMasok555(address) && additionalAddresses.length === 0;
   if (additionalAddresses.length > MAX_EXTRA_PARCELS) return NextResponse.json({error:`합필은 대표 필지를 포함해 최대 ${MAX_EXTRA_PARCELS + 1}필지까지 검토할 수 있습니다. 현재 추가 필지 ${additionalAddresses.length}개입니다.`},{status:400});
   const inspectAdditionalParcel = async (parcelAddress: string): Promise<ParcelReview> => {
     const parcelPreset = findSitePreset(parcelAddress);
@@ -682,7 +684,12 @@ export async function POST(request: NextRequest) {
   const ordinanceMaxima = !mixedUseZones && zoneNames.length === 1
     ? getOrdinanceZoneStandards({ ordinanceArticleCandidates }, zoneNames[0]) : null;
   const unverifiedUiwangAssembly = isUiwangChopyeong6301(address) && additionalAddresses.length > 0;
-  const resolvedPlanningStandards = unverifiedUiwangAssembly ? null : isUiwang ? planningStandards : ordinanceMaxima ? {
+  const resolvedPlanningStandards = singleMasok ? {
+    zone: MASOK_555.zone,
+    buildingCoverageRatio: MASOK_555.plan.bcrPercent,
+    far: MASOK_555.plan.farPercent,
+    source: "마석택지지구 단독2-A14 · 남양주시 고시 제2025-314호 결정조서 p.43 및 시행지침 제36조 (50/150/3층; 115세대 조건부)",
+  } : unverifiedUiwangAssembly ? null : isUiwang ? planningStandards : ordinanceMaxima ? {
     zone: zoneNames[0],
     buildingCoverageRatio: ordinanceMaxima.bcr,
     far: ordinanceMaxima.far,
@@ -711,21 +718,26 @@ export async function POST(request: NextRequest) {
     nationalArticleCandidates,
     // C1 use restriction is sourced to the 2026 LH guideline and user-
     // confirmed C1 map placement. It does NOT assert an official C1-2 sublot.
-    ruleFindings: isUiwang ? getUiwangC1UseFindings() : [],
+    ruleFindings: singleMasok ? getMasok555RuleFindings() : isUiwang ? getUiwangC1UseFindings() : [],
     webSearch,
     officialDocuments,
     lhNotice,
     missing,
     errors,
     unresolved: [
+      ...(singleMasok ? MASOK_555.unresolved : []),
       ordinances.length ? (isUiwang ? "C1 허용용도는 사용자 지도확인 + 2026 원문 적용. 허가용 공식 지적도 중첩확인 및 조례 별표 적용관계 별도 점검" : "관할 조례 일반 용도지역 수치 확인 여부와 별개로 대상 필지 지구단위계획·주거복합 별표·특례 승인 검토 필요") : "관할 지자체 건축·주차장 조례 원문",
       ...(additionalAddresses.length && isUiwangChopyeong6301(address) ? ["초평동 630-1 C1 확인은 단일 필지에 한정. 추가 필지가 포함된 합필은 획지별 허용용도·용적률을 별도로 검증해야 합니다."] : []),
       ...(isUiwang ? UIWANG_6301.warnings : []),
       ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
-      officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
+      singleMasok
+        ? "마석 단독2-A14 지구단위계획 결정조서(p.43~44)와 시행지침 제36조 원문 확보; 기존 조성승인·경과규정과 115세대 전환은 인허가 확인 필요"
+        : officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
         ? "지구단위계획 관련 문서를 추출했지만 해당 필지·획지별 결정도서와 변경고시 검증 필요"
         : "지구단위계획 결정도서 및 시행지침 원문 확보 필요",
-      lhNotice?.rules || officialDocuments.documents.some((item) => item.kind === "lh-notice" && item.status === "analyzed")
+      singleMasok
+        ? "경기북부 26-4차 LH 공고 p.1·3·9·26 확보; 주차 및 인수 적합성·건축허용 여부는 선택 주택유형별 별도 심사"
+        : lhNotice?.rules || officialDocuments.documents.some((item) => item.kind === "lh-notice" && item.status === "analyzed")
         ? "LH 관련 문서를 추출했지만 해당 지역본부·공급유형·공고 연도와 인수기준 대조 필요"
         : "해당 연도 LH 지역본부 매입공고 원문 확보 필요",
       "일조·인동거리·소방활동공간 배치 검토",
