@@ -43,6 +43,8 @@ export const DEFAULT_INPUT: ProjectInput = {
   regionalOffice: "",
   userPlanNotes: "",
   siteArea: 0,
+  massingSiteArea: undefined,
+  maxHomes: undefined,
   buildableSiteRatio: 88,
   siteWidth: 0,
   siteDepth: 0,
@@ -123,6 +125,8 @@ export function resetSiteDependentInput(current: ProjectInput, address: string):
     regionalOffice: "",
     userPlanNotes: "",
     siteArea: 0,
+    massingSiteArea: undefined,
+    maxHomes: undefined,
     siteWidth: 0,
     siteDepth: 0,
     roadWidth: 0,
@@ -283,8 +287,10 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const farGrossAreaPerUnit = definition.useType === "officetel"
     ? getGrossAreaPerUnit(definition.exclusiveArea, officeFarEfficiency)
     : grossAreaPerUnit;
-  const buildableSite = input.siteArea * input.buildableSiteRatio / 100;
-  const maxBuildableArea = Math.min(input.siteArea * input.buildingCoverageRatio / 100, buildableSite);
+  const massingSiteArea = input.massingSiteArea && input.massingSiteArea > 0 && input.massingSiteArea <= input.siteArea
+    ? input.massingSiteArea : input.siteArea;
+  const buildableSite = massingSiteArea * input.buildableSiteRatio / 100;
+  const maxBuildableArea = Math.min(massingSiteArea * input.buildingCoverageRatio / 100, buildableSite);
   const plannedBuildingArea = maxBuildableArea * input.floorPlateRatio / 100;
   const floorHeight = definition.useType === "apartment" ? input.apartmentFloorHeight : input.officetelFloorHeight;
   // Unknown height is not a legal zero-height restriction. Calculate from
@@ -298,14 +304,15 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   // before counting apartment / officetel units. A pure residential tower must
   // not consume 100% of a mixed-use FAR budget.
   const residentialPortion = input.commercialMixShare>0 ? Math.max(0,1-input.commercialMixShare/100) : 1;
-  const farLimitArea = input.siteArea * appliedFar / 100 * residentialPortion;
+  const farLimitArea = massingSiteArea * appliedFar / 100 * residentialPortion;
   const envelopeArea = plannedBuildingArea * legalMaxFloors * residentialPortion;
   // An expressly prohibited residential use has ZERO feasible units.
   // Do not export hypothetical unit counts as LH-feasible housing capacity.
   const residentialUseProhibited = context.usePermissions[definition.useType] === "ineligible";
-  const unitCountByFar = residentialUseProhibited ? 0 : solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit);
-  const unitCountByEnvelope = residentialUseProhibited ? 0 : solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit);
-  const unitCount = residentialUseProhibited ? 0 : solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit);
+  const cap = input.maxHomes && Number.isFinite(input.maxHomes) && input.maxHomes > 0 ? Math.floor(input.maxHomes) : Number.MAX_SAFE_INTEGER;
+  const unitCountByFar = residentialUseProhibited ? 0 : Math.min(cap,solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit));
+  const unitCountByEnvelope = residentialUseProhibited ? 0 : Math.min(cap,solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit));
+  const unitCount = residentialUseProhibited ? 0 : Math.min(cap,solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit));
   const facilities = calculateFacilities(definition.useType, unitCount, context);
   const amenityArea = facilities.reduce((sum, item) => sum + item.area, 0);
   const equipmentArea = unitCount > 0 ? Math.max(35, unitCount * 0.35) : 0;
@@ -320,7 +327,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const housingFloorPlate=plannedBuildingArea*residentialPortion;
   const recommendedFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / plannedBuildingArea)) : 0;
   const estimatedHeight = recommendedFloors > 0 ? 1.2 + recommendedFloors * floorHeight : 0;
-  const parking = calculateParking(input, definition, unitCount, context);
+  const parking = calculateParking({...input, siteArea:massingSiteArea}, definition, unitCount, context);
   const regionalLh = input.businessMode==="purchase" ? screenRegionalLhHomes(input.address,context.regionalLhNoticeId??null,unitCount):null;
   const belowGroundArea = farCountedArea > 0 ? parking.area + Math.max(60, residentialFarArea * 0.025) : 0;
   const totalFloorArea = farCountedArea + belowGroundArea;
