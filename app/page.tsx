@@ -901,6 +901,13 @@ export default function Home() {
               <div className="lookup-result-lines"><span><b>현재 계산 시나리오</b> {input.maxHomes===115 ? "115세대 · 주차장 기부채납 조건 미확정" : "50세대 · 기본 블록 제한"} · 산정용 주택용지 {input.massingSiteArea?.toLocaleString() ?? "미적용"}㎡ · 건축허가 확정값 아님</span></div>
               <div className="lookup-warning"><Icon name="alert" size={13}/>115세대안은 주택건설사업계획승인, 759.4㎡ 공공주차장 결정·공사·기부채납 및 도로변 2.5m 공지를 충족해야 합니다. 759.4㎡를 모두 주택용지에서 공제하는 것은 보수적 규모검토 가정이며 확정 면적이 아닙니다.</div>
               <div className="lookup-warning"><Icon name="alert" size={13}/>사업부지 총면적과 주택용지를 혼동하지 마세요. 2024년 34필지 대지조성사업의 준공·분할 여부, 주차·일조·소방·오수·토목 및 LH 매입약정은 미확정입니다. 150~200세대는 현행 허용치가 아니라 지구단위계획 변경을 전제로 한 비교안입니다.</div>
+              <div className="lookup-result-lines">
+                <span><b>2026 LH 가이드라인 반영</b> 4층 이상(필로티 포함)·고령자 주택은 승강기 필수, 장애인 주차구획 대상 주택은 장애인용 승강기 필수. 계단 유효폭 1,200mm 이상 및 커뮤니티시설 지상 1층 원칙(협의 가능).</span>
+                <span><b>115세대·3층 배치 민감도</b> 현재 기준층 활용률 72% 가정에서 전용 46㎡는 면적 여유, 전용 59㎡는 커뮤니티 포함 시 매우 빠듯, 전용 74㎡는 기준층 확대 필요. 실제 배치·주차·일조는 미검증.</span>
+                <span><b>150~200세대는 계획 변경 외에 배치도 문제</b> 전용 46㎡ 기준 150세대 약 74%, 180세대 약 89%, 200세대 약 99%의 법정 최대 건축바닥면적 활용률이 요구되는 개략 계산(커뮤니티·관리·설비 가정 포함).</span>
+                <span><b>옛 동일층 4호 기준 주의</b> 현행 택지개발업무처리지침 제17조제4항제4호는 삭제. 과거 지침의 층당 4호 제한을 자동 적용하지 말고 해당 블록의 최신 시행지침을 확인.</span>
+              </div>
+              <div className="lookup-result-lines"><span><b>추가 근거</b> <a href={MASOK_555.sources.lhDesign2026GuideZip} target="_blank" rel="noopener noreferrer">2026 LH 설계·시공 가이드라인 원본 ZIP</a> · <a href={MASOK_555.sources.currentBlockHousingRule} target="_blank" rel="noopener noreferrer">현행 택지개발업무처리지침</a></span></div>
               <div className="lookup-result-lines"><span><b>원문자료</b> <a href={MASOK_555.sources.officialPlanPdf} target="_blank" rel="noopener noreferrer">결정조서 p.43~44</a> · <a href={MASOK_555.sources.officialGuidelinePdf} target="_blank" rel="noopener noreferrer">시행지침 제36조</a> · <a href={MASOK_555.sources.changeApprovalPdf} target="_blank" rel="noopener noreferrer">2025 승인 변경</a> · <a href={MASOK_555.sources.lhNoticePdf} target="_blank" rel="noopener noreferrer">LH 경기북부 공고</a></span></div>
             </section>}
             {!lookupDetails && reviewData && (reviewData.location || reviewData.landUse.length > 0) && <div className="lookup-result-card">

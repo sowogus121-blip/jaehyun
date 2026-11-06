@@ -62,6 +62,8 @@ export const MASOK_555 = {
     lhNoticeLanding: "https://apply.lh.or.kr/lhapply/apply/pch/view.do?mi=1076&pchPanSn=1755",
     lhNoticePdf: "https://apply.lh.or.kr/lhapply/lhFile.do?fileid=69326768",
     lhGuideAttachment: "https://apply.lh.or.kr/lhapply/lhFile.do?fileid=69324941",
+    lhDesign2026GuideZip: "https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68421266",
+    currentBlockHousingRule: "https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000282370&chrClsCd=010201",
   },
   sourcePages: {
     planningAllowedUses: "지구단위계획 결정조서 PDF p.43~44 (단독2-A14; 고시 2025-314)",
@@ -71,6 +73,8 @@ export const MASOK_555 = {
     lhMinimum: "LH 26-4차 경기북부 공고 PDF p.1, p.3",
     lhCommunity: "LH 공고 PDF p.9",
     lh03Parking: "LH 공고 PDF p.26",
+    lhElevatorStairsAndCommunity: "LH 2026-09-02 설계·시공 가이드라인 ZIP > 설계·시공 개정전문 XLSX / 설계 가이드라인 탭: 승강기 22행, 계단 53행, 커뮤니티 100~102행",
+    modernBlockHousing: "현행 택지개발업무처리지침 제16조제7항·제17조제4항제4호(삭제): 과거 동일층 4호 규칙 자동 적용 금지",
   },
   verifiedAsOf: "2026-11-07",
   unresolved: [
@@ -82,6 +86,8 @@ export const MASOK_555 = {
     "주차장법·남양주시 조례·LH 공고의 건축유형별 주차대수, 자주식 진출입, 옹벽·소방 배치",
     "토지대장 최신 확정면적·공시지가·소유권 및 도시계획 변경 가능성",
     "LH 매입가격·매입약정 심의·상수원 권역의 하수처리 및 행정협의",
+    "2026 LH 가이드라인에서 승강기는 4층 이상(필로티 포함) 또는 고령자 주택에 의무. 장애인 주차구획 대상 주택이면 장애인용 승강기 필수이므로 3층도 면제 확정 금지.",
+    "2026 택지개발업무처리지침 제17조제4항제4호는 삭제됐으므로 2008년 옛 기준의 동일층 4호 제한을 현행 의무로 자동 적용 금지.",
   ],
 } as const;
 
