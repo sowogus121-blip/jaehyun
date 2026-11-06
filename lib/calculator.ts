@@ -43,6 +43,8 @@ export const DEFAULT_INPUT: ProjectInput = {
   regionalOffice: "",
   userPlanNotes: "",
   siteArea: 0,
+  massingSiteArea: undefined,
+  maxHomes: undefined,
   buildableSiteRatio: 88,
   siteWidth: 0,
   siteDepth: 0,
@@ -123,6 +125,8 @@ export function resetSiteDependentInput(current: ProjectInput, address: string):
     regionalOffice: "",
     userPlanNotes: "",
     siteArea: 0,
+    massingSiteArea: undefined,
+    maxHomes: undefined,
     siteWidth: 0,
     siteDepth: 0,
     roadWidth: 0,
@@ -283,8 +287,10 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const farGrossAreaPerUnit = definition.useType === "officetel"
     ? getGrossAreaPerUnit(definition.exclusiveArea, officeFarEfficiency)
     : grossAreaPerUnit;
-  const buildableSite = input.siteArea * input.buildableSiteRatio / 100;
-  const maxBuildableArea = Math.min(input.siteArea * input.buildingCoverageRatio / 100, buildableSite);
+  const massingSiteArea = input.massingSiteArea && input.massingSiteArea > 0 && input.massingSiteArea <= input.siteArea
+    ? input.massingSiteArea : input.siteArea;
+  const buildableSite = massingSiteArea * input.buildableSiteRatio / 100;
+  const maxBuildableArea = Math.min(massingSiteArea * input.buildingCoverageRatio / 100, buildableSite);
   const plannedBuildingArea = maxBuildableArea * input.floorPlateRatio / 100;
   const floorHeight = definition.useType === "apartment" ? input.apartmentFloorHeight : input.officetelFloorHeight;
   // Unknown height is not a legal zero-height restriction. Calculate from
@@ -298,14 +304,15 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   // before counting apartment / officetel units. A pure residential tower must
   // not consume 100% of a mixed-use FAR budget.
   const residentialPortion = input.commercialMixShare>0 ? Math.max(0,1-input.commercialMixShare/100) : 1;
-  const farLimitArea = input.siteArea * appliedFar / 100 * residentialPortion;
+  const farLimitArea = massingSiteArea * appliedFar / 100 * residentialPortion;
   const envelopeArea = plannedBuildingArea * legalMaxFloors * residentialPortion;
   // An expressly prohibited residential use has ZERO feasible units.
   // Do not export hypothetical unit counts as LH-feasible housing capacity.
   const residentialUseProhibited = context.usePermissions[definition.useType] === "ineligible";
-  const unitCountByFar = residentialUseProhibited ? 0 : solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit);
-  const unitCountByEnvelope = residentialUseProhibited ? 0 : solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit);
-  const unitCount = residentialUseProhibited ? 0 : solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit);
+  const cap = input.maxHomes && Number.isFinite(input.maxHomes) && input.maxHomes > 0 ? Math.floor(input.maxHomes) : Number.MAX_SAFE_INTEGER;
+  const unitCountByFar = residentialUseProhibited ? 0 : Math.min(cap,solveUnitCount(input, definition, farLimitArea, Number.MAX_SAFE_INTEGER, context, farGrossAreaPerUnit));
+  const unitCountByEnvelope = residentialUseProhibited ? 0 : Math.min(cap,solveUnitCount(input, definition, Number.MAX_SAFE_INTEGER, envelopeArea, context, farGrossAreaPerUnit));
+  const unitCount = residentialUseProhibited ? 0 : Math.min(cap,solveUnitCount(input, definition, farLimitArea, envelopeArea, context, farGrossAreaPerUnit));
   const facilities = calculateFacilities(definition.useType, unitCount, context);
   const amenityArea = facilities.reduce((sum, item) => sum + item.area, 0);
   const equipmentArea = unitCount > 0 ? Math.max(35, unitCount * 0.35) : 0;
@@ -320,12 +327,14 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
   const housingFloorPlate=plannedBuildingArea*residentialPortion;
   const recommendedFloors = plannedBuildingArea > 0 ? Math.min(legalMaxFloors, ceil(farCountedArea / plannedBuildingArea)) : 0;
   const estimatedHeight = recommendedFloors > 0 ? 1.2 + recommendedFloors * floorHeight : 0;
-  const parking = calculateParking(input, definition, unitCount, context);
+  const parking = calculateParking({...input, siteArea:massingSiteArea}, definition, unitCount, context);
   const regionalLh = input.businessMode==="purchase" ? screenRegionalLhHomes(input.address,context.regionalLhNoticeId??null,unitCount):null;
   const belowGroundArea = farCountedArea > 0 ? parking.area + Math.max(60, residentialFarArea * 0.025) : 0;
   const totalFloorArea = farCountedArea + belowGroundArea;
   const physicalMaxFloors = housingFloorPlate > 0 ? Math.min(legalMaxFloors, ceil(envelopeArea / housingFloorPlate)) : 0;
   const warnings: string[] = [];
+  if (input.maxHomes && input.maxHomes > 0) warnings.push(`블록 전체 수용세대수 ${Math.floor(input.maxHomes)}세대 상한을 반영했으며 건축배치·LH 인수 가능 세대수 확정이 아닙니다.`);
+  if (input.massingSiteArea && input.massingSiteArea < input.siteArea) warnings.push(`사업 전체면적 ${input.siteArea}㎡와 규모 산정 대상 가정면적 ${input.massingSiteArea}㎡를 분리 적용했습니다. 확정 획지는 원문 대조가 필요합니다.`);
   const blockingReasons: string[] = [];
   const conditionalReasons: string[] = [];
 
@@ -416,9 +425,9 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
     physicalMaxFloors,
     recommendedFloors,
     estimatedHeight: round(estimatedHeight, 1),
-    plannedBcr: input.siteArea > 0 ? round(plannedBuildingArea / input.siteArea * 100, 2) : 0,
-    plannedFar: input.siteArea > 0 ? round(farCountedArea / input.siteArea * 100, 2) : 0,
-    landscapeArea: round(input.siteArea * input.landscapeRatio / 100),
+    plannedBcr: massingSiteArea > 0 ? round(plannedBuildingArea / massingSiteArea * 100, 2) : 0,
+    plannedFar: massingSiteArea > 0 ? round(farCountedArea / massingSiteArea * 100, 2) : 0,
+    landscapeArea: round(massingSiteArea * input.landscapeRatio / 100),
     facilities,
     parking,
     warnings,
@@ -426,9 +435,9 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
       `세대당 계약·공급 참고면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.efficiency * 100).toFixed(0)}% = ${grossAreaPerUnit.toFixed(2)}㎡`,
       `세대당 지상 용적률 산정면적 = ${definition.exclusiveArea}㎡ ÷ ${(definition.useType === "officetel" ? officeFarEfficiency * 100 : definition.efficiency * 100).toFixed(0)}% = ${farGrossAreaPerUnit.toFixed(2)}㎡`,
       `지상 주거 ${residentialFarArea.toFixed(1)}㎡ + 비주거 ${nonResidentialFarArea.toFixed(1)}㎡ = 용적률 산정 총 ${farCountedArea.toFixed(1)}㎡`,
-      `주거용 연면적 한도 = ${input.siteArea.toLocaleString()}㎡ × 전체 계획용적률 ${appliedFar}% × 주거비율 ${(residentialPortion*100).toFixed(0)}% = ${farLimitArea.toFixed(1)}㎡`,
+      `주거용 연면적 한도 = ${massingSiteArea.toLocaleString()}㎡ × 전체 계획용적률 ${appliedFar}% × 주거비율 ${(residentialPortion*100).toFixed(0)}% = ${farLimitArea.toFixed(1)}㎡`,
       `계획 기준층 = min(대지×건폐율, 건축가능대지) × ${input.floorPlateRatio}% = ${plannedBuildingArea.toFixed(1)}㎡`,
-      `계획 용적률 = ${farCountedArea.toFixed(1)}㎡ ÷ ${input.siteArea.toLocaleString()}㎡ × 100 = ${(farCountedArea / input.siteArea * 100).toFixed(2)}%`,
+      `계획 용적률 = ${farCountedArea.toFixed(1)}㎡ ÷ ${massingSiteArea.toLocaleString()}㎡ × 100 = ${(farCountedArea / massingSiteArea * 100).toFixed(2)}%`,
       `기본 법정주차 = ceil(${unitCount} × ${parking.originalLegalRatio}) = ${parking.originalLegalCount}대`,
       ...(parking.conditionalCount !== null ? [`0.3대 조건부 주차 = ceil(${unitCount} × 0.3) = ${parking.conditionalCount}대 · 승인상태 ${parking.relaxationStatus}`] : []),
       `최종 적용주차 = ${parking.finalCount}대${parking.lhRequirementVerified ? " · 검증된 LH 기준 포함" : " · 미검증 LH 가정은 강제하지 않음"}`,
