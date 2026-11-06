@@ -9,6 +9,7 @@ import { getMunicipalMechanicalGuard, type MunicipalMechanicalGuard } from "@/li
 import { getLhParkingReview, type LhParkingReview } from "@/lib/lh-parking-review";
 import { getNoticeMemoryStatus } from "@/lib/lh-notice-memory";
 import { isUiwangChopyeong6301, UIWANG_6301 } from "@/lib/uiwang-chopyeong-6301";
+import { MASOK_555, isMasok555, masokMassingScenario } from "@/lib/masok-555";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
@@ -417,6 +418,9 @@ export default function Home() {
   const assemblyEntryRows = input.parcelList.split(/\r?\n/);
   const normalizedExtras = normalizeAssemblyAddresses(input.address, assemblyEntryRows);
   const singleUiwangC1 = isUiwangChopyeong6301(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
+  const singleMasok = isMasok555(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
+  const masokBase = masokMassingScenario(false);
+  const masokConditional = masokMassingScenario(true);
   const tooManyExtras = normalizedExtras.length > MAX_EXTRA_PARCELS;
   const updateAssemblyRow = (index: number, value: string) => {
     const updated = [...assemblyEntryRows]; updated[index] = value;
@@ -509,7 +513,40 @@ export default function Home() {
     setActiveTab(3);
   };
 
+  const selectMasokScenario = (conditional115: boolean) => {
+    if (!singleMasok || !reviewData) return;
+    const scenario = masokMassingScenario(conditional115);
+    setInput(current=>({
+      ...current,
+      projectName: current.projectName === "새 프로젝트" ? "남양주 마석우리 555 LH 매입약정" : current.projectName,
+      siteArea: MASOK_555.approvedGrossProjectSqm,
+      massingSiteArea: scenario.modelingSiteSqm,
+      maxHomes: scenario.maxHomes,
+      buildingCoverageRatio: MASOK_555.plan.bcrPercent,
+      baseFar: MASOK_555.plan.farPercent,
+      maxFloors: MASOK_555.plan.maxFloors,
+      relaxedFar: 0,
+      useRelaxedFar: false,
+      businessMode: "purchase",
+      lhSupplyType: "newlywed",
+      regionalOffice: "경기북부지역본부",
+      specialParkingEnabled:false,
+      specialParkingApproval:"not-reviewed",
+      specialParkingLocationConfirmed:false,
+    }));
+    setScenarioFloors(3);
+    setReviewedRules([]);
+    setToast(conditional115
+      ? "조건부 115세대 시나리오를 적용했습니다. 공공주차장 기부채납 및 별도 주택건설사업계획승인 전 가정입니다."
+      : "단독2-A14 기본 50세대 상한을 적용했습니다. 계산용 주택용지 면적은 기존 승인 9,228.4㎡입니다.");
+    setActiveTab(3);
+  };
+
   const startPreliminaryScenario = (farOption: "base" | "example" = "base") => {
+    if (singleMasok) {
+      setToast("마석우리 555는 지구단위계획 50/150/3층 및 50·조건부115세대 전용 시나리오를 사용하세요.");
+      return;
+    }
     if (!preliminaryLimits || !reviewData) {
       setToast("관할 도시계획조례의 해당 용도지역 건폐율·용적률 일반기준 원문부터 확인해 주세요.");
       return;
@@ -596,6 +633,7 @@ export default function Home() {
       setReviewData(review);
       const merged = assessParcelAssembly(review);
       const hanamCommercial=isHanamCommercialSite(review);
+      const masok=isMasok555(resolvedAddress) && !merged?.isMultiple;
       const automaticOrdinance = merged?.isMultiple
         ? merged.status === "ready" ? merged.ordinary : null
         : getPreliminaryOrdinanceInputs(buildLegalReviewReport({ ...input, address: resolvedAddress }, review, null).rows);
@@ -633,6 +671,18 @@ export default function Home() {
           commercialMixShare:20,baseFar:calculateHanamCommercialMix(20).totalFar,
           relaxedFar:0,useRelaxedFar:false,
         } : {commercialMixShare:0}),
+        // Site-specific official A14 constraints override ordinary zone maxima.
+        // The modeled massing plot is distinct from the approved gross project.
+        ...(masok ? {
+          siteArea: MASOK_555.approvedGrossProjectSqm,
+          massingSiteArea: MASOK_555.approvedHousingPlotSqm,
+          maxHomes: MASOK_555.plan.ordinaryMaxHomes,
+          buildingCoverageRatio: MASOK_555.plan.bcrPercent,
+          baseFar: MASOK_555.plan.farPercent,
+          maxFloors: MASOK_555.plan.maxFloors,
+          relaxedFar: 0,
+          useRelaxedFar: false,
+        } : {massingSiteArea:undefined,maxHomes:undefined}),
 
         ...(review.districtPlan !== null ? { districtPlan: review.districtPlan } : {}),
         // The generic national zoning upper limit is NOT the local ordinance
@@ -825,6 +875,34 @@ export default function Home() {
               <div className="lookup-result-lines"><span><Icon name="site" size={14} /><b>접도</b>{lookupDetails.roads.join(" · ")}</span><span><Icon name="law" size={14} /><b>지역·구역</b>{[...lookupDetails.restrictions, lookupDetails.landscape].join(" · ")}</span></div>
               {lookupDetails.warnings.map((warning) => <div className="lookup-warning" key={warning}><Icon name="alert" size={13} />{warning}</div>)}
             </div>}
+            {singleMasok && reviewData && <section className="lookup-result-card" aria-label="마석우리 555 필지 전용 LH 검토">
+              <div className="lookup-result-head"><Badge status="review" /><b>마석우리 555 · 마석택지지구 단독2-A14 전용 검토</b><span>남양주시 공식 고시 2025-314 · LH 26-4차 공고</span></div>
+              <div className="lookup-result-grid">
+                <span><small>승인 사업부지</small><b>11,776.2㎡</b></span>
+                <span><small>승인 주택용지</small><b>9,228.4㎡</b></span>
+                <span><small>건폐율 · 용적률</small><b>50% · 150%</b></span>
+                <span><small>지상 최고층수</small><b>3층</b></span>
+              </div>
+              <p>지구단위계획상 3층 이하 공동주택(기숙사 제외)은 허용되지만 오피스텔·다중·다가구주택은 변경된 허용용도에 없습니다. 종전 승인받아 조성 완료한 필지는 경과규정 확인이 필요합니다.</p>
+              <div className="lookup-result-grid">
+                <span><small>기본 블록 상한</small><b>50세대</b></span>
+                <span><small>조건부 상한</small><b>115세대</b></span>
+                <span><small>공공주차장 기부채납</small><b>759.4㎡</b></span>
+                <span><small>도로변 보행공지</small><b>2.5m</b></span>
+              </div>
+              <div className="lookup-result-lines">
+                <span><b>기본안</b> 50세대 상한 · 주택용지 {masokBase.modelingSiteSqm.toLocaleString()}㎡ · 전용 46㎡ 이론면적 {masokBase.areaOnly46Homes}세대분(법정 세대상한 우선)</span>
+                <span><b>특례안</b> 조건부 115세대 · 주택용지 {masokConditional.modelingSiteSqm.toLocaleString()}㎡ 가정 · 전용 46㎡ 이론면적 {masokConditional.areaOnly46Homes}세대분(승인 전 참고)</span>
+              </div>
+              <div className="address-row">
+                <button className="button ghost" type="button" onClick={()=>selectMasokScenario(false)} disabled={input.maxHomes===50 && input.massingSiteArea===MASOK_555.approvedHousingPlotSqm}>기본 50세대안 계산 적용</button>
+                <button className="button primary" type="button" onClick={()=>selectMasokScenario(true)} disabled={input.maxHomes===115 && input.massingSiteArea===MASOK_555.plan.provisionalConditionalHousingPlotSqm}>조건부 115세대안 계산 적용</button>
+              </div>
+              <div className="lookup-result-lines"><span><b>현재 계산 시나리오</b> {input.maxHomes===115 ? "115세대 · 주차장 기부채납 조건 미확정" : "50세대 · 기본 블록 제한"} · 산정용 주택용지 {input.massingSiteArea?.toLocaleString() ?? "미적용"}㎡ · 건축허가 확정값 아님</span></div>
+              <div className="lookup-warning"><Icon name="alert" size={13}/>115세대안은 주택건설사업계획승인, 759.4㎡ 공공주차장 결정·공사·기부채납 및 도로변 2.5m 공지를 충족해야 합니다. 759.4㎡를 모두 주택용지에서 공제하는 것은 보수적 규모검토 가정이며 확정 면적이 아닙니다.</div>
+              <div className="lookup-warning"><Icon name="alert" size={13}/>사업부지 총면적과 주택용지를 혼동하지 마세요. 2024년 34필지 대지조성사업의 준공·분할 여부, 주차·일조·소방·오수·토목 및 LH 매입약정은 미확정입니다. 150~200세대는 현행 허용치가 아니라 지구단위계획 변경을 전제로 한 비교안입니다.</div>
+              <div className="lookup-result-lines"><span><b>원문자료</b> <a href={MASOK_555.sources.officialPlanPdf} target="_blank" rel="noopener noreferrer">결정조서 p.43~44</a> · <a href={MASOK_555.sources.officialGuidelinePdf} target="_blank" rel="noopener noreferrer">시행지침 제36조</a> · <a href={MASOK_555.sources.changeApprovalPdf} target="_blank" rel="noopener noreferrer">2025 승인 변경</a> · <a href={MASOK_555.sources.lhNoticePdf} target="_blank" rel="noopener noreferrer">LH 경기북부 공고</a></span></div>
+            </section>}
             {!lookupDetails && reviewData && (reviewData.location || reviewData.landUse.length > 0) && <div className="lookup-result-card">
               <div className="lookup-result-head"><Badge status={reviewData.location ? "verified" : "review"} /><b>{input.multipleParcels ? "합필 대표 필지 · " : ""}{input.address}</b><span>VWorld 통합조회 · {new Date(reviewData.checkedAt).toLocaleString("ko-KR")}</span></div>
               <div className="lookup-result-grid"><span><small>{input.multipleParcels ? "합필 면적 합계" : "대지면적"}</small><b>{reviewData.parcel?.area ? `${f(reviewData.parcel.area)}㎡${reviewData.parcel.approximate ? " (개략)" : ""}` : "미확보"}</b></span><span><small>지목</small><b>{reviewData.parcel?.landCategory || "미확보"}</b></span><span><small>용도지역</small><b>{reviewData.mixedUseZones ? "혼합 · 필지별 확인" : reviewData.landUse.find((item) => item.category === "용도지역")?.name || "미확보"}</b></span><span><small>좌표</small><b>{reviewData.location ? `${reviewData.location.x}, ${reviewData.location.y}` : "미확보"}</b></span></div>
@@ -1007,13 +1085,13 @@ export default function Home() {
                 <small>최고층수는 직접 가정하는 값이며 지구단위계획·일조·주차·LH 인수 조건을 확정하지 않아.</small>
               </div>
               <label>가정 층수 <input type="number" aria-label="예비 계획 층수" min="1" max="60" step="1" value={scenarioFloors} onChange={(e) => setScenarioFloors(Number(e.target.value) || 0)} />층</label>
-              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData || singleUiwangC1} onClick={() => startPreliminaryScenario("base")}>{singleUiwangC1 ? "C1 주거 불허 · LH 규모검토 제외" : "기본안 4개 비교"} <Icon name="chevron" size={15}/></button>
+              <button className="button primary" type="button" disabled={!preliminaryLimits || !reviewData || singleUiwangC1 || singleMasok} onClick={() => startPreliminaryScenario("base")}>{singleUiwangC1 ? "C1 주거 불허 · LH 규모검토 제외" : "기본안 4개 비교"} <Icon name="chevron" size={15}/></button>
             </div>
             {preliminaryLimits && <div className="far-compare-strip">
               <div><span>조례 일반 용적률</span><b>{preliminaryLimits.far}%</b><small>조문 일반기준 · 지구단위 검증 전</small></div>
               <div className="far-compare-arrow">→</div>
               <div><span>120% 완화 가정안</span><b>{exampleRelaxedFar}%</b><small>완화요건 미확인 · 승인값 아님</small></div>
-              <button type="button" className="button ghost" onClick={() => startPreliminaryScenario("example")} disabled={!reviewData || singleUiwangC1}>완화 가정 비교</button>
+              <button type="button" className="button ghost" onClick={() => startPreliminaryScenario("example")} disabled={!reviewData || singleUiwangC1 || singleMasok}>완화 가정 비교</button>
             </div>}
             <div className="parking-inline-settings"><div><b>주차대수 바로 계산</b><small>현재 미확정 법정계수 대신 입력하는 계획 가정값이야. 입력 즉시 4개 대안이 갱신돼.</small></div>
               <label>공동주택 <input aria-label="공동주택 주차계수 빠른 입력" type="number" min="0" step="0.1" value={input.apartmentParkingRatio || ""} placeholder="대/세대" onChange={e => update("apartmentParkingRatio", Number(e.target.value))} /></label>
