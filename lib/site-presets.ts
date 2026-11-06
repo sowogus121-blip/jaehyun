@@ -1,4 +1,5 @@
 import { UIWANG_6301 } from "./uiwang-chopyeong-6301";
+import { MASOK_555 } from "./masok-555";
 export interface SitePreset {
   id: string;
   aliases: string[];
@@ -25,6 +26,52 @@ export interface SitePreset {
 }
 
 export const SITE_PRESETS: SitePreset[] = [
+  {
+    id: "namyangju-masok-555",
+    aliases: [
+      "마석우리555", "마석우리 555", "화도읍 마석우리 555",
+      "남양주시 화도읍 마석우리 555", "경기도 남양주시 화도읍 마석우리 555",
+      "경기도 남양주시 화도읍 마석우리 555번지",
+    ],
+    address: MASOK_555.address,
+    province: "경기도",
+    district: "남양주시",
+    neighborhood: "마석우리",
+    parcel: "555",
+    siteArea: MASOK_555.approvedGrossProjectSqm,
+    landCategory: "대",
+    zone: MASOK_555.zone,
+    districtPlan: true,
+    publicPricePerSqm: 0,
+    publicPriceBase: "2026 개별공시지가·등기 자료 미확인 (2020 과거 감정평가액은 현 시가 아님)",
+    roads: [
+      "소로 화도1-4호선 접면(조건부 115세대안은 2.5m 보행공지)",
+      "2024 승인 단지 내 도로 2,319.7㎡(현행 준공·접근 가능 여부 미확인)",
+    ],
+    planningRoadWidth: 0,
+    restrictions: [
+      "마석택지지구 단독2-A14 · 블록형 단독주택용지",
+      "지구단위계획 건폐율 50% / 용적률 150% / 지상 3층 이하",
+      "단독주택(다중·다가구 제외)·단독형 집합주택·3층 이하 공동주택(기숙사 제외) 허용",
+      "오피스텔 불허(허용용도 미열거)",
+      "블록 전체 기본 50세대 · 조건부 115세대(주차장 759.4㎡ 기부채납 + 2.5m 공지)",
+      "원형지 기반시설 20% 이상 기준; 산입 시설·현황 재검증",
+      "2024 승인: 주택용지 9,228.4㎡ / 34필지 / 도로 2,319.7㎡",
+    ],
+    landscape: "남양주시 고시 제2025-314호(2025.7.29.) 마석지구 지구단위계획 시행지침 제36조",
+    buildingCoverageRatioAssumption: MASOK_555.plan.bcrPercent,
+    farAssumption: MASOK_555.plan.farPercent,
+    source: "남양주시 공식 결정조서 p.43~44·시행지침 p.11·2024-417/2025-20 대지조성 승인 고시 대조(2026-11-07)",
+    confirmedAt: MASOK_555.verifiedAsOf,
+    warnings: [
+      "11,776.2㎡는 2024/2025 승인 사업부지 총면적이며 건축용 주택용지 9,228.4㎡와 다름. 기존 VWorld 도형 면적 약 11,713.5㎡는 근사값.",
+      "115세대는 무조건 허용이 아니라 주택법 주택건설사업계획승인·759.4㎡ 주차장 도시계획시설 결정/조성/기부채납 및 2.5m 보행공간 조건부.",
+      "2025.7.29 이전 승인받고 조성 완료한 필지에 대한 경과규정 있음. 기존 34필지 조성준공·분할 및 종전 허용용도 적용 여부 확인 전.",
+      "LH 경기북부 26-4차 공고상 남양주시와 30세대 이상 일반요건에 해당하더라도 LH 매입약정 선정은 별도 심사.",
+      "기부채납 주차장 759.4㎡ 전부를 주택용지에서 공제하는 것은 예비 규모검토 가정이지 확정 획지면적이 아님.",
+      "주차·옹벽·하수·소방·일조·정북방향·토목·LH 매입가격 및 현행 소유권 미확인.",
+    ],
+  },
   {
     id: "uiwang-chopyeong-630-1",
     aliases: ["초평동630-1", "초평동 630-1", "의왕시 초평동 630-1", "경기도 의왕시 초평동 630-1"],
