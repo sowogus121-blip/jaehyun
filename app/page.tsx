@@ -10,6 +10,7 @@ import { getLhParkingReview, type LhParkingReview } from "@/lib/lh-parking-revie
 import { getNoticeMemoryStatus } from "@/lib/lh-notice-memory";
 import { isUiwangChopyeong6301, UIWANG_6301 } from "@/lib/uiwang-chopyeong-6301";
 import { MASOK_555, isMasok555, masokMassingScenario } from "@/lib/masok-555";
+import { NURIFLEX_750_14, isNuriflexBangbae, screenNuriflex } from "@/lib/nuriflex-bangbae-750-14";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
@@ -419,6 +420,7 @@ export default function Home() {
   const normalizedExtras = normalizeAssemblyAddresses(input.address, assemblyEntryRows);
   const singleUiwangC1 = isUiwangChopyeong6301(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
   const singleMasok = isMasok555(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
+  const singleNuriflex = isNuriflexBangbae(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
   const masokBase = masokMassingScenario(false);
   const masokConditional = masokMassingScenario(true);
   const tooManyExtras = normalizedExtras.length > MAX_EXTRA_PARCELS;
@@ -875,6 +877,25 @@ export default function Home() {
               <div className="lookup-result-lines"><span><Icon name="site" size={14} /><b>접도</b>{lookupDetails.roads.join(" · ")}</span><span><Icon name="law" size={14} /><b>지역·구역</b>{[...lookupDetails.restrictions, lookupDetails.landscape].join(" · ")}</span></div>
               {lookupDetails.warnings.map((warning) => <div className="lookup-warning" key={warning}><Icon name="alert" size={13} />{warning}</div>)}
             </div>}
+            {singleNuriflex && <section className="lookup-result-card" aria-label="누리플렉스 방배동 750-14 청년형 조건부 규모검토">
+              <div className="lookup-result-head"><Badge status="review"/><b>누리플렉스 본사 · 방배동 750-14 청년형 별도 규모검토</b><span>2026.11.07 · 공식 본사주소 + 민간 건축정보 + 법령 비교</span></div>
+              <div className="lookup-result-grid">
+                <span><small>대지면적(민간 건축정보)</small><b>1,211.09㎡</b></span>
+                <span><small>서울 준주거지역 일반기준</small><b>60% / 400%</b></span>
+                <span><small>현 건물 / 자주식 주차</small><b>지상10·지하3층 / 31대</b></span>
+                <span><small>전용률 가정</small><b>도생 70% · 오피스텔 45%</b></span>
+              </div>
+              <p><b>전용 20~24㎡ 청년형 / 자주식</b> 비교. 아래 호수는 대지×용적률에서 커뮤니티 1㎡/호·관리설비 50㎡를 개략 차감한 <b>면적상 이론치</b>로, 건축선·일조·평면·지구단위계획·비주거 용도 제한을 반영한 허가가능 호수가 아닙니다.</p>
+              <div className="lookup-result-lines">
+                {([350,400] as const).map(far => <span key={`nuriflex-urban-${far}`}><b>도생 · {far}%</b> {([20,22,24] as const).map(a => `${a}㎡ ${screenNuriflex("urban",a,far).homes}호`).join(" / ")} · 22㎡ 주차 기본 0.5대 <b>{screenNuriflex("urban",22,far).parking05}대</b>, LH 0.3대 조건부 <b>{screenNuriflex("urban",22,far).parking03Conditional}대</b></span>)}
+                {([350,400] as const).map(far => <span key={`nuriflex-office-${far}`}><b>오피스텔 · {far}%</b> {([20,22,24] as const).map(a => `${a}㎡ ${screenNuriflex("officetel",a,far).homes}실`).join(" / ")} · 22㎡ 기본 0.5대 <b>{screenNuriflex("officetel",22,far).parking05}대</b> (0.3대 <b>{screenNuriflex("officetel",22,far).parking03Conditional}대</b>는 별도 인정 전 미적용)</span>)}
+                <span><b>500%는 별도 특례 비교</b> 도생 전용 22㎡ <b>{screenNuriflex("urban",22,500).homes}호</b> · 주차 0.5대 <b>{screenNuriflex("urban",22,500).parking05}대</b> / 0.3대 조건부 <b>{screenNuriflex("urban",22,500).parking03Conditional}대</b>. 공공주택 확보·지구단위계획 등 법정 요건 확인 전 일반 규모에 적용 금지.</span>
+                <span><b>자주식 주차면적(22㎡ 도생 350%)</b> 0.5대 65대 → 약 {screenNuriflex("urban",22,350).parking05GrossSqm[0].toLocaleString()}~{screenNuriflex("urban",22,350).parking05GrossSqm[1].toLocaleString()}㎡ / 0.3대 조건부 39대 → 약 {screenNuriflex("urban",22,350).parking03GrossSqm[0].toLocaleString()}~{screenNuriflex("urban",22,350).parking03GrossSqm[1].toLocaleString()}㎡ (35~40㎡/대 단순 가정)</span>
+              </div>
+              <div className="lookup-warning"><Icon name="alert" size={13}/>LH 청년형 0.3대는 공공주택 특별법상 요건·LH 매입약정 및 서초구 협의가 필요하고, 오피스텔에는 자동 적용하지 않습니다. 구반포역 출구 500m 이내는 공개 좌표상 약 365m 추정이며 현장/지적 경계 검증 전입니다.</div>
+              <div className="lookup-warning"><Icon name="alert" size={13}/>준주거 400%는 서울시 일반 비교기준이며 이 필지의 지구단위계획 중첩, 비주거 의무, 가로구역 높이, 도로 건축선·대지안 공지, 지하 주차 램프, 실측 대지면적 미확정. 2026 서울 LH 6차 신축매입약정 접수는 11월 5일 종료되어 신규 접수 가능 공고 별도 확인 필요. 이 별도 비교표는 일반 규모계산기의 기본 전용46/25㎡ 대안과 독립된 계산입니다.</div>
+              <div className="lookup-result-lines"><span><b>근거자료</b> <a href={NURIFLEX_750_14.sources.headquarters} target="_blank" rel="noopener noreferrer">누리플렉스 본사 공식 주소</a> · <a href={NURIFLEX_750_14.sources.buildingSummary} target="_blank" rel="noopener noreferrer">대지·기존 건물(민간 집계)</a> · <a href={NURIFLEX_750_14.sources.seoulOrdinance} target="_blank" rel="noopener noreferrer">서울 주차장 조례</a> · <a href={NURIFLEX_750_14.sources.publicHousingParking} target="_blank" rel="noopener noreferrer">0.3대 법령</a> · <a href={NURIFLEX_750_14.sources.seoulCityPlanning} target="_blank" rel="noopener noreferrer">서울 500% 안내</a> · <a href={NURIFLEX_750_14.sources.lhSeoul6} target="_blank" rel="noopener noreferrer">LH 서울 6차 공고</a> · <a href={NURIFLEX_750_14.sources.cadastralRecords} target="_blank" rel="noopener noreferrer">토지이음</a></span></div>
+            </section>}
             {singleMasok && reviewData && <section className="lookup-result-card" aria-label="마석우리 555 필지 전용 LH 검토">
               <div className="lookup-result-head"><Badge status="review" /><b>마석우리 555 · 마석택지지구 단독2-A14 전용 검토</b><span>남양주시 공식 고시 2025-314 · LH 26-4차 공고</span></div>
               <div className="lookup-result-grid">
