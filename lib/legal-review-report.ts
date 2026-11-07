@@ -642,7 +642,7 @@ export function buildLegalReviewReport(
   // Previously uploads were parsed but never surfaced in the legal review.
   // Older records have no sourceAddress: exclude them rather than mistakenly
   // applying another project's documents to the current cadastral lot.
-  const siteKey = (value: string) => value.toLowerCase().replace(/\\s+/g, "").replace(/^서울특별시/, "서울").replace(/^경기도/, "경기");
+  const siteKey = (value: string) => value.toLowerCase().replace(/\s+/g, "").replace(/^서울특별시/, "서울").replace(/^경기도/, "경기");
   const projectDocs = uploadedDocuments.filter((document) =>
     document.status === "analyzed" &&
     Boolean(document.sourceAddress) &&
