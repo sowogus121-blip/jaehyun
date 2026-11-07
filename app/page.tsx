@@ -413,7 +413,7 @@ export default function Home() {
   const calculationContext = useMemo(() => deriveCalculationContext(reviewData, input), [reviewData, input]);
   const activeRules = activeReviewedRules(input, reviewedRules);
   const autoZoningCandidates = suggestZoningRules(reviewData);
-  const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules), [input, reviewData, lookupDetails, activeRules]);
+  const legalReport = useMemo(() => buildLegalReviewReport(input, reviewData, lookupDetails, activeRules, documents), [input, reviewData, lookupDetails, activeRules, documents]);
   const decisionDashboard = useMemo(() => buildDecisionDashboard(input, reviewData, legalReport), [input, reviewData, legalReport]);
   const assembly = useMemo(() => assessParcelAssembly(reviewData), [reviewData]);
   const assemblyEntryRows = input.parcelList.split(/\r?\n/);
@@ -421,6 +421,30 @@ export default function Home() {
   const singleUiwangC1 = isUiwangChopyeong6301(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
   const singleMasok = isMasok555(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
   const singleNuriflex = isNuriflexBangbae(input.address) && !input.multipleParcels && (reviewData?.parcels?.length ?? 1) === 1;
+  // Site certificate and ordinary ordinance values have already been checked.
+  // Seed known baseline inputs but never infer height, parking approval or 500% FAR.
+  useEffect(() => {
+    if (!singleNuriflex) return;
+    setInput((current) => {
+      if (current.multipleParcels) return current;
+      const n = NURIFLEX_750_14;
+      const replaceApproxArea = current.siteArea <= 0 ||
+        Math.abs(current.siteArea - n.vworldVerification.approximateParcelSqm) < 0.05;
+      const next: ProjectInput = {
+        ...current,
+        siteArea: replaceApproxArea ? n.officialEum.parcelAreaSqm : current.siteArea,
+        zone: current.zone === "미확인" ? "준주거지역 (토지이음 원문 확인)" : current.zone,
+        buildingCoverageRatio: current.buildingCoverageRatio > 0 ? current.buildingCoverageRatio : n.provisionalBcrPercent,
+        baseFar: current.baseFar > 0 ? current.baseFar : n.provisionalFarPercent,
+        landscapeRatio: current.landscapeRatio > 0 ? current.landscapeRatio : 15,
+        regionalOffice: current.regionalOffice || "서울지역본부",
+        lhSupplyType: current.lhSupplyType === "undecided" ? "youth" : current.lhSupplyType,
+        businessMode: current.businessMode === "undecided" ? "purchase" : current.businessMode,
+      };
+      return (Object.keys(next) as Array<keyof ProjectInput>).some((key) => next[key] !== current[key])
+        ? next : current;
+    });
+  }, [singleNuriflex]);
   const masokBase = masokMassingScenario(false);
   const masokConditional = masokMassingScenario(true);
   const tooManyExtras = normalizedExtras.length > MAX_EXTRA_PARCELS;
@@ -645,7 +669,7 @@ export default function Home() {
         ...(addressParts[0] ? { province: addressParts[0] } : {}),
         ...(addressParts[1] ? { district: addressParts[1] } : {}),
         ...(zoneValue ? { zone: zoneValue } : {}),
-        ...(merged?.isMultiple ? {siteArea: merged.totalArea ?? 0,buildingCoverageRatio:automaticOrdinance?.bcr??0,baseFar:automaticOrdinance?.far??0,relaxedFar:automaticOrdinance?Math.round(automaticOrdinance.far*1.2*100)/100:0,useRelaxedFar:false} : review.parcel?.area ? { siteArea: review.parcel.area } : {}),
+        ...(merged?.isMultiple ? {siteArea: merged.totalArea ?? 0,buildingCoverageRatio:automaticOrdinance?.bcr??0,baseFar:automaticOrdinance?.far??0,relaxedFar:automaticOrdinance?Math.round(automaticOrdinance.far*1.2*100)/100:0,useRelaxedFar:false} : review.parcel?.area ? { siteArea: isNuriflexBangbae(resolvedAddress) && !input.multipleParcels ? NURIFLEX_750_14.officialEum.parcelAreaSqm : review.parcel.area } : {}),
         // C1 location confirmed by user's map comparison; C1-2 sublot remains
         // unverified. These caps describe commercial uses, NOT housing permission.
         ...(isUiwangChopyeong6301(resolvedAddress) && !merged?.isMultiple ? {
@@ -755,6 +779,7 @@ export default function Home() {
       name: file.name,
       size: file.size,
       category: file.name.includes("지구단위") ? "지구단위계획" : file.name.includes("공고") ? "LH 공고" : "검토자료",
+      sourceAddress: input.address.trim(),
       status: "analyzing" as const,
       uploadedAt: new Date().toISOString(),
     }));
@@ -896,7 +921,7 @@ export default function Home() {
                 <span><b>법규 구분</b> 서울시 준주거 400%→500%는 제51조제2항제3호에 따라 400% 초과 용적률의 1/2 이상 공공임대주택 확보가 필요하며, 2028.03.27까지 건축허가(또는 사업계획승인)를 신청한 경우에 한시 적용됩니다.</span>
                 <span><b>LH 매입약정으로 자동 인정 불가</b> 서울시에서 공개한 공공임대주택 매입업무 처리기준의 인수자는 '서울특별시장'입니다. LH 약정 물량이 해당 조례상의 확보분으로 인정되는지 서울시 임대주택과(02-2133-9582)와 서초구 건축과의 서면 검토가 필요합니다. 오피스텔에 500% 주택특례를 자동 적용하지 마세요.</span>
                 <span><b>지구단위 GIS 확인</b> 2026.09 서울시 공식 SHP의 건물 대표점 중첩 결과 지구단위계획 도형 밖이며, 반포아파트지구 지구단위 경계와 약 102.5m. 토지이용계획확인서·지적 경계 전체 중첩 및 2026.09 이후 고시는 별도 확인 전입니다.</span>
-                <span><b>2026.04 최신 지정구역 GIS: '동작대로' 지정구역 안</b> 서울시 공개 47개 가로구역 최고높이 지정구역 SHP와 대상지 대표점을 EPSG:5174로 중첩한 결과 동작대로 지정구역(경계내 0m)입니다. 과거 일반 '산정구역' 적용 설명은 정정합니다. <b>개별 필지 기준높이·최고높이(m)는 아직 결정도서·지침도 미확보로 미확정</b>이며 기존 건물 10층·40.6m는 새 건물에 자동 승계되지 않습니다.</span>
+                <span><b>2026.04 최신 지정구역 GIS: '동작대로' 지정구역 안</b> 서울시 공개 47개 가로구역 최고높이 지정구역 SHP와 대상지 대표점을 EPSG:5174로 중첩한 결과 동작대로 지정구역(경계내 0m)입니다. 과거 일반 '산정구역' 적용 설명은 정정합니다. <b>개별 필지 기준높이·최고높이(m)는 제공 지침도와 지적 경계의 정확한 블록·간선/이면 중첩 미완료로 미확정</b>이며 기존 건물 10층·40.6m는 새 건물에 자동 승계되지 않습니다.</span>
               </div>
               <div className="lookup-result-lines">
                 <span><b>업로드 공식자료 확인</b> 토지이음: 대지 1,211.1㎡, 준주거지역, 가로구역 최고높이 제한, 교육환경 상대보호, 대공방어협조. LH 서울 7차: 청년형 전용 19~60㎡, 도생·주거용오피스텔 매입대상, 전용30㎡ 미만·역출구 500m 조건부 0.3대 검토.</span>
