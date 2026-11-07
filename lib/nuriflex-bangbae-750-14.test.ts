@@ -22,6 +22,10 @@ describe("누리플렉스 750-14 청년형 개략검토", () => {
     expect(NURIFLEX_750_14.districtPlanGIS.pointInside).toBe(false);
     expect(NURIFLEX_750_14.districtPlanGIS.nearestPlanMeters).toBe(102.5);
     expect(NURIFLEX_750_14.seoul500Scenario.minPublicRentalCountedFloorSqm).toBe(605.55);
+    expect(NURIFLEX_750_14.officialEum.parcelAreaSqm).toBe(1211.1);
+    expect(NURIFLEX_750_14.officialEum.designatedRoadHeight).toBe(true);
+    expect(NURIFLEX_750_14.lhSeoul7Original.youthExclusiveMinSqm).toBe(19);
+    expect(NURIFLEX_750_14.lhSeoul7Original.rampTwoLaneFromParkingStalls).toBe(50);
     expect(NURIFLEX_750_14.seoul500Scenario.status).toBe("unconfirmed-for-lh-alone");
     expect(NURIFLEX_750_14.designatedRoadHeightGIS.designatedZone).toBe("동작대로");
     expect(NURIFLEX_750_14.designatedRoadHeightGIS.representativePointInside).toBe(true);
@@ -31,9 +35,11 @@ describe("누리플렉스 750-14 청년형 개략검토", () => {
   });
   it("retains the lawful baseline parking in office comparisons", () => {
     const at400=screenNuriflex("officetel",22,400);
-    expect(at400.homes).toBe(96);
-    expect(at400.parking05).toBe(48);
-    expect(at400.parking03Conditional).toBe(29);
-    expect(at400.parking05GrossSqm).toEqual([1680,1920]);
+    // Former 96 was obtained by misapplying the 45% contract-area efficiency
+    // to FAR gross; officetel FAR-space efficiency uses the separate 70% scenario.
+    expect(at400.homes).toBe(147);
+    expect(at400.parking05).toBe(74);
+    expect(at400.parking03Conditional).toBe(45);
+    expect(at400.parking05GrossSqm).toEqual([2590,2960]);
   });
 });
