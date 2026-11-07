@@ -23,6 +23,10 @@ describe("누리플렉스 750-14 청년형 개략검토", () => {
     expect(NURIFLEX_750_14.districtPlanGIS.nearestPlanMeters).toBe(102.5);
     expect(NURIFLEX_750_14.seoul500Scenario.minPublicRentalCountedFloorSqm).toBe(605.55);
     expect(NURIFLEX_750_14.seoul500Scenario.status).toBe("unconfirmed-for-lh-alone");
+    expect(NURIFLEX_750_14.designatedRoadHeightGIS.designatedZone).toBe("동작대로");
+    expect(NURIFLEX_750_14.designatedRoadHeightGIS.representativePointInside).toBe(true);
+    expect(NURIFLEX_750_14.designatedRoadHeightGIS.heightLimitMeters).toBeNull();
+    expect(NURIFLEX_750_14.designatedRoadHeightGIS.status).toBe("height-designated-gis-confirmed-number-not-verified");
     expect(NURIFLEX_750_14.sources.lhSeoul7.closesAt).toBe("2026-11-30");
   });
   it("retains the lawful baseline parking in office comparisons", () => {
