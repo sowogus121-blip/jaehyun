@@ -6,6 +6,7 @@ import { isHanamCommercialSite, calculateHanamCommercialMix, HANAM_CITY_ORDINANC
 import { ALTERNATIVES } from "./calculator";
 import { UIWANG_6301, isUiwangChopyeong6301 } from "./uiwang-chopyeong-6301";
 import { MASOK_555, isMasok555 } from "./masok-555";
+import { NURIFLEX_750_14, isNuriflexBangbae } from "./nuriflex-bangbae-750-14";
 import { findMetroOrdinanceSource, findMetroOrdinanceRules } from "./metro-ordinance-catalog";
 import { findMetroAnnexRecords, findLhPurchaseNotice, findLhGuidelines, koreaLocalDay, noticeIsOpen } from "./metro-annex-lh-catalog";
 import { findDistrictPlanEvidence } from "./district-plan-sources";
@@ -90,11 +91,16 @@ export function buildLegalReviewReport(
   const isParcelAssembly = Boolean(review?.parcels && review.parcels.length > 1);
   const singleUiwangC1 = isUiwangChopyeong6301(place) && !isParcelAssembly;
   const unverifiedUiwangAssembly = isUiwangChopyeong6301(place) && isParcelAssembly;
-  const siteArea = review?.parcels && review.parcels.length > 1 && !review.parcel?.area
+  // The 2026-11-08 parcel-specific source bundle is for THIS cadastral lot only,
+  // not another lot matching a building nickname, and never for assemblies.
+  const singleNuriflex = !isParcelAssembly && !input.multipleParcels &&
+    isNuriflexBangbae(place) && /(?:방배동\s*750-14(?:번지)?|사평대로\s*16(?!\d))/.test(place);
+  const siteArea = singleNuriflex ? NURIFLEX_750_14.officialEum.parcelAreaSqm :
+    review?.parcels && review.parcels.length > 1 && !review.parcel?.area
     ? null : review?.parcel?.area || lookup?.siteArea || (input.siteArea > 0 ? input.siteArea : null);
   const landUse = review?.landUse.filter((item) => item.category === "용도지역") ?? [];
   const zones = [...new Set(landUse.map((item) => item.name))];
-  const zone = review?.mixedUseZones ? zones.join(" / ") + " (혼합)" : zones[0] || lookup?.zone || (input.zone !== "미확인" ? input.zone : "미확인");
+  const zone = singleNuriflex ? NURIFLEX_750_14.officialEum.zoning : review?.mixedUseZones ? zones.join(" / ") + " (혼합)" : zones[0] || lookup?.zone || (input.zone !== "미확인" ? input.zone : "미확인");
   const cityOrdinance = sourceUrl(review, "도시계획 조례");
   const buildingOrdinance = sourceUrl(review, "건축 조례");
   const parkingOrdinance = sourceUrl(review, "주차장 설치 및 관리 조례");
@@ -496,6 +502,139 @@ export function buildLegalReviewReport(
       "LH 2026-11-06 정정공고 p.1·3·9·26",
       "LH 지역·규모요건은 건축허용과 인수심의가 아님. 50세대 이상 LH 커뮤니티 세대당 1㎡, 신혼형 전용46㎡ 0.3대 주차특례 적용 불가.",
       "conditional", src.lhNoticePdf);
+  }
+
+  // Explicit 2026.11.08 sources for ONE verified lot. General ordinance extraction
+  // often omits the zone ratio because the fetched article is absent or truncated.
+  // Distinguish sourced GENERAL zoning maxima from CONDITIONAL permit outcomes.
+  if (singleNuriflex) {
+    const n = NURIFLEX_750_14;
+    const zoningUrl = "https://law.go.kr/ordinInfoP.do?ordinId=2000719";
+    const buildingUrl = "https://law.go.kr/ordinInfoP.do?ordinId=2000120";
+    const reviewNote = "사용자 제출 2026.11.08 토지이음 p.1 · 지적·건축선의 법적 도면과 인허가 적용은 별도.";
+    const rowOverrides: Record<string, Partial<LegalReviewRow>> = {
+      address: {
+        detail: n.address+" ("+n.roadAddress+")", citation:"2026.11.08 토지이음 p.1",
+        note:reviewNote, status:"source", sourceUrl:n.sources.cadastralRecords
+      },
+      area: {
+        detail:"1,211.1㎡ (토지이음 지번면적)", citation:"2026.11.08 토지이음 p.1 · 방배동 750-14",
+        note:"민간 집계 1,211.09㎡와 구별. 실측·등기부 합치 및 도로 편입면적은 인허가 전 확인.",
+        status:"source", sourceUrl:n.sources.cadastralRecords
+      },
+      zone: {
+        detail:"준주거지역 · 가로구역별 최고높이 제한지역 · 교육환경 상대보호구역 · 대공방어협조구역",
+        citation:"2026.11.08 토지이음 p.1",
+        note:"가로구역 높이와 교육환경·군 공역 관련 별도 사전 협의사항은 건축허가 단계 검토.",
+        status:"source",sourceUrl:n.sources.cadastralRecords
+      },
+      use: {
+        detail:"준주거지역 일반 허용용도 검토: 도시형생활주택 / 주거용 오피스텔 (LH 서울7차 매입대상)",
+        citation:"서울시 도시계획 조례 · LH 서울 2026-7차 공고 pp.3~4",
+        note:"LH의 매입대상이라는 사실만으로 해당 필지의 건축허가가 보장되는 것은 아님. 건축물 종류·교육환경보호구역·특별 높이/건축선 등 확인.",
+        status:"conditional",sourceUrl:zoningUrl
+      },
+      bcr: {
+        detail:"60% 이하 (준주거지역 조례 일반상한, 건축면적 최대 726.7㎡)",
+        citation:"서울특별시 도시계획 조례 제44조제6호 (준주거지역)",
+        note:"토지이음 준주거지역 확인과 현행 조례 수치 대조 완료. 가로구역 건축선·다른 강화규제 별도 적용. 인허가 승인치 아님.",
+        status:"source",sourceUrl:zoningUrl
+      },
+      far: {
+        detail:"400% 이하 (준주거지역 조례 일반상한, 용적률 산입연면적 최대 4,844.4㎡)",
+        citation:"서울특별시 도시계획 조례 제48조제6호 (준주거지역)",
+        note:"기본 비교 수치. 높이·건축선·비주거 의무·채광·LH 기준 적용 시 실제 채움면적 감소 가능; 500% 특례 미포함.",
+        status:"source",sourceUrl:zoningUrl
+      },
+      relax: {
+        detail:"공공임대주택 별도 특례 검토: 400% → 최대 500% (조건부, 적용 확정 아님)",
+        citation:"서울시 도시계획 조례 제51조제2항제3호 · LH 2026 서울7차 공고 p.24",
+        note:"400% 초과분의 1/2 이상 공공주택 확보(500% 비교 시 약 605.55㎡). LH 7차의 국가 120% 특례와 서울시 500% 인수요건은 별개. LH 매입약정만으로 서울시 인수요건 자동 충족 여부 불명확: 서면 판단 필요.",
+        status:"conditional",sourceUrl:n.sources.cityPublicRentalPurchaseGuide
+      },
+      plan: {
+        detail:"토지이음 지역·지구 목록에 지구단위계획 미표시 · 2026.09 서울 GIS 대표점 미중첩",
+        citation:"2026.11.08 토지이음 p.1 · 서울시 지구단위계획구역 GIS (2026.09)",
+        note:"구역이 확정적으로 없다는 법적 확인은 아님. 최신 고시·필지 법적 경계 중첩으로 최종 확인.",
+        status:"conditional",sourceUrl:n.sources.seoulDistrictPlanGIS202609
+      },
+      height: {
+        detail:"동작대로 가로구역별 최고높이 제한 적용 · 필지별 기준/최고높이(m) 미확정",
+        citation:"토지이음 p.1 · 서울시 고시 2024-300호 「1-5 동작대로 지침·지침도」",
+        note:"47개 지정구역 GIS상 동작대로 안. 간선접도길이 3L 및 간선/이면 지침도 블록을 정확히 대조해야 함. 기존 10층·40.6m 자동 승계 불가.",
+        status:"conditional",sourceUrl:n.sources.seoulRoadHeightOfficial2024
+      },
+      sun: {
+        detail:"건축법상 일조·채광 확보 검토 대상 · 실제 이격거리 도면 미산정",
+        citation:"건축법 제61조 · 건축법 시행령 제86조 · 서울시 건축 조례",
+        note:"건물유형(도생/오피스텔), 주변 용도지역, 배치방위·높이·대지경계별로 분리 계산. 대상지별 수치 단정 금지.",
+        status:"conditional",sourceUrl:buildingUrl
+      },
+      setback: {
+        detail:"건축선·인접대지경계 이격 규제 확인 · 최종 공지거리 미산정",
+        citation:"건축법 제58조 · 서울특별시 건축 조례 제30조 및 별표",
+        note:"건축법상 대지 안의 공지와 동작대로 높이지침 건축한계선/도로후퇴는 별도. 건축물 세부 용도·층수·접도/측량 도면 필요.",
+        status:"conditional",sourceUrl:buildingUrl
+      },
+      landscape: {
+        detail:"연면적 2,000㎡ 이상 일반기준 조경 15% 이상 · 대지 약 181.7㎡",
+        citation:"서울특별시 건축 조례 제24조제1항제1호 (2026 시행)",
+        note:"이번 350~400% 신축안은 총연면적 2천㎡ 이상으로 가정. 적용제외·특례 및 조경면적 인정방식은 최종 설계 기준 확인.",
+        status:"source",sourceUrl:buildingUrl
+      },
+      road: {
+        detail:"토지이음상 도로 접함 확인 · 실제 도로 폭원·차량출입 위치 미확정",
+        citation:"토지이음 p.1 · 건축법 제44조",
+        note:"접도 확인과 건축법상 차량 진출입 허가, 주차장 램프 설치 가능 여부는 서로 다름. 도로대장·현황측량 및 교통협의 필요.",
+        status:"conditional",sourceUrl:n.sources.cadastralRecords
+      },
+      fire: {
+        detail:"LH 2026 서울7차 안전·피난 및 구조검토 기준 확보 · 최종 배치/높이 미확정",
+        citation:"LH 서울 2026-7차 공고 p.1 · 설계·시공 가이드라인",
+        note:"최고높이·층수·소방차 진입·피난계단·지하주차장 확정 전 시설/피난요건 충족여부 판정 불가.",
+        status:"conditional",sourceUrl:n.sources.lhCurrentSeoulPurchaseList
+      },
+      "apt-parking": {
+        detail:"LH 청년형 도시형생활주택 전용 20·22·24㎡ 대상 · 0.5대 기본/0.3대 조건부 비교",
+        citation:"LH 서울 2026-7차 공고 pp.25~26",
+        note:"기존 범용 46㎡ 신혼형 행을 본 필지에서는 청년형으로 대체. 입지요건과 지자체 0.3대 허가·추가 공공기여 협의 필수.",
+        status:"conditional",sourceUrl:n.sources.lhCurrentSeoulPurchaseList,
+        label:"주차 — 도시형생활주택 청년형"
+      },
+      "office-parking": {
+        detail:"주거용 오피스텔 전용 20·22·24㎡ · 0.5대 기본/0.3대 적용은 별도 승인",
+        citation:"서울특별시 주차장 조례 별표 · LH 서울 2026-7차 공고 pp.25~26",
+        note:"0.3대 공특법 적용대상 인정 여부와 허가권자 확인 전 기본 0.5대를 유지. 실제 주차는 전용·시설면적과 용도 혼합별 재산정.",
+        status:"conditional",sourceUrl:n.sources.seoulOrdinance,
+        label:"주차 — 주거용 오피스텔 청년형"
+      },
+      "special-parking": {
+        detail:"LH 청년형 전용 30㎡ 미만 0.3대/호 가능요건 확인 · 이 부지 인허가 적용 미승인",
+        citation:"LH 2026 서울7차 공고 pp.25~26 · 공공주택 특별법 시행령 제37조제4항",
+        note:"구반포역 출구 약 365m는 공개 좌표 추정(확정 측량 전). LH 매입약정증명서·서초구 승인·공공기여협의 필수; 선택 여부와 승인 여부를 구분.",
+        status:"conditional",sourceUrl:n.sources.publicHousingParking
+      },
+      "mechanical-lh": {
+        detail:"자주식 계획 우선 · LH 0.3대 완화 시 기계식 주차 지양",
+        citation:"LH 서울7차 공고 p.8·설계·시공 가이드라인",
+        note:"기계식 허용 범위 확인과 별개로 사용자 계획은 자주식. LH 지상·지하 램프 배치 검토 필요.",
+        status:"conditional",sourceUrl:n.sources.lhCurrentSeoulPurchaseList
+      }
+    };
+    for (const row of rows) {
+      const item = rowOverrides[row.id];
+      if (item) Object.assign(row, item, { excerpt: item.note ?? row.excerpt });
+    }
+    add("nuri-lh7", "LH·주차 검토", "LH 서울 2026-7차 신축매입약정 원문",
+      "청년형 전용 19~60㎡ · 도생·주거용 오피스텔 매입대상 · 2026.11.30 접수 마감",
+      "사용자 제공 LH 서울7차 공고문 pp.3~4,32~34",
+      "50호 이상은 11.23까지 사전컨설팅 신청(마감 7일 전), 신청서·배치/주차·층별 평면·입면·단면 필수. 접수는 매입 적격 승인이 아님.",
+      "source",n.sources.lhCurrentSeoulPurchaseList);
+    add("nuri-parking-ramp", "LH·주차 검토", "LH 지하주차장 램프·커뮤니티 기준",
+      "자주식 50대 이상 2차로·램프 폭 6m 이상 · 청년 50세대 이상 커뮤니티 1㎡/호",
+      "LH 서울7차 설계·시공 가이드라인 체크리스트 행100~116",
+      "22㎡ 도생 400% 면적안 147세대: 0.5대 가정 74대(6m 램프), 0.3대 가정 45대(조건부). 실제 도면에서 주차 구획·램프·관리/경비 면적 검증.",
+      "conditional",n.sources.lhCurrentGuide);
   }
 
   const calculatedLimits: LegalReviewReport["calculatedLimits"] = [
