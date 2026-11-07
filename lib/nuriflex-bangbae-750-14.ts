@@ -5,7 +5,42 @@
 export const NURIFLEX_750_14 = {
   address: "서울특별시 서초구 방배동 750-14",
   roadAddress: "서울특별시 서초구 사평대로 16",
-  siteSqm: 1211.09,
+  /** 2026-11-08 user-supplied 토지이음 토지이용계획확인서 p1. */
+  siteSqm: 1211.1,
+  officialEum: {
+    issuedAt: "2026-11-08 00:04 KST",
+    parcel: "서울특별시 서초구 방배동 750-14",
+    parcelAreaSqm: 1211.1,
+    zoning: "준주거지역",
+    districtPlanListed: false,
+    designatedRoadHeight: true,
+    educationProtectionArea: true,
+    militaryAirspaceConsultationArea: true,
+    caution: "토지이음 확인도면은 법적 측량/경계 근거가 아니며 실제 건축선·필지별 높이구간은 별도 확정 필요.",
+  },
+  lhSeoul7Original: {
+    noticeDate: "2026-11-06",
+    closesAt: "2026-11-30",
+    youthExclusiveMinSqm: 19,
+    youthExclusiveMaxSqm: 60,
+    eligibleUseTypes: ["도시형생활주택", "주거용오피스텔"],
+    prescreenRequiredFromHomes: 50,
+    prescreenRequestNoLaterThan: "2026-11-23",
+    prescreenGeneralDeadline: "2026-11-25",
+    youthCommunityMandatoryFromHomes: 50,
+    communitySqmPerHome: 1,
+    additionalPublicBenefitForParking03: "LH와 별도 협의",
+    rampTwoLaneFromParkingStalls: 50,
+    rampMinimumWidthMeters: 6,
+    communitySecurityRoomRequiredFromHomes: 50,
+    managementOfficeNoticeThresholdHomes: 150,
+    managementOfficeGuideUrbanHomes: 50,
+    managementOfficeGuideOfficetelHomes: 150,
+    managementOfficeCaveat: "공고 표와 설계 체크리스트 사이 용도별 설치기준을 병행 대조: 공동주택 50호 이상 시 관리사무소·근로자휴게시설(체크리스트 항목99); 오피스텔 150호 이상.",
+    elevatorMandatoryAboveFloors: 3,
+    carShareSpecialFromHomes: 150,
+    verifiedSource: "사용자 제공 서울지역 2026-7차 민간신축매입약정방식공고문.pdf + 붙임2 체크리스트(2026.11.08)",
+  },
   approximateZone: "준주거지역",
   /** 2026-11-07 VWorld site-review: parcel outline area is approximate. */
   vworldVerification: {
@@ -46,7 +81,9 @@ export const NURIFLEX_750_14 = {
     ordinaryFarPercent: 400,
     conditionalFarPercent: 500,
     publicRentalFractionOfIncrease: 0.5,
-    minPublicRentalCountedFloorSqm: Math.round(1211.09 * 0.5 * 100) / 100,
+    minPublicRentalCountedFloorSqm: Math.round(1211.1 * 0.5 * 100) / 100,
+    lh7ExplicitlyIncludesPurchaseAgreementUnitsForNational120PercentRule: true,
+    lh7ExplicitlyConfirmsSeoul500PercentPurchaseQualification: false,
     permitApplicationBy: "2028-03-27",
     status: "unconfirmed-for-lh-alone",
     caution: "서울시 매입업무 처리기준은 인수자를 서울특별시장으로 명시; LH 매입약정이 서울시 제51조제2항제3호 공공주택 확보분에 해당하는지 서면 판단 필요.",
@@ -54,7 +91,7 @@ export const NURIFLEX_750_14 = {
   provisionalBcrPercent: 60,
   provisionalFarPercent: 400,
   existing: { floors: 10, basementFloors: 3, farSqm: 4646.72, grossSqm: 6674.81, parkingStalls: 31, heightMeters: 40.6 },
-  siteEvidence: "건축물대장 기반 민간 집계자료(2026.11.07 조회), 토지대장·토지이용계획확인서 원본 별도 확인 필요",
+  siteEvidence: "사용자 제공 토지이음 토지이용계획확인서(2026.11.08): 1,211.1㎡ 준주거, 가로구역 최고높이 제한. 건축물 현황은 민간자료를 별도 참고.",
   sources: {
     headquarters: "https://nuriflex.co.kr/kr/about/headquarter-location.html",
     buildingSummary: "https://zippoom.com/부동산/서울-서초구-방배동-누리빌딩/8e14dv",
@@ -102,11 +139,16 @@ export interface NuriflexScreen {
 
 /** Only a FAR-capacity comparison, NOT a permit, parking or LH approval.
  *  - 1m²/community per dwelling and 50m² additional gross space.
+ *  - Officetel 45% (contract-area efficiency) is NOT the FAR-area 70% assumption.
  *  - All nonresidential obligations are unknown and omitted.
  *  - 500% is a separate unverified housing-related relaxation.
  */
 export function screenNuriflex(use: NuriflexUse, exclusiveSqm:20|22|24, farPercent:350|400|500):NuriflexScreen {
-  const efficiency = use === "urban" ? 0.70 : 0.45;
+  // FAR-equivalent *aboveground* area efficiency is assumed at 70% for BOTH options.
+  // Officetel 45% often denotes exclusive / contract gross area, including underground common area;
+  // applying 45% directly to FAR gross exaggerates aboveground common-area consumption.
+  // 70% is a scenario only, not an LH verified efficiency.
+  const efficiency = 0.70;
   const grossFarSqm = NURIFLEX_750_14.siteSqm*farPercent/100;
   const homes = Math.max(0,Math.floor((grossFarSqm-50)/(exclusiveSqm/efficiency+1)));
   const parking05 = Math.ceil(homes*0.5);
