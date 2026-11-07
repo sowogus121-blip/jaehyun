@@ -172,6 +172,8 @@ export interface UploadedDocument {
   name: string;
   size: number;
   category: string;
+  /** Site address at upload time; evidence from another project must not leak into this project. */
+  sourceAddress?: string;
   status: "analyzing" | "analyzed" | "failed" | "needs-integration";
   uploadedAt: string;
   analysis?: {
