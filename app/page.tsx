@@ -885,6 +885,18 @@ export default function Home() {
                 <span><small>현 건물 / 자주식 주차</small><b>지상10·지하3층 / 31대</b></span>
                 <span><small>전용률 가정</small><b>도생 70% · 오피스텔 45%</b></span>
               </div>
+              <div className="lookup-result-grid">
+                <span><small>VWorld 공식 용도지역</small><b>준주거지역 · 확인</b></span>
+                <span><small>2026.09 서울 지구단위 GIS</small><b>건물 점 미중첩</b></span>
+                <span><small>500% 사용 시 공공임대 확보</small><b>약 {NURIFLEX_750_14.seoul500Scenario.minPublicRentalCountedFloorSqm.toLocaleString()}㎡ 이상</b></span>
+                <span><small>서울 LH 신축매입</small><b>7차 · 11/30 마감</b></span>
+              </div>
+              <div className="lookup-result-lines">
+                <span><b>법규 구분</b> 서울시 준주거 400%→500%는 제51조제2항제3호에 따라 400% 초과 용적률의 1/2 이상 공공임대주택 확보가 필요하며, 2028.03.27까지 건축허가(또는 사업계획승인)를 신청한 경우에 한시 적용됩니다.</span>
+                <span><b>LH 매입약정으로 자동 인정 불가</b> 서울시에서 공개한 공공임대주택 매입업무 처리기준의 인수자는 '서울특별시장'입니다. LH 약정 물량이 해당 조례상의 확보분으로 인정되는지 서울시 임대주택과(02-2133-9582)와 서초구 건축과의 서면 검토가 필요합니다. 오피스텔에 500% 주택특례를 자동 적용하지 마세요.</span>
+                <span><b>지구단위 GIS 확인</b> 2026.09 서울시 공식 SHP의 건물 대표점 중첩 결과 지구단위계획 도형 밖이며, 반포아파트지구 지구단위 경계와 약 102.5m. 토지이용계획확인서·지적 경계 전체 중첩 및 2026.09 이후 고시는 별도 확인 전입니다.</span>
+                <span><b>높이 별도 확인</b> 서울시 고시 제2024-300호 개정 높이 산정구역 운영지침의 기준높이·최고높이는 실제 도로 폭과 법정 건축선을 확인해야 합니다. 기존 10층·40.6m는 신축 최고높이가 아닙니다.</span>
+              </div>
               <p><b>전용 20~24㎡ 청년형 / 자주식</b> 비교. 아래 호수는 대지×용적률에서 커뮤니티 1㎡/호·관리설비 50㎡를 개략 차감한 <b>면적상 이론치</b>로, 건축선·일조·평면·지구단위계획·비주거 용도 제한을 반영한 허가가능 호수가 아닙니다.</p>
               <div className="lookup-result-lines">
                 {([350,400] as const).map(far => <span key={`nuriflex-urban-${far}`}><b>도생 · {far}%</b> {([20,22,24] as const).map(a => `${a}㎡ ${screenNuriflex("urban",a,far).homes}호`).join(" / ")} · 22㎡ 주차 기본 0.5대 <b>{screenNuriflex("urban",22,far).parking05}대</b>, LH 0.3대 조건부 <b>{screenNuriflex("urban",22,far).parking03Conditional}대</b></span>)}
@@ -893,8 +905,8 @@ export default function Home() {
                 <span><b>자주식 주차면적(22㎡ 도생 350%)</b> 0.5대 65대 → 약 {screenNuriflex("urban",22,350).parking05GrossSqm[0].toLocaleString()}~{screenNuriflex("urban",22,350).parking05GrossSqm[1].toLocaleString()}㎡ / 0.3대 조건부 39대 → 약 {screenNuriflex("urban",22,350).parking03GrossSqm[0].toLocaleString()}~{screenNuriflex("urban",22,350).parking03GrossSqm[1].toLocaleString()}㎡ (35~40㎡/대 단순 가정)</span>
               </div>
               <div className="lookup-warning"><Icon name="alert" size={13}/>LH 청년형 0.3대는 공공주택 특별법상 요건·LH 매입약정 및 서초구 협의가 필요하고, 오피스텔에는 자동 적용하지 않습니다. 구반포역 출구 500m 이내는 공개 좌표상 약 365m 추정이며 현장/지적 경계 검증 전입니다.</div>
-              <div className="lookup-warning"><Icon name="alert" size={13}/>준주거 400%는 서울시 일반 비교기준이며 이 필지의 지구단위계획 중첩, 비주거 의무, 가로구역 높이, 도로 건축선·대지안 공지, 지하 주차 램프, 실측 대지면적 미확정. 2026 서울 LH 6차 신축매입약정 접수는 11월 5일 종료되어 신규 접수 가능 공고 별도 확인 필요. 이 별도 비교표는 일반 규모계산기의 기본 전용46/25㎡ 대안과 독립된 계산입니다.</div>
-              <div className="lookup-result-lines"><span><b>근거자료</b> <a href={NURIFLEX_750_14.sources.headquarters} target="_blank" rel="noopener noreferrer">누리플렉스 본사 공식 주소</a> · <a href={NURIFLEX_750_14.sources.buildingSummary} target="_blank" rel="noopener noreferrer">대지·기존 건물(민간 집계)</a> · <a href={NURIFLEX_750_14.sources.seoulOrdinance} target="_blank" rel="noopener noreferrer">서울 주차장 조례</a> · <a href={NURIFLEX_750_14.sources.publicHousingParking} target="_blank" rel="noopener noreferrer">0.3대 법령</a> · <a href={NURIFLEX_750_14.sources.seoulCityPlanning} target="_blank" rel="noopener noreferrer">서울 500% 안내</a> · <a href={NURIFLEX_750_14.sources.lhSeoul6} target="_blank" rel="noopener noreferrer">LH 서울 6차 공고</a> · <a href={NURIFLEX_750_14.sources.cadastralRecords} target="_blank" rel="noopener noreferrer">토지이음</a></span></div>
+              <div className="lookup-warning"><Icon name="alert" size={13}/>준주거 400%는 서울시 일반 비교기준이며 2026.09 지구단위 GIS 건물점 미중첩(법적 필지경계 확정 전), 비주거 의무, 가로구역별 최고높이, 도로 건축선·대지안 공지, 지하 주차 램프, 공부상 대지면적 미확정. 2026 서울 LH 6차 접수는 11월 5일 마감됐고, 7차 공고는 11월 6일 게시되어 11월 30일 마감 예정입니다. 7차 본문 PDF/부속 ZIP의 세부 기준은 아직 미대조 상태입니다. 이 별도 비교표는 일반 규모계산기의 기본 전용46/25㎡ 대안과 독립된 계산입니다.</div>
+              <div className="lookup-result-lines"><span><b>근거자료</b> <a href={NURIFLEX_750_14.sources.headquarters} target="_blank" rel="noopener noreferrer">누리플렉스 본사 공식 주소</a> · <a href={NURIFLEX_750_14.sources.buildingSummary} target="_blank" rel="noopener noreferrer">대지·기존 건물(민간 집계)</a> · <a href={NURIFLEX_750_14.sources.seoulOrdinance} target="_blank" rel="noopener noreferrer">서울 주차장 조례</a> · <a href={NURIFLEX_750_14.sources.publicHousingParking} target="_blank" rel="noopener noreferrer">0.3대 법령</a> · <a href={NURIFLEX_750_14.sources.seoulCityPlanning} target="_blank" rel="noopener noreferrer">서울 500% 안내</a> · <a href={NURIFLEX_750_14.sources.lhCurrentSeoulPurchaseList} target="_blank" rel="noopener noreferrer">LH 서울 7차 현행 공고목록</a> · <a href={NURIFLEX_750_14.sources.seoulDistrictPlanGIS202609} target="_blank" rel="noopener noreferrer">서울 2026.09 지구단위 SHP</a> · <a href={NURIFLEX_750_14.sources.seoulRoadHeightOfficial2024} target="_blank" rel="noopener noreferrer">2024-300 높이고시·원문</a> · <a href={NURIFLEX_750_14.sources.cityPublicRentalPurchaseRules} target="_blank" rel="noopener noreferrer">서울시 임대주택 매입업무 처리기준</a> · <a href={NURIFLEX_750_14.sources.seoul500ExtendingGazette} target="_blank" rel="noopener noreferrer">2028 특례 연장 고시</a> · <a href={NURIFLEX_750_14.sources.cadastralRecords} target="_blank" rel="noopener noreferrer">토지이음</a></span></div>
             </section>}
             {singleMasok && reviewData && <section className="lookup-result-card" aria-label="마석우리 555 필지 전용 LH 검토">
               <div className="lookup-result-head"><Badge status="review" /><b>마석우리 555 · 마석택지지구 단독2-A14 전용 검토</b><span>남양주시 공식 고시 2025-314 · LH 26-4차 공고</span></div>
