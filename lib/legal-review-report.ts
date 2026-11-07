@@ -544,7 +544,7 @@ export function buildLegalReviewReport(
       far: {
         detail:"400% 이하 (준주거지역 조례 일반상한, 용적률 산입연면적 최대 4,844.4㎡)",
         citation:"서울특별시 도시계획 조례 제48조제6호 (준주거지역)",
-        note:"기본 비교 수치. 높이·건축선·비주거 의무·채광·LH 기준 적용 시 실제 채움면적 감소 가능; 500% 특례 미포함.",
+        note:"기본 비교 수치. 서울시는 2025.1 준주거 비주거 10% 일률의무를 폐지했지만 개별 계획의 허용용도·건축선·채광·LH 매입 제외 근생 등은 별도. 500% 특례 미포함.",
         status:"source",sourceUrl:zoningUrl
       },
       relax: {
@@ -560,15 +560,15 @@ export function buildLegalReviewReport(
         status:"conditional",sourceUrl:n.sources.seoulDistrictPlanGIS202609
       },
       height: {
-        detail:"동작대로 가로구역별 최고높이 제한 적용 · 필지별 기준/최고높이(m) 미확정",
+        detail:"동작대로 1지구 E블록 지침도 판독(필지귀속 잠정): 간선부 기준60m·최고80m / 이면부 기준32m·최고42m",
         citation:"토지이음 p.1 · 서울시 고시 2024-300호 「1-5 동작대로 지침·지침도」",
-        note:"47개 지정구역 GIS상 동작대로 안. 간선접도길이 3L 및 간선/이면 지침도 블록을 정확히 대조해야 함. 기존 10층·40.6m 자동 승계 불가.",
+        note:"토지이음 확인도와 원결정 지침도 p.1 육안 대조에서 1지구 E블록 후보. 정확한 750-14 지적경계 중첩/2024-300 정정도면/간선 3L 적용범위는 미검증으로 80m는 건축허가 확정치가 아님. 인접 750-20(2021 허가)은 20층이지만 별도 완화내역 승계 불가.",
         status:"conditional",sourceUrl:n.sources.seoulRoadHeightOfficial2024
       },
       sun: {
-        detail:"건축법상 일조·채광 확보 검토 대상 · 실제 이격거리 도면 미산정",
+        detail:"준주거 정북일조 일반 적용대상 아님 · 공동주택 채광거리 H/4 등은 적용 검토 · 오피스텔은 공동주택 채광거리 대상 아님",
         citation:"건축법 제61조 · 건축법 시행령 제86조 · 서울시 건축 조례",
-        note:"건물유형(도생/오피스텔), 주변 용도지역, 배치방위·높이·대지경계별로 분리 계산. 대상지별 수치 단정 금지.",
+        note:"건축법 제61조제1항 정북일조는 전용·일반주거 대상. 제61조제2항/시행령 제86조제3항은 공동주택 채광창과 인접대지 경계·건물유형에 따른 거리 검토. 인접대지 공지·도로경계는 별도.",
         status:"conditional",sourceUrl:buildingUrl
       },
       setback: {
@@ -584,9 +584,9 @@ export function buildLegalReviewReport(
         status:"source",sourceUrl:buildingUrl
       },
       road: {
-        detail:"토지이음상 도로 접함 확인 · 실제 도로 폭원·차량출입 위치 미확정",
+        detail:"사평대로 접도 확인 · 20m 이상 간선가로 요건 해당(도로계획 대로2-29 폭37~43.5m 자료 참조) · 접도길이 L·건축선 미산정",
         citation:"토지이음 p.1 · 건축법 제44조",
-        note:"접도 확인과 건축법상 차량 진출입 허가, 주차장 램프 설치 가능 여부는 서로 다름. 도로대장·현황측량 및 교통협의 필요.",
+        note:"2023 반포아파트지구 도로결정조서 대로2-29 폭37~43.5m는 연계 간선 참고값일 뿐 750-14 접도부의 정확한 법정 폭원 아님. 진출입 설치, 교통협의, 건축선은 별도.",
         status:"conditional",sourceUrl:n.sources.cadastralRecords
       },
       fire: {
