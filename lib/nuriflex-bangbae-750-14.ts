@@ -29,6 +29,19 @@ export const NURIFLEX_750_14 = {
     nextPlanMeters: 167,
     caveat: "건물 중심좌표 대 서울시 2026년 9월 폴리곤 중첩; 법정 필지경계·최신 변경고시 확인서 아님.",
   },
+  /** 서울열린데이터광장 2026-04.07 서울 47개 가로구역별 최고높이 지정구역 SHP 원본 EPSG:5174 중첩. */
+  designatedRoadHeightGIS: {
+    asOf: "2026-04-07",
+    sourceFile: "서울시 가로구역별 최고높이 지정구역(47개소).zip",
+    sourceSha256: "e1b86a7d20814d0b08889aaf567584c760438fd7f504d43ae570ceab9e0f35a9",
+    coordinateSystem: "EPSG:5174",
+    representativePointInside: true,
+    designatedZone: "동작대로",
+    sourceFeatureIndexZeroBased: 17,
+    heightLimitMeters: null as number | null,
+    status: "height-designated-gis-confirmed-number-not-verified",
+    caution: "동작대로 지정구역 안으로 GIS 확인. 일반 준주거 높이 산정구역으로 자동 계산하지 말 것. 개별 필지의 동작대로 높이지침도와 기준높이·최고높이 구간은 공식 도면/서초구 확인 필요.",
+  },
   seoul500Scenario: {
     ordinaryFarPercent: 400,
     conditionalFarPercent: 500,
@@ -52,6 +65,8 @@ export const NURIFLEX_750_14 = {
     cityPublicRentalPurchaseGuide: "https://news.seoul.go.kr/citybuild/archives/520265",
     seoulDistrictPlanGIS202609: "https://data.seoul.go.kr/dataList/OA-21161/A/1/datasetView.do",
     seoulRoadHeightPublicGuide: "https://news.seoul.go.kr/citybuild/archives/523924",
+    designatedHeight47GIS: "https://data.seoul.go.kr/dataList/OA-22900/F/1/datasetView.do",
+    historicalDongjakHeightArticle: "https://news.nate.com/view/20090111n00460?mid=n0000",
     seoulRoadHeightOfficial2024: "https://www.seoul.go.kr/news/news_notice.do?nttNo=414285&tr_code=snews",
     seoulRoadHeight2024Pdf: "https://seoulboard.seoul.go.kr/comm/getFile?srvcId=BBSTY1&upperNo=414285&fileTy=ATTACH&fileNo=1&bbsNo=277",
     lhCurrentSeoulPurchaseList: "https://apply.lh.or.kr/lhapply/apply/pch/list.do?mi=1076",
