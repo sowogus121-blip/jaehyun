@@ -1,4 +1,4 @@
-import type { ProjectInput, SiteLookupDetails, SiteReviewResult } from "./types";
+import type { ProjectInput, SiteLookupDetails, SiteReviewResult, UploadedDocument } from "./types";
 import type { ReviewedRule } from "./rule-application";
 import { screenParking03 } from "./lh-parking-screen";
 import { getLhParkingReview } from "./lh-parking-review";
@@ -85,6 +85,7 @@ export function buildLegalReviewReport(
   review: SiteReviewResult | null,
   lookup: SiteLookupDetails | null = null,
   reviewedRules: ReviewedRule[] = [],
+  uploadedDocuments: UploadedDocument[] = [],
 ): LegalReviewReport {
   const rows: LegalReviewRow[] = [];
   const place = review?.location?.parcelAddress || review?.location?.address || input.address || "주소 미입력";
@@ -637,11 +638,65 @@ export function buildLegalReviewReport(
       "conditional",n.sources.lhCurrentGuide);
   }
 
+  // A browser upload is project-scoped evidence, not a verified permit rule.
+  // Previously uploads were parsed but never surfaced in the legal review.
+  // Older records have no sourceAddress: exclude them rather than mistakenly
+  // applying another project's documents to the current cadastral lot.
+  const siteKey = (value: string) => value.toLowerCase().replace(/\\s+/g, "").replace(/^서울특별시/, "서울").replace(/^경기도/, "경기");
+  const projectDocs = uploadedDocuments.filter((document) =>
+    document.status === "analyzed" &&
+    Boolean(document.sourceAddress) &&
+    siteKey(document.sourceAddress!) === siteKey(input.address) &&
+    Boolean(document.analysis?.textLength)).slice(0, 20);
+  const topicToRows: Record<string, string[]> = {
+    use: ["허용용도", "LH 대상주택 유형"],
+    bcr: ["건폐율"],
+    far: ["용적률"],
+    plan: ["지구단위계획"],
+    height: ["높이"],
+    sun: ["일조"],
+    setback: ["대지 안의 공지"],
+    landscape: ["조경"],
+    relax: ["완화"],
+    "apt-parking": ["주차"],
+    "office-parking": ["주차"],
+    "special-parking": ["LH 0.3대 주차특례"],
+  };
+  for (const row of rows) {
+    const topics = topicToRows[row.id];
+    if (!topics) continue;
+    const matched = projectDocs.flatMap((document) => (document.analysis?.candidates ?? [])
+      .filter((candidate) => topics.some((topic) => candidate.topic === topic))
+      .slice(0, 2).map((candidate) => ({
+        name: document.name,
+        quote: clean(candidate.quote).slice(0, 105),
+      }))).slice(0, 2);
+    if (!matched.length) continue;
+    row.note += " · 제출자료 후보: " + matched.map((item) => item.name + " 「" + item.quote + "」").join(" / ") +
+      " (원문 수치·표/도면의 해당 필지 적용은 추가 검증 전)";
+    if (row.status === "unknown") {
+      row.status = "conditional";
+      row.detail += " · 제출자료 관련 문구 확보(적용 미검증)";
+    }
+  }
+  for (const document of projectDocs) {
+    const candidates = document.analysis?.candidates ?? [];
+    const topics = [...new Set(candidates.map((candidate) => candidate.topic))];
+    add("upload-" + document.id, document.category === "LH 공고" ? "LH·주차 검토" : "건축·도시계획",
+      "[제출자료 본문 검토] " + document.name,
+      "본문 " + (document.analysis?.textLength ?? 0).toLocaleString("ko-KR") + "자 추출 · 법규 문구 후보 " +
+        candidates.length + "건" + (topics.length ? " · " + topics.slice(0, 5).join(" / ") : ""),
+      document.name + " · 현재 대상지 업로드",
+      "원문 확인과 개별 필지 적용은 구별합니다. 업로드 후보를 건폐율·용적률·최고높이의 승인값으로 자동 확정하지 않습니다.",
+      "conditional", null,
+      candidates.slice(0, 2).map((candidate) => clean(candidate.quote)).join(" / ").slice(0, 260) || null);
+  }
+
   const calculatedLimits: LegalReviewReport["calculatedLimits"] = [
     { label: "건폐율 · 계산 입력", value: input.buildingCoverageRatio > 0 ? input.buildingCoverageRatio + "%" : "미입력",
-      source: selectedRule("buildingCoverageRatio")?.sourceTitle || "사용자 계산값 · 조례 일반기준과 별개", status: input.buildingCoverageRatio > 0 ? "user" : "unknown" },
+      source: selectedRule("buildingCoverageRatio")?.sourceTitle || (singleNuriflex && input.buildingCoverageRatio === 60 ? "2026.11.08 토지이음 준주거 · 서울특별시 도시계획 조례 제44조 일반기준" : "사용자 계산값 · 조례 일반기준과 별개"), status: singleNuriflex && input.buildingCoverageRatio === 60 ? "source" : input.buildingCoverageRatio > 0 ? "user" : "unknown" },
     { label: "용적률 · 계산 입력", value: input.baseFar > 0 ? input.baseFar + "%" : "미입력",
-      source: selectedRule("baseFar")?.sourceTitle || "사용자 계산값 · 적용조건 미검증", status: input.baseFar > 0 ? "user" : "unknown" },
+      source: selectedRule("baseFar")?.sourceTitle || (singleNuriflex && input.baseFar === 400 ? "2026.11.08 토지이음 준주거 · 서울특별시 도시계획 조례 제48조 일반기준" : "사용자 계산값 · 적용조건 미검증"), status: singleNuriflex && input.baseFar === 400 ? "source" : input.baseFar > 0 ? "user" : "unknown" },
     { label: "완화 용적률", value: input.relaxedFar > 0 ? input.relaxedFar + "%" : "미입력",
       source: "승인 전 조건부 시나리오 · 기본안과 별도", status: input.relaxedFar > 0 ? "conditional" : "unknown" },
     { label: "공동주택 주차계수", value: input.apartmentParkingRatio > 0 ? input.apartmentParkingRatio + "대/세대" : "미입력",
