@@ -880,10 +880,10 @@ export default function Home() {
             {singleNuriflex && <section className="lookup-result-card" aria-label="누리플렉스 방배동 750-14 청년형 조건부 규모검토">
               <div className="lookup-result-head"><Badge status="review"/><b>누리플렉스 본사 · 방배동 750-14 청년형 별도 규모검토</b><span>2026.11.07 · 공식 본사주소 + 민간 건축정보 + 법령 비교</span></div>
               <div className="lookup-result-grid">
-                <span><small>대지면적(민간 건축정보)</small><b>1,211.09㎡</b></span>
+                <span><small>대지면적(토지이음 2026.11.08)</small><b>1,211.1㎡</b></span>
                 <span><small>서울 준주거지역 일반기준</small><b>60% / 400%</b></span>
                 <span><small>현 건물 / 자주식 주차</small><b>지상10·지하3층 / 31대</b></span>
-                <span><small>전용률 가정</small><b>도생 70% · 오피스텔 45%</b></span>
+                <span><small>지상 FAR 면적효율(비교 가정)</small><b>도생·오피스텔 70%</b></span>
               </div>
               <div className="lookup-result-grid">
                 <span><small>VWorld 공식 용도지역</small><b>준주거지역 · 확인</b></span>
@@ -898,6 +898,14 @@ export default function Home() {
                 <span><b>지구단위 GIS 확인</b> 2026.09 서울시 공식 SHP의 건물 대표점 중첩 결과 지구단위계획 도형 밖이며, 반포아파트지구 지구단위 경계와 약 102.5m. 토지이용계획확인서·지적 경계 전체 중첩 및 2026.09 이후 고시는 별도 확인 전입니다.</span>
                 <span><b>2026.04 최신 지정구역 GIS: '동작대로' 지정구역 안</b> 서울시 공개 47개 가로구역 최고높이 지정구역 SHP와 대상지 대표점을 EPSG:5174로 중첩한 결과 동작대로 지정구역(경계내 0m)입니다. 과거 일반 '산정구역' 적용 설명은 정정합니다. <b>개별 필지 기준높이·최고높이(m)는 아직 결정도서·지침도 미확보로 미확정</b>이며 기존 건물 10층·40.6m는 새 건물에 자동 승계되지 않습니다.</span>
               </div>
+              <div className="lookup-result-lines">
+                <span><b>업로드 공식자료 확인</b> 토지이음: 대지 1,211.1㎡, 준주거지역, 가로구역 최고높이 제한, 교육환경 상대보호, 대공방어협조. LH 서울 7차: 청년형 전용 19~60㎡, 도생·주거용오피스텔 매입대상, 전용30㎡ 미만·역출구 500m 조건부 0.3대 검토.</span>
+                <span><b>높이지침도 적용 주의</b> 동작대로 1-5 지침 제5~7조: 간선가로(20m 이상) 접도길이 L의 3L 범위는 간선높이, 그 외 이면높이. 제공 지침도는 2004년 세부구간 도면이므로 필지의 개별 블록·간선/이면 구분 없이 최고높이(m) 확정 금지.</span>
+                <span><b>LH 7차 신청기한</b> 공고 11.06~11.30. 50호 이상은 마감 7일 전 사전컨설팅 신청 필수(11.23 우선), 컨설팅 일반 신청기간은 11.25까지. 설계도면과 신청서 완비 필수, 이메일 선착순.</span>
+                <span><b>주차 50대 여부가 지하계획 결정</b> LH 7차 체크리스트에서 총 주차 50대 이상 램프는 2차선·폭 6m 이상. 22㎡ 도생 400% 147세대 0.5대=74대(6m 램프), 조건부 0.3대=45대. 커뮤니티 1㎡/호 이상 및 추가 공공기여 협의 필요.</span>
+                <span><b>오피스텔 면적효율 계산 정정</b> 기존 45%는 계약면적 대비 전용률 가정이므로 지상 FAR에 직접 사용하면 호수 과소산정. 이번 개략표는 오피스텔 지상 FAR 전용효율 70%를 별도 가정. 정확한 지하 공용면적·계약면적은 추가 산정해야 함.</span>
+                <span><b>500% 공공주택 확보 조건 미확정</b> LH 공고 p24의 국가 공공임대주택 120% 용적률 특례(민간 매입약정 포함)와 서울시 준주거 400→500% 확보/인수조건은 별개. LH가 서울시의 공공주택 인수요건을 자동 충족하는 것은 아님.</span>
+              </div>
               <p><b>전용 20~24㎡ 청년형 / 자주식</b> 비교. 아래 호수는 대지×용적률에서 커뮤니티 1㎡/호·관리설비 50㎡를 개략 차감한 <b>면적상 이론치</b>로, 건축선·일조·평면·지구단위계획·비주거 용도 제한을 반영한 허가가능 호수가 아닙니다.</p>
               <div className="lookup-result-lines">
                 {([350,400] as const).map(far => <span key={`nuriflex-urban-${far}`}><b>도생 · {far}%</b> {([20,22,24] as const).map(a => `${a}㎡ ${screenNuriflex("urban",a,far).homes}호`).join(" / ")} · 22㎡ 주차 기본 0.5대 <b>{screenNuriflex("urban",22,far).parking05}대</b>, LH 0.3대 조건부 <b>{screenNuriflex("urban",22,far).parking03Conditional}대</b></span>)}
@@ -906,7 +914,7 @@ export default function Home() {
                 <span><b>자주식 주차면적(22㎡ 도생 350%)</b> 0.5대 65대 → 약 {screenNuriflex("urban",22,350).parking05GrossSqm[0].toLocaleString()}~{screenNuriflex("urban",22,350).parking05GrossSqm[1].toLocaleString()}㎡ / 0.3대 조건부 39대 → 약 {screenNuriflex("urban",22,350).parking03GrossSqm[0].toLocaleString()}~{screenNuriflex("urban",22,350).parking03GrossSqm[1].toLocaleString()}㎡ (35~40㎡/대 단순 가정)</span>
               </div>
               <div className="lookup-warning"><Icon name="alert" size={13}/>LH 청년형 0.3대는 공공주택 특별법상 요건·LH 매입약정 및 서초구 협의가 필요하고, 오피스텔에는 자동 적용하지 않습니다. 구반포역 출구 500m 이내는 공개 좌표상 약 365m 추정이며 현장/지적 경계 검증 전입니다.</div>
-              <div className="lookup-warning"><Icon name="alert" size={13}/>준주거 400%는 서울시 일반 비교기준이며 2026.09 지구단위 GIS 건물점 미중첩(법적 필지경계 확정 전), 비주거 의무, 동작대로 지정구역의 필지별 최고높이·높이지침도, 도로 건축선·대지안 공지, 지하 주차 램프, 공부상 대지면적 미확정. 2026 서울 LH 6차 접수는 11월 5일 마감됐고, 7차 공고는 11월 6일 게시되어 11월 30일 마감 예정입니다. 7차 본문 PDF/부속 ZIP의 세부 기준은 아직 미대조 상태입니다. 이 별도 비교표는 일반 규모계산기의 기본 전용46/25㎡ 대안과 독립된 계산입니다.</div>
+              <div className="lookup-warning"><Icon name="alert" size={13}/>준주거 400%는 서울시 일반 비교기준이며 2026.09 지구단위 GIS 건물점 미중첩(법적 필지경계 확정 전), 비주거 의무, 동작대로 지정구역의 필지별 최고높이·높이지침도, 도로 건축선·대지안 공지, 지하 주차 램프, 공부상 대지면적 미확정. 2026 LH 서울 7차 공고문·서식·설계/시공 체크리스트는 사용자 원본으로 대조했고, 최종 인허가·0.3대 허가·500% 인정은 별도 확인이 필요합니다. 이 별도 비교표는 일반 규모계산기의 기본 전용46/25㎡ 대안과 독립된 계산입니다.</div>
               <div className="lookup-result-lines"><span><b>근거자료</b> <a href={NURIFLEX_750_14.sources.headquarters} target="_blank" rel="noopener noreferrer">누리플렉스 본사 공식 주소</a> · <a href={NURIFLEX_750_14.sources.buildingSummary} target="_blank" rel="noopener noreferrer">대지·기존 건물(민간 집계)</a> · <a href={NURIFLEX_750_14.sources.seoulOrdinance} target="_blank" rel="noopener noreferrer">서울 주차장 조례</a> · <a href={NURIFLEX_750_14.sources.publicHousingParking} target="_blank" rel="noopener noreferrer">0.3대 법령</a> · <a href={NURIFLEX_750_14.sources.seoulCityPlanning} target="_blank" rel="noopener noreferrer">서울 500% 안내</a> · <a href={NURIFLEX_750_14.sources.lhCurrentSeoulPurchaseList} target="_blank" rel="noopener noreferrer">LH 서울 7차 현행 공고목록</a> · <a href={NURIFLEX_750_14.sources.seoulDistrictPlanGIS202609} target="_blank" rel="noopener noreferrer">서울 2026.09 지구단위 SHP</a> · <a href={NURIFLEX_750_14.sources.designatedHeight47GIS} target="_blank" rel="noopener noreferrer">서울 2026.04 최고높이 지정 47개구역 SHP</a> · <a href={NURIFLEX_750_14.sources.seoulRoadHeightOfficial2024} target="_blank" rel="noopener noreferrer">2024-300 높이고시·원문</a> · <a href={NURIFLEX_750_14.sources.cityPublicRentalPurchaseRules} target="_blank" rel="noopener noreferrer">서울시 임대주택 매입업무 처리기준</a> · <a href={NURIFLEX_750_14.sources.seoul500ExtendingGazette} target="_blank" rel="noopener noreferrer">2028 특례 연장 고시</a> · <a href={NURIFLEX_750_14.sources.cadastralRecords} target="_blank" rel="noopener noreferrer">토지이음</a></span></div>
             </section>}
             {singleMasok && reviewData && <section className="lookup-result-card" aria-label="마석우리 555 필지 전용 LH 검토">
