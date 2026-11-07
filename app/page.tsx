@@ -779,6 +779,7 @@ export default function Home() {
       name: file.name,
       size: file.size,
       category: file.name.includes("지구단위") ? "지구단위계획" : file.name.includes("공고") ? "LH 공고" : "검토자료",
+      sourceAddress: input.address.trim(),
       status: "analyzing" as const,
       uploadedAt: new Date().toISOString(),
     }));
