@@ -73,8 +73,25 @@ export const NURIFLEX_750_14 = {
     representativePointInside: true,
     designatedZone: "동작대로",
     sourceFeatureIndexZeroBased: 17,
+    // Do not populate the legal limit with a visual-match candidate.
     heightLimitMeters: null as number | null,
-    status: "height-designated-gis-confirmed-number-not-verified",
+    /** 2004 map sheet is supplied with the 2024-300 operation guideline.
+     * The E block matches the roadside shape on the Eum map only visually.
+     * No cadastral overlay or written municipal verification exists.
+     */
+    mapCandidate: {
+      sheet: "동작대로 1지구",
+      block: "E",
+      arterialBaseMeters: 60,
+      arterialMaxMeters: 80,
+      rearBaseMeters: 32,
+      rearMaxMeters: 42,
+      provisionalParcelMatch: true,
+      mapOriginalDecision: "2004년 원결정 표기 · 2024-300 운영지침과 대조",
+      source: "사용자 제출 1-5_동작대로 지침도.pdf p.1 · 토지이음.pdf p.1",
+      caveat: "750-14의 E블록 필지 귀속은 육안 위치대조 잠정값이며 지적좌표 중첩·현행 정정도면 대조 전. 법정 최고높이 80m 확정 또는 설계 계산 자동 적용 금지.",
+    },
+    status: "height-designated-gis-confirmed-candidate-map-height-not-parcel-verified",
     caution: "동작대로 지정구역 안으로 GIS 확인. 일반 준주거 높이 산정구역으로 자동 계산하지 말 것. 개별 필지의 동작대로 높이지침도와 기준높이·최고높이 구간은 공식 도면/서초구 확인 필요.",
   },
   seoul500Scenario: {
