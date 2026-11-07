@@ -32,7 +32,7 @@ export function getPreliminaryOrdinanceInputs(
   const bcr = rows.find((row) => row.id === "bcr" && row.status === "source");
   const far = rows.find((row) => row.id === "far" && row.status === "source");
   const parse = (value?: string) => {
-    const match = value?.match(/^(\d+(?:\.\d+)?)%\s*이하\s*\(조례 일반기준\)/);
+    const match = value?.match(/^(\d+(?:\.\d+)?)%\s*이하\s*\([^)]*조례\s*일반(?:기준|상한)/);
     return match ? Number(match[1]) : null;
   };
   const bcrValue = parse(bcr?.detail);
