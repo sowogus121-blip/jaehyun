@@ -87,6 +87,7 @@ export const NURIFLEX_750_14 = {
       rearBaseMeters: 32,
       rearMaxMeters: 42,
       provisionalParcelMatch: true,
+      adjoiningBlockAlternative: "F블록: 이면부 기준32m·최고42m만 표시됨. 750-14 지적경계와 E/F 도면경계 중첩 전 배제 금지.",
       mapOriginalDecision: "2004년 원결정 표기 · 2024-300 운영지침과 대조",
       source: "사용자 제출 1-5_동작대로 지침도.pdf p.1 · 토지이음.pdf p.1",
       caveat: "750-14의 E블록 필지 귀속은 육안 위치대조 잠정값이며 지적좌표 중첩·현행 정정도면 대조 전. 법정 최고높이 80m 확정 또는 설계 계산 자동 적용 금지.",
