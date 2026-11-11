@@ -154,6 +154,6 @@ export const PARCEL_LEGAL_GUIDES = [OSONG_GUIDE, DOKSAN_GUIDE] as const;
 export function getParcelLegalGuide(address: string): ParcelLegalGuide | null {
   const key = (address || "").replace(/[\s\-]/g, "").toLowerCase();
   if (key.includes("봉산리992") && (key.includes("오송") || key.includes("청주"))) return OSONG_GUIDE;
-  if (key.includes("독산동15110") && (key.includes("금천") || key.includes("서울"))) return DOKSAN_GUIDE;
+  if (key.includes("독산동15110")) return DOKSAN_GUIDE;
   return null;
 }
