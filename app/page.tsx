@@ -14,6 +14,7 @@ import { NURIFLEX_750_14, isNuriflexBangbae, screenNuriflex } from "@/lib/nurifl
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { getParcelLegalGuide } from "@/lib/parcel-legal-guides";
 import { getParcelAnnexSources } from "@/lib/parcel-annex-library";
+import { getParcelMassingReview } from "@/lib/parcel-massing-reviews";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
 import { buildDecisionDashboard, type DecisionDashboard } from "@/lib/decision-dashboard";
@@ -416,6 +417,50 @@ function ParcelAnnexLibrary({ address }: { address: string }) {
     <h4 style={{ marginTop: "24px" }}>대상지별 조례 별표·지구단위계획·LH 지역본부 공고 ({local.length})</h4>
     <div className="table-scroll"><table className="comparison-table"><thead><tr><th>자료</th><th>핵심 검토사항</th><th>공식 링크</th></tr></thead><tbody>{renderRows(local)}</tbody></table></div>
   </details>;
+}
+
+function ParcelMassingReviewCard({ address }: { address: string }) {
+  const review = getParcelMassingReview(address);
+  if (!review) return null;
+  const commercial = review.category === "commercial-only";
+  return <section className="card form-card" aria-label="대상지별 법규·규모개요 예비검토">
+    <div className="card-title">
+      <div className="title-icon teal"><Icon name="scale" /></div>
+      <div><h3>{review.name} · 법규 및 규모개요 예비검토</h3>
+        <p>필지 조건부 시나리오 | 법적 승인·LH 인수/매입 보증 아님 · 2026.11.11</p></div>
+      <Badge status="review" />
+    </div>
+    <div className="notice amber"><Icon name="alert" /><div>
+      <b>{review.overallConclusion}</b>
+      <span>{review.legalGate}</span>
+    </div></div>
+    <div className="summary-strip">
+      <Metric label="대지면적" value={f(review.siteArea)} suffix="㎡" sub="원자료 또는 공개대장" />
+      <Metric label="시나리오" value={review.scenarios.length} suffix="개" sub={commercial ? "비주거용만" : "주거 조건부"} />
+      <div className="strip-status"><span>허용용도 판단</span><b>{commercial ? "LH 주거계획 보류" : "LH 인수·법규 검증 전"}</b><small>획지·공장부지 및 최신 허가 선결 확인</small></div>
+    </div>
+    <div className="table-scroll"><table className="comparison-table">
+      <thead><tr><th>시나리오</th><th>건폐율</th><th>용적률</th><th>건축면적 상한</th><th>용적률 연면적</th><th>동시 적용 상한</th><th>46㎡ 신혼형</th><th>25㎡ 청년형</th></tr></thead>
+      <tbody>{review.scenarios.map((row) => <tr key={row.title}>
+        <th>{row.title}<small style={{ display:"block",fontWeight:400,whiteSpace:"normal",marginTop:5 }}>{row.condition}</small></th>
+        <td>{row.bcrPercent}%</td><td>{row.farPercent}%</td>
+        <td>{f(row.maximumBuildingArea)}㎡</td>
+        <td>{f(row.farArea)}㎡</td>
+        <td>{f(row.conditionalUpperArea)}㎡{row.maxFloors ? <small style={{display:"block"}}>최대 {row.maxFloors}층의 층수×건폐율 상한 반영</small>:null}</td>
+        <td>{row.apt46Theoretical === null ? "미산정" : row.apt46Theoretical+"세대 (상한 가정)"}</td>
+        <td>{row.officetel25Theoretical === null ? "미산정" : row.officetel25Theoretical+"호 (상한 가정)"}</td>
+      </tr>)}</tbody>
+    </table></div>
+    <p style={{ margin:"12px 0",fontSize:"13px",lineHeight:1.7 }}>{review.scenarioExplanation}</p>
+    <div className="notice"><Icon name="building" /><div>
+      <b>기존 건축허가와 신규 주거 시나리오는 별개</b><span>{review.existingPermit}</span>
+    </div></div>
+    <h4 style={{ marginTop:"22px" }}>추가 검증 없이는 확정할 수 없는 항목</h4>
+    <ul>{review.checks.map(check => <li key={check}>{check}</li>)}</ul>
+    <div className="lh-latest-links">{review.sources.map(source =>
+      <a href={source.url} target="_blank" rel="noopener noreferrer" key={source.url}>{source.name} ↗</a>
+    )}</div>
+  </section>;
 }
 
 export default function Home() {
@@ -919,6 +964,7 @@ export default function Home() {
           <div className="workflow-hint"><b>① 주소 입력·자동조회</b><span>→</span><b>② 법규 원문 확인</b><span>→</span><b>③ 가정 층수로 예비규모 산정</b><span>→</span><b>④ 건축개요 확인</b></div>
           <ParcelLegalEvidence address={input.address} />
           <ParcelAnnexLibrary address={input.address} />
+          <ParcelMassingReviewCard address={input.address} />
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
@@ -1450,6 +1496,7 @@ export default function Home() {
         {activeTab === 3 && <>
           {assembly?.isMultiple && <div className="assembly-massing-note"><b>합필 예정지 {assembly.parcelCount}필지</b><span>{assembly.totalArea!==null?"합계 "+f(assembly.totalArea)+"㎡": "합산면적 미확인"} · {assembly.sameZone?"동일 용도지역 예비규모": "혼합 용도지역 · 적용기준 조건부"} · 법적 합필 확정 전</span><button type="button" onClick={()=>setActiveTab(1)}>필지별 검토표</button></div>}
           <SectionHeader eyebrow="04 · MASSING STUDY" title="건축 규모검토" description="법규상 최대치와 배치·주차를 고려한 개략 실현가능 규모를 구분합니다." action={<span className="live-pill"><i /> LIVE CALCULATION</span>} />
+           <ParcelMassingReviewCard address={input.address} />
           {!readiness.canEstimateUnits && <div className="massing-unready"><Icon name="alert" size={20}/><div><strong>아직 규모를 산정할 조건이 부족해.</strong><span>필요: {readiness.missing.join(" · ")} · 법적으로 0세대라는 뜻이 아니야.</span></div><button type="button" className="button primary" onClick={() => setActiveTab(1)}>조례 일반기준으로 예비계산하기</button></div>}
           {readiness.canEstimateUnits && (!readiness.hasApartmentParking || !readiness.hasOfficetelParking) && <div className="massing-unready info"><Icon name="alert" size={20}/><div><strong>세대·호실수는 계획 가정으로 산정했어.</strong><span>주차대수·지하층·전체 연면적은 주차계수 확인 전까지 미산정으로 표시해.</span></div><button type="button" className="button ghost" onClick={() => setActiveTab(2)}>주차계수 입력</button></div>}
           <EfficiencyControls input={input} update={update} />
