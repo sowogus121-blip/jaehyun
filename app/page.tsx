@@ -13,6 +13,7 @@ import { MASOK_555, isMasok555, masokMassingScenario } from "@/lib/masok-555";
 import { NURIFLEX_750_14, isNuriflexBangbae, screenNuriflex } from "@/lib/nuriflex-bangbae-750-14";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { getParcelLegalGuide } from "@/lib/parcel-legal-guides";
+import { getParcelAnnexSources } from "@/lib/parcel-annex-library";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
 import { buildDecisionDashboard, type DecisionDashboard } from "@/lib/decision-dashboard";
@@ -390,6 +391,31 @@ function ParcelLegalEvidence({ address }: { address: string }) {
       </div>)}
     </div>
   </section>;
+}
+
+function ParcelAnnexLibrary({ address }: { address: string }) {
+  const sources = getParcelAnnexSources(address);
+  if (!sources.length) return null;
+  const common = sources.filter(source => source.scope === "공통");
+  const local = sources.filter(source => source.scope !== "공통");
+  const renderRows = (items: typeof sources) => items.map((item) => (
+    <tr key={item.id}>
+      <td><b>{item.title}</b><div style={{ fontSize: "12px", color: "#667085", marginTop: 6 }}>{item.kind} · {item.reviewStatus}</div></td>
+      <td style={{ maxWidth: "440px" }}>{item.purpose}</td>
+      <td><a href={item.url} target="_blank" rel="noopener noreferrer">원문·첨부 열기 ↗</a></td>
+    </tr>
+  ));
+  return <details className="card form-card" aria-label="필지별 별표 법규 및 LH 가이드라인 자료실">
+    <summary style={{ cursor: "pointer", fontWeight: 700 }}>별표·법규·LH 설계/시공 가이드라인 자료실 ({sources.length}건) — 펼쳐보기</summary>
+    <div className="notice amber"><Icon name="alert" /><div>
+      <b>검증 상태를 반드시 확인하세요.</b>
+      <span>법규 조항·별표의 존재와 원문 위치를 확인한 자료실입니다. 일부 별표 전문과 LH ZIP 내부 파일은 아직 추출하지 않았습니다. 획지·공장부지·주차 특례 적용이 확인되기 전에는 계산값에 자동 반영하지 않습니다.</span>
+    </div></div>
+    <h4>전국 공통 법령·LH 본사 가이드라인 ({common.length})</h4>
+    <div className="table-scroll"><table className="comparison-table"><thead><tr><th>자료</th><th>핵심 검토사항</th><th>공식 링크</th></tr></thead><tbody>{renderRows(common)}</tbody></table></div>
+    <h4 style={{ marginTop: "24px" }}>대상지별 조례 별표·지구단위계획·LH 지역본부 공고 ({local.length})</h4>
+    <div className="table-scroll"><table className="comparison-table"><thead><tr><th>자료</th><th>핵심 검토사항</th><th>공식 링크</th></tr></thead><tbody>{renderRows(local)}</tbody></table></div>
+  </details>;
 }
 
 export default function Home() {
@@ -892,6 +918,7 @@ export default function Home() {
           <SectionHeader eyebrow="01 · SITE INPUT" title="대상지 및 사업조건" description="자동조회 정보와 사용자 입력값을 구분해 관리합니다. 입력 즉시 4개 대안이 다시 계산됩니다." action={<div className="source-legend"><Badge status="verified" /><Badge status="user" /><Badge status="unknown" /></div>} />
           <div className="workflow-hint"><b>① 주소 입력·자동조회</b><span>→</span><b>② 법규 원문 확인</b><span>→</span><b>③ 가정 층수로 예비규모 산정</b><span>→</span><b>④ 건축개요 확인</b></div>
           <ParcelLegalEvidence address={input.address} />
+          <ParcelAnnexLibrary address={input.address} />
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
@@ -1019,6 +1046,7 @@ export default function Home() {
           </section>
 
           <ParcelLegalEvidence address={input.address} />
+          <ParcelAnnexLibrary address={input.address} />
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
           {singleUiwangC1 && <section className="card uiwang-evidence" aria-label="의왕초평 630-1 지구계획 원문 대조">
             <div className="site-decision-title"><div><span>LH 직접 첨부 원문 · 지구단위계획 제Ⅱ편 제4장</span>
