@@ -12,6 +12,7 @@ import { isUiwangChopyeong6301, UIWANG_6301 } from "@/lib/uiwang-chopyeong-6301"
 import { MASOK_555, isMasok555, masokMassingScenario } from "@/lib/masok-555";
 import { NURIFLEX_750_14, isNuriflexBangbae, screenNuriflex } from "@/lib/nuriflex-bangbae-750-14";
 import { suggestZoningRules } from "@/lib/zoning-applicability";
+import { getParcelLegalGuide } from "@/lib/parcel-legal-guides";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
 import { buildDecisionDashboard, type DecisionDashboard } from "@/lib/decision-dashboard";
@@ -365,6 +366,30 @@ function ComparisonTable({ results, input }: { results: AlternativeResult[]; inp
     ["법규·LH 적합성", (r) => <Badge status={r.eligibility} />],
   ];
   return <div className="table-scroll"><table className="comparison-table"><thead><tr><th>구분</th>{results.map((r) => <th key={r.definition.id}><span>{r.definition.id}</span>{r.definition.shortName}</th>)}</tr></thead><tbody>{rows.map(([label, getter]) => <tr key={label}><th>{label}</th>{results.map((r) => <td key={r.definition.id}>{getter(r)}</td>)}</tr>)}</tbody></table></div>;
+}
+
+function ParcelLegalEvidence({ address }: { address: string }) {
+  const guide = getParcelLegalGuide(address);
+  if (!guide) return null;
+  return <section className="card form-card" aria-label="해당 필지 법규 원문 검토">
+    <div className="card-title">
+      <div className="title-icon teal"><Icon name="law" /></div>
+      <div><h3>{guide.name}</h3><p>2026.11.11 조사 · 원문 규정과 필지 적용 여부를 분리한 선결 검토</p></div>
+      <Badge status="review" />
+    </div>
+    <div className="notice amber"><Icon name="alert" /><div>
+      <b>{guide.conclusion}</b><span>{guide.caveat}</span>
+    </div></div>
+    <div className="audit-grid">
+      {guide.rules.map((rule) => <div key={rule.title}>
+        <Badge status={rule.status === "source-confirmed" ? "verified" : "review"} />
+        <h4 style={{ margin: "10px 0 6px", fontSize: "14px" }}>{rule.title}</h4>
+        <p>{rule.detail}</p>
+        <small>{rule.basis}</small>
+        <p><a href={rule.sourceUrl} target="_blank" rel="noopener noreferrer">공식 원문·근거 확인 ↗</a></p>
+      </div>)}
+    </div>
+  </section>;
 }
 
 export default function Home() {
@@ -992,6 +1017,7 @@ export default function Home() {
             <Toggle checked={input.districtPlan} onChange={(v) => update("districtPlan", v)} label="지구단위계획구역" note="체크 시 결정도서와 시행지침 원문 검토가 필수입니다." />
           </section>
 
+          <ParcelLegalEvidence address={input.address} />
           <ParcelAssemblyCard study={assembly} onWeightedPreview={applyWeightedAssemblyPreview} />
           {singleUiwangC1 && <section className="card uiwang-evidence" aria-label="의왕초평 630-1 지구계획 원문 대조">
             <div className="site-decision-title"><div><span>LH 직접 첨부 원문 · 지구단위계획 제Ⅱ편 제4장</span>
