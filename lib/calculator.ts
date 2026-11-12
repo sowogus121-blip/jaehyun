@@ -386,7 +386,7 @@ export function calculateAlternative(input: ProjectInput, definition: Alternativ
       input.mechanicalMaxRatio > context.lhPurchaseMechanicalMaxPercent)
     warnings.push(`공고 확인 기계식주차 상한 ${context.lhPurchaseMechanicalMaxPercent}%를 사용자 가정 ${input.mechanicalMaxRatio}%보다 우선 적용했습니다.`);
   if(definition.parkingMode==="mechanical" && typeof context.municipalMechanicalMaxPercent==="number"){
-    warnings.push(`관할 조례 기계식 상한 ${context.municipalMechanicalMaxPercent}%가 LH 공고·사용자 가정보다 엄격하면 그 값을 우선 적용. 원문: ${context.municipalMechanicalSource??"지자체 주차장조례"}`);
+    if(context.municipalMechanicalMaxPercent<100)warnings.push(`관할 조례 기계식 상한 ${context.municipalMechanicalMaxPercent}%가 LH 공고·사용자 가정보다 엄격하면 그 값을 우선 적용. 원문: ${context.municipalMechanicalSource??"지자체 주차장조례"}`);
     if(context.municipalMechanicalMinStalls)warnings.push(`기계식 최소 설치대수 ${context.municipalMechanicalMinStalls}대 미만이면 기계식 0대로 재산정합니다.`);
   }
   if (definition.parkingMode === "mechanical") warnings.push("기계식 면적은 개략값이며 제조사 형식·대기공간·LH 인수기준 검토가 필요합니다.");

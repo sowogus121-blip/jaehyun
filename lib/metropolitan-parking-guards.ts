@@ -22,11 +22,15 @@ export interface MunicipalMechanicalGuard {
 }
 const PAJU_URL="https://law.go.kr/LSW/ordinInfoP.do?ordinSeq=2073597";
 const UIJEONGBU_URL="https://www.law.go.kr/LSW/ordinInfoP.do?ordinSeq=2107023";
+const CHEONGJU_URL="https://www.law.go.kr/LSW/ordinInfoR.do?ordinSeq=2170297";
 
 export const METROPOLITAN_MECHANICAL_REFERENCES = [
   {id:"paju-2025-2293",city:"파주시",sourceArticle:"파주시 주차장 설치 및 관리 조례 제19조제3항",sourceUrl:PAJU_URL,
    lastChecked:"2026-11-01",maxMechanicalPercent:30,minMechanicalStalls:0,
    notes:"부설주차장 기계식 장치의 비율 30% 이하. 대지·건축물 허용용도 및 별표 주차대수 미확정."},
+  {id:"cheongju-2026-1823",city:"청주시",sourceArticle:"청주시 주차장 조례 제15조제3항",sourceUrl:CHEONGJU_URL,
+   lastChecked:"2026-11-12",maxMechanicalPercent:100,minMechanicalStalls:30,
+   notes:"2026.09.23 시행: 기계식 30대 이상 설치 시 허용, 종전 자주식 비율 의무 삭제. 100은 해당 조례상 별도 퍼센트 상한이 없는 경우의 계산용 sentinel이며 법률상 100% 승인이 아님."},
   {id:"uijeongbu-2026-annex3",city:"의정부시",sourceArticle:"의정부시 주차장 설치 및 관리 조례 제11조의2, 별표3",sourceUrl:UIJEONGBU_URL,
    lastChecked:"2026-11-01",maxMechanicalPercent:20,minMechanicalStalls:20,
    notes:"제2·3종일반주거 공동주택은 기계식 설치대상에서 제외. 비공동주택도 연면적 1,000㎡ 이상 또는 5층 이상. 기계식은 총 의무주차의 20% 이하·20대 미만 불허."}
@@ -37,11 +41,21 @@ export function getMunicipalMechanicalGuard(review:SiteReviewResult|null,input:P
  if(!review?.location?.parcelAddress || !review.parcel?.pnu ||
     review.mixedUseZones || review.parcels?.length!==1)return null;
  const location=review.location.parcelAddress.replace(/\s+/g,"");
- const governingCity=location.includes("의정부시")?"의정부시":location.includes("파주시")?"파주시":null;
+ const governingCity=location.includes("의정부시")?"의정부시":location.includes("파주시")?"파주시":location.includes("청주시")?"청주시":null;
  if(!governingCity || !review.ordinances?.some(x=>x.name.includes("주차장")&&x.name.includes(governingCity)))return null;
  const zones=review.landUse.filter(x=>x.category==="용도지역").map(x=>x.name);
  if(zones.length!==1)return null;
  const zone=zones[0].replace(/\s+/g,"");
+ if(location.includes("청주시")){
+  return {id:"cheongju-2026-1823",city:"청주시",
+    sourceArticle:"청주시 주차장 조례 제15조제3항·제4항(2026.09.23)",
+    sourceUrl:CHEONGJU_URL,lastChecked:"2026-11-12",evidence:"municipal-ordinance-clause",
+    maxMechanicalPercent:100,minMechanicalStalls:30,apartmentProhibited:false,
+    officeMinimumGrossSqmOrFloors:null,
+    note:"기계식으로 설치하는 대수 30대 이상. 종전 비율상한 삭제(100은 계산용 무상한 sentinel일 뿐 법적 설치 100% 허용 의미 아님). 방향전환장치·건축물 내부 설치·주차관리실·LH 인수 별도 검증.",
+    applicableToOneVerifiedParcelOnly:true};
+ }
+
  if(location.includes("의정부시")){
   const eligibleZoning=["중심상업지역","일반상업지역","근린상업지역","유통상업지역","준주거지역",
     "전용공업지역","일반공업지역","준공업지역","제2종일반주거지역","제3종일반주거지역"];
