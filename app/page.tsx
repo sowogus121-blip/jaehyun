@@ -15,6 +15,7 @@ import { suggestZoningRules } from "@/lib/zoning-applicability";
 import { getParcelLegalGuide } from "@/lib/parcel-legal-guides";
 import { getParcelAnnexSources } from "@/lib/parcel-annex-library";
 import { getParcelMassingReview } from "@/lib/parcel-massing-reviews";
+import { getParcelMechanicalReview } from "@/lib/parcel-mechanical-parking-review";
 import { buildLegalReviewReport } from "@/lib/legal-review-report";
 import { getMassingReadiness, getPreliminaryOrdinanceInputs } from "@/lib/massing-readiness";
 import { buildDecisionDashboard, type DecisionDashboard } from "@/lib/decision-dashboard";
@@ -460,6 +461,47 @@ function ParcelMassingReviewCard({ address }: { address: string }) {
     <div className="lh-latest-links">{review.sources.map(source =>
       <a href={source.url} target="_blank" rel="noopener noreferrer" key={source.url}>{source.name} ↗</a>
     )}</div>
+  </section>;
+}
+
+function ParcelMechanicalParkingCard({ address }: { address: string }) {
+  const review = getParcelMechanicalReview(address);
+  if (!review) return null;
+  return <section className="card form-card" aria-label="기계식주차 설치 및 LH 인수 상세 판정">
+    <div className="card-title">
+      <div className="title-icon teal"><Icon name="parking" /></div>
+      <div><h3>{review.title}</h3><p>2026.11.12 검토 · 지자체 허용과 LH 매입 인수는 별개</p></div>
+      <Badge status="review" />
+    </div>
+    <div className="notice amber"><Icon name="alert" /><div><b>{review.headline}</b>
+      <span>법적 설치: 조건부 검토 가능 / LH 매입 인수: {review.lhGate==="blocked-by-use"?"지구단위 용도제한으로 보류":"최신 LH 설계·시공 ZIP 전문 및 입지 미확인"}</span>
+    </div></div>
+    <div className="audit-grid">
+      <div><strong>관할 조례 설치기준</strong><p>{review.ordinanceRule}</p></div>
+      <div><strong>LH 인수·역세권 기준</strong><p>{review.lhRule}</p></div>
+    </div>
+    <h4>기계식 설치 수량별 예비 검토 — 확정 주차대수 아님</h4>
+    <div className="table-scroll"><table className="comparison-table">
+      <thead><tr><th>조건부 대안</th><th>가정 총주차</th><th>참고 기계식</th><th>참고 자주식</th><th>해석</th></tr></thead>
+      <tbody>{review.mechanicalScenarios.map(sc=><tr key={sc.id}>
+        <th>{sc.label}</th>
+        <td>{sc.assumedTotal===null?"미산정":sc.assumedTotal+"대"}</td>
+        <td>{sc.illustrativeHalfMechanical===null?"미산정":sc.illustrativeHalfMechanical+"대"}</td>
+        <td>{sc.illustrativeHalfSelf===null?"미산정":sc.illustrativeHalfSelf+"대"}</td>
+        <td style={{maxWidth:360,whiteSpace:"normal"}}>{sc.verdict}</td>
+      </tr>)}</tbody>
+    </table></div>
+    <p style={{ fontSize: "12px" }}>※ 독산동 표의 50% 기계식 비율은 서울 LH 6차에서 검토한 과거 참고치입니다. 2026년 7차에 적용된다고 확정하지 않았습니다. 0.3대 또한 허가권자 승인 전 산술 가정입니다.</p>
+    <h4>추가 확인항목</h4><ul>{review.localPermitChecks.map(x=><li key={x}>{x}</li>)}</ul>
+    <details className="advanced-api-details"><summary style={{ cursor:"pointer",fontWeight:700 }}>원문·법규 별표·LH 가이드라인 {review.sourceRecords.length}건</summary>
+      <div className="table-scroll"><table className="comparison-table"><thead><tr><th>원문·별표</th><th>적용 검토</th><th>검증 상태</th></tr></thead>
+        <tbody>{review.sourceRecords.map(src=><tr key={src.id}>
+          <th><a href={src.url} target="_blank" rel="noopener noreferrer">{src.title} ↗</a></th>
+          <td style={{maxWidth:420,whiteSpace:"normal"}}>{src.reference}</td>
+          <td>{src.verification==="article-verified"?"조문 검증":src.verification==="annex-linked"?"별표 목록 확보":src.verification==="download-linked-unread"?"LH ZIP 미열람":"이전 공고 참고·현행 미확인"}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </details>
   </section>;
 }
 
@@ -965,6 +1007,7 @@ export default function Home() {
           <ParcelLegalEvidence address={input.address} />
           <ParcelAnnexLibrary address={input.address} />
           <ParcelMassingReviewCard address={input.address} />
+          <ParcelMechanicalParkingCard address={input.address} />
           <section className="card form-card">
             <div className="card-title"><div className="title-icon teal"><Icon name="site" /></div><div><h3>대상지 위치</h3><p>주소 API가 연결되면 좌표를 확인하며, 법적 조건은 원문 확인 후에만 확정합니다.</p></div><Badge status="user" /></div>
             <div className="address-row"><div className="address-input"><Icon name="search" size={18} /><input value={input.address} onChange={(e) => { const address = e.target.value; setInput((current) => resetSiteDependentInput(current, address)); setLookupDetails(null); setReviewData(null); setReviewedRules([]); setReviewCandidateIndex(null); }} placeholder="전국 도로명주소 또는 지번주소" /></div><button className="button primary" disabled={isReviewing} onClick={lookupAddress}>{isReviewing ? "통합 조회 중…" : "전국 통합 자동검토"}</button></div>
@@ -1497,6 +1540,7 @@ export default function Home() {
           {assembly?.isMultiple && <div className="assembly-massing-note"><b>합필 예정지 {assembly.parcelCount}필지</b><span>{assembly.totalArea!==null?"합계 "+f(assembly.totalArea)+"㎡": "합산면적 미확인"} · {assembly.sameZone?"동일 용도지역 예비규모": "혼합 용도지역 · 적용기준 조건부"} · 법적 합필 확정 전</span><button type="button" onClick={()=>setActiveTab(1)}>필지별 검토표</button></div>}
           <SectionHeader eyebrow="04 · MASSING STUDY" title="건축 규모검토" description="법규상 최대치와 배치·주차를 고려한 개략 실현가능 규모를 구분합니다." action={<span className="live-pill"><i /> LIVE CALCULATION</span>} />
            <ParcelMassingReviewCard address={input.address} />
+          <ParcelMechanicalParkingCard address={input.address} />
           {!readiness.canEstimateUnits && <div className="massing-unready"><Icon name="alert" size={20}/><div><strong>아직 규모를 산정할 조건이 부족해.</strong><span>필요: {readiness.missing.join(" · ")} · 법적으로 0세대라는 뜻이 아니야.</span></div><button type="button" className="button primary" onClick={() => setActiveTab(1)}>조례 일반기준으로 예비계산하기</button></div>}
           {readiness.canEstimateUnits && (!readiness.hasApartmentParking || !readiness.hasOfficetelParking) && <div className="massing-unready info"><Icon name="alert" size={20}/><div><strong>세대·호실수는 계획 가정으로 산정했어.</strong><span>주차대수·지하층·전체 연면적은 주차계수 확인 전까지 미산정으로 표시해.</span></div><button type="button" className="button ghost" onClick={() => setActiveTab(2)}>주차계수 입력</button></div>}
           <EfficiencyControls input={input} update={update} />
