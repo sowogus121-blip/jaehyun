@@ -310,7 +310,7 @@ function LhParkingAudit({analysis,input,results,ready,municipal,onLhTab}:{
       <b>{municipal.city} 기계식주차 별도 제한 · {municipal.maxMechanicalPercent<100?municipal.maxMechanicalPercent+"% 이하":municipal.minMechanicalStalls+"대 이상 설치"}</b>
       <span>{municipal.note} · LH 인수 조건은 시 조례보다 별도로 엄격할 수 있습니다.</span>
       <a href={municipal.sourceUrl} target="_blank" rel="noopener noreferrer">시 조례 {municipal.sourceArticle} 원문 ↗</a>
-      <small>{municipal.maxMechanicalPercent<100?"조례 비율 제한 반영":"최소 설치대수 반영(별도 퍼센트 상한 없음)"} · 별표 법정주차계수·인허가·LH 인수 별도 검증 필요</small></div></div>
+      <small>{municipal.maxMechanicalPercent<100?"조례 비율 제한 반영":"최소 설치대수 반영(별도 퍼센트 상한 없음)"} · 별표 법정주차계수·인허가·LH 인수 별도 검증 필요</small></div></div>}
     {analysis.verifiedOriginal&&<div className="lh-parking-highlights">
       <div><small>기계식 주차 한도</small><strong>50% 이하</strong><span>역 출구 500m · 허용 주택유형 조건부</span></div>
       <div><small>150세대 미만</small><strong>20대 미만 우대</strong><span>무조건 금지선 아님</span></div>
