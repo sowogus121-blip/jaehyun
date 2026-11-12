@@ -18,7 +18,7 @@ describe("2026 mechanical parking source and LH acceptance gates", () => {
     expect(r?.lhGate).toBe("unverified");
     expect(r?.ordinanceRule).toContain("단순 2단식");
     expect(r?.lhRule).toContain("7차");
-    expect(r?.lhRule).toContain("입증되지");
+    expect(r?.lhRule).toContain("직선거리 측정");
     const sc=r!.mechanicalScenarios;
     expect(sc.map(x=>x.assumedTotal)).toEqual([40,44,27]);
     expect(sc.map(x=>x.illustrativeHalfMechanical)).toEqual([20,22,13]);
