@@ -306,10 +306,11 @@ function LhParkingAudit({analysis,input,results,ready,municipal,onLhTab}:{
       <p>{analysis.noticeTitle??"해당 지역 LH 공식 공고 미확인"}</p></div>
       <span className="lh-parking-audit-state">{analysis.verifiedOriginal?"공고 원문 "+analysis.clauses.length+"개 조건 확인":
         analysis.noticeTitle?"PDF 문구 "+analysis.clauses.length+"개 · 검증 전":"공고 확인 필요"}</span></div>
-    {municipal&&<div className="notice amber"><Icon name="alert" size={16}/><div><b>{municipal.city} 기계식주차 별도 제한 · {municipal.maxMechanicalPercent}% 이하</b>
-      <span>{municipal.note} · LH 공고가 더 완화돼도 시 조례의 엄격한 기준을 초과하지 않고 계산합니다.</span>
+    {municipal&&<div className="notice amber"><Icon name="alert" size={16}/><div>
+      <b>{municipal.city} 기계식주차 별도 제한 · {municipal.maxMechanicalPercent<100?municipal.maxMechanicalPercent+"% 이하":municipal.minMechanicalStalls+"대 이상 설치"}</b>
+      <span>{municipal.note} · LH 인수 조건은 시 조례보다 별도로 엄격할 수 있습니다.</span>
       <a href={municipal.sourceUrl} target="_blank" rel="noopener noreferrer">시 조례 {municipal.sourceArticle} 원문 ↗</a>
-      <small>기계식 비율 상한은 계산에 반영되지만, 별표 법정주차계수·실제 허용 여부 및 LH 인수 승인은 별도 검증이 필요합니다.</small></div></div>}
+      <small>{municipal.maxMechanicalPercent<100?"조례 비율 제한 반영":"최소 설치대수 반영(별도 퍼센트 상한 없음)"} · 별표 법정주차계수·인허가·LH 인수 별도 검증 필요</small></div></div>
     {analysis.verifiedOriginal&&<div className="lh-parking-highlights">
       <div><small>기계식 주차 한도</small><strong>50% 이하</strong><span>역 출구 500m · 허용 주택유형 조건부</span></div>
       <div><small>150세대 미만</small><strong>20대 미만 우대</strong><span>무조건 금지선 아님</span></div>
