@@ -1,224 +1,161 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import type { AlternativeResult, ProjectInput, SiteReviewResult } from "../../../../lib/types";
-import type { ReviewedRule } from "../../../../lib/rule-application";
-import type { SiteLookupDetails } from "../../../../lib/types";
-import { buildLegalReviewReport } from "../../../../lib/legal-review-report";
-import { assessParcelAssembly } from "../../../../lib/parcel-assembly";
+import type { ReviewRow } from "../../../../lib/review/types";
+import { STATUS_LABEL } from "../../../../lib/review/types";
+import { emphasizeNumbers, citeLine } from "../../../../lib/report/format";
+import type { ExportBody } from "../../../../lib/report/export-types";
 
 export const runtime = "nodejs";
 
-type ExportBody = {
-  input?: ProjectInput;
-  results?: AlternativeResult[];
-  reviewData?: SiteReviewResult | null;
-  reviewedRules?: ReviewedRule[];
-  lookupDetails?: SiteLookupDetails | null;
-};
+const NAVY = "FF4E6487";
+const GROUP_FILL = "FFDCE1EA";
+const BORDER = { style: "thin" as const, color: { argb: "FF8A94A6" } };
+const ALL_BORDERS = { top: BORDER, left: BORDER, bottom: BORDER, right: BORDER };
+const BASE_FONT = { name: "맑은 고딕", size: 10 };
 
-function styleHeader(row: ExcelJS.Row) {
-  row.font = { bold: true, color: { argb: "FFFFFFFF" } };
-  row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF173A56" } };
-  row.alignment = { vertical: "middle", horizontal: "center" };
+function rich(text: string) {
+  return { richText: emphasizeNumbers(text).map((r) => ({ text: r.text, font: { ...BASE_FONT, ...(r.emphasis ? { color: { argb: "FFE60012" } } : {}) } })) };
+}
+function lineCount(text: string, width: number) {
+  return text.split("\n").reduce((n, line) => n + Math.max(1, Math.ceil((line.length * 1.9) / width)), 0);
+}
+
+function legalSheet(wb: ExcelJS.Workbook, body: ExportBody) {
+  const ws = wb.addWorksheet("법규검토", { pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } } });
+  ws.columns = [{ width: 13 }, { width: 11 }, { width: 62 }, { width: 34 }, { width: 34 }];
+  ws.addRow(["LH 공공임대 법규검토"]);
+  ws.mergeCells("A1:E1");
+  ws.getCell("A1").font = { ...BASE_FONT, size: 14, bold: true, color: { argb: "FF1F3A68" } };
+  ws.addRow([body.projectName || body.address]);
+  ws.mergeCells("A2:E2");
+  ws.getCell("A2").font = { ...BASE_FONT, size: 18, bold: true, color: { argb: "FF1F3A68" } };
+  ws.getRow(2).height = 30;
+  const header = ws.addRow(["구분", "", "내용", "관련 법령", "비고"]);
+  ws.mergeCells(header.number, 1, header.number, 2);
+  header.height = 20;
+  header.eachCell((cell) => {
+    cell.font = { ...BASE_FONT, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = ALL_BORDERS;
+  });
+
+  const rows = (body.rows ?? []).filter((r) => r.content.trim() || r.status !== "missing");
+  let i = 0;
+  while (i < rows.length) {
+    const group = rows[i].group;
+    let j = i;
+    while (j < rows.length && rows[j].group === group && rows[j].sub) j++;
+    const block = j > i ? rows.slice(i, j) : [rows[i]];
+    const start = ws.rowCount + 1;
+    for (const row of block) {
+      const content = row.content || (row.missing ? `[근거 누락] ${row.missing}` : "");
+      const note = [row.note, row.status === "candidate" ? "※ 후보·조건부 (원문 대조 필요)" : row.status === "missing" ? "※ 근거 누락" : ""].filter(Boolean).join("\n");
+      const r = ws.addRow([row.group, row.sub ?? "", "", row.law, ""]);
+      r.getCell(3).value = rich(content);
+      r.getCell(5).value = rich(note);
+      r.height = Math.max(22, 14 * Math.max(lineCount(content, 62), lineCount(row.law, 34), lineCount(note, 34)) + 6);
+      r.eachCell({ includeEmpty: true }, (cell, col) => {
+        cell.border = ALL_BORDERS;
+        cell.alignment = { vertical: "middle", horizontal: col <= 2 ? "center" : "left", wrapText: true };
+        if (col <= 2) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GROUP_FILL } };
+          cell.font = { ...BASE_FONT, bold: true };
+        } else if (col === 4) cell.font = BASE_FONT;
+      });
+      if (!row.sub) ws.mergeCells(r.number, 1, r.number, 2);
+    }
+    if (block.length > 1 || block[0].sub) {
+      const end = start + block.length - 1;
+      if (end > start) ws.mergeCells(start, 1, end, 1);
+    }
+    i = j > i ? j : i + 1;
+  }
+
+  // 근거 목록 시트
+  const src = wb.addWorksheet("근거 목록");
+  src.columns = [{ width: 18 }, { width: 12 }, { width: 46 }, { width: 14 }, { width: 60 }];
+  const h = src.addRow(["구분", "상태", "근거 (법령·조항·별표·고시)", "시행일", "원문 링크"]);
+  h.eachCell((c) => { c.font = { ...BASE_FONT, bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } }; c.border = ALL_BORDERS; });
+  for (const row of body.rows ?? []) {
+    const label = row.sub ? `${row.group} · ${row.sub}` : row.group;
+    if (!row.sources.length) {
+      const r = src.addRow([label, STATUS_LABEL[row.status], row.missing ? "누락: " + row.missing : "-", "", ""]);
+      r.eachCell((c) => { c.border = ALL_BORDERS; c.font = BASE_FONT; c.alignment = { wrapText: true, vertical: "top" }; });
+      continue;
+    }
+    for (const s of row.sources) {
+      const r = src.addRow([label, STATUS_LABEL[row.status], citeLine(s), s.effectiveDate ?? "", s.url ? { text: s.url, hyperlink: s.url } : ""]);
+      r.eachCell((c) => { c.border = ALL_BORDERS; c.font = BASE_FONT; c.alignment = { wrapText: true, vertical: "top" }; });
+      r.getCell(5).font = { ...BASE_FONT, color: { argb: "FF1F5FBF" }, underline: true };
+    }
+  }
+}
+
+function summarySheet(wb: ExcelJS.Workbook, body: ExportBody) {
+  const scenarios = body.scenarios ?? [];
+  const ws = wb.addWorksheet("건축개요", { pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  ws.columns = [{ width: 20 }, ...scenarios.map(() => ({ width: 34 }))];
+  ws.addRow(["건축개요 (개략 검토)"]);
+  ws.mergeCells(1, 1, 1, Math.max(2, scenarios.length + 1));
+  ws.getCell("A1").font = { ...BASE_FONT, size: 16, bold: true, color: { argb: "FF1F3A68" } };
+  ws.addRow([`${body.projectName} · ${body.address}`]);
+  ws.mergeCells(2, 1, 2, Math.max(2, scenarios.length + 1));
+  const header = ws.addRow(["구분", ...scenarios.map((s) => `${s.name}\n[${s.feasibility}]`)]);
+  header.height = 34;
+  header.eachCell((c) => { c.font = { ...BASE_FONT, bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; c.border = ALL_BORDERS; });
+  const labels = scenarios[0]?.summary.map(([k]) => k) ?? [];
+  labels.forEach((label, idx) => {
+    const r = ws.addRow([label, ...scenarios.map((s) => s.summary[idx]?.[1] ?? "")]);
+    r.eachCell({ includeEmpty: true }, (c, col) => {
+      c.border = ALL_BORDERS;
+      c.font = col === 1 ? { ...BASE_FONT, bold: true } : BASE_FONT;
+      c.alignment = { horizontal: col === 1 ? "center" : "left", vertical: "middle", wrapText: true };
+      if (col === 1) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GROUP_FILL } };
+    });
+    r.height = 20;
+  });
+  const foot = ws.addRow(["※ 설계도서 이전 개략 검토값입니다. 계산식은 '산식' 시트 참조."]);
+  ws.mergeCells(foot.number, 1, foot.number, Math.max(2, scenarios.length + 1));
+  foot.getCell(1).font = { ...BASE_FONT, italic: true, color: { argb: "FF666666" } };
+
+  const types = wb.addWorksheet("타입별 세대수");
+  types.columns = [{ width: 30 }, { width: 12 }, { width: 14 }, { width: 10 }, { width: 18 }, { width: 16 }];
+  const th = types.addRow(["대안", "타입", "전용면적(㎡)", "세대(호)", "공급/지상면적(㎡)", "계약면적(㎡)"]);
+  th.eachCell((c) => { c.font = { ...BASE_FONT, bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } }; c.border = ALL_BORDERS; });
+  for (const s of scenarios) for (const t of s.types) {
+    const r = types.addRow([s.name, t.name, t.exclusive, t.count, t.supplyArea, t.contractArea]);
+    r.eachCell((c) => { c.border = ALL_BORDERS; c.font = BASE_FONT; });
+    [3, 5, 6].forEach((n) => { r.getCell(n).numFmt = "#,##0.00"; });
+  }
+
+  const f = wb.addWorksheet("산식");
+  f.columns = [{ width: 30 }, { width: 120 }];
+  for (const s of scenarios) {
+    const t = f.addRow([s.name]);
+    t.font = { ...BASE_FONT, bold: true, color: { argb: "FF1F3A68" } };
+    s.formulas.forEach((line) => f.addRow(["", line]).eachCell((c) => { c.font = BASE_FONT; }));
+    s.notes.forEach((line) => f.addRow(["검토사항", line]).eachCell((c) => { c.font = { ...BASE_FONT, color: { argb: "FFB04500" } }; }));
+    f.addRow([]);
+  }
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as ExportBody | null;
-  if (!body?.input || !Array.isArray(body.results) || body.results.length !== 4) {
-    return NextResponse.json({ error: "프로젝트 입력값과 4개 대안 결과가 필요합니다." }, { status: 400 });
-  }
-
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "LH Plan Lab";
-  workbook.created = new Date();
-  workbook.calcProperties.fullCalcOnLoad = true;
-
-  // A printable, audit-friendly summary matching the legal review screen.
-  const legalReview = buildLegalReviewReport(body.input, body.reviewData ?? null, body.lookupDetails ?? null, body.reviewedRules ?? []);
-  const legalSheet = workbook.addWorksheet("법규검토 총괄표");
-  legalSheet.addRow(["LH Plan Lab | 법규검토 총괄표"]);
-  legalSheet.mergeCells("A1:E1");
-  legalSheet.getRow(1).font = { bold: true, size: 17, color: { argb: "FF193C57" } };
-  legalSheet.getRow(1).height = 30;
-  legalSheet.addRow(["대상지", body.input.address, "검토 기준", body.reviewData?.checkedAt ?? "실조회 전", "법규 원문 = 필지별 자동승인 아님"]);
-  legalSheet.getRow(2).height = 24;
-  legalSheet.addRow(["구분", "검토 내용", "관련 법령 / 조례", "판정", "비고 및 원문 링크"]);
-  styleHeader(legalSheet.getRow(3));
-  const labels: Record<string, string> = { source: "원문 확인 (적용검토 전)", conditional: "조건부 검토", unknown: "미확정", user: "계획 입력" };
-  let currentSection = "";
-  legalReview.rows.forEach((item) => {
-    if (item.section !== currentSection) {
-      currentSection = item.section;
-      const sectionRow = legalSheet.addRow([currentSection]);
-      legalSheet.mergeCells(sectionRow.number, 1, sectionRow.number, 5);
-      sectionRow.font = { bold: true, color: { argb: "FF274B62" } };
-      sectionRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDEEAF0" } };
-      sectionRow.height = 22;
-    }
-    const row = legalSheet.addRow([item.label, item.detail, item.citation, labels[item.status], item.note]);
-    row.height = 52;
-    row.getCell(1).font = { bold: true, color: { argb: "FF254357" } };
-    row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F7F9" } };
-    row.getCell(4).font = { bold: true, color: { argb: item.status === "source" ? "FF23715D" :
-      item.status === "conditional" ? "FFA1662C" : item.status === "user" ? "FF2D6487" : "FF7A8791" } };
-    if (item.sourceUrl) {
-      row.getCell(3).value = { text: item.citation, hyperlink: item.sourceUrl };
-      row.getCell(3).font = { color: { argb: "FF25759B" }, underline: true };
-    }
-    if (item.excerpt) row.getCell(5).value = item.note + "\n[조문 발췌] " + item.excerpt;
-  });
-  legalSheet.addRow([]);
-  const calcTitle = legalSheet.addRow(["규모검토 계산 입력값 · 법정상한과 구분"]);
-  legalSheet.mergeCells(calcTitle.number, 1, calcTitle.number, 5);
-  calcTitle.font = { bold: true, color: { argb: "FF193C57" } };
-  legalReview.calculatedLimits.forEach((item) => legalSheet.addRow([item.label, item.value, item.source,
-    labels[item.status], "조문·별표 적용조건 확인 필요"]));
-  legalSheet.columns = [
-    { width: 27 }, { width: 45 }, { width: 44 }, { width: 25 }, { width: 72 },
-  ];
-  legalSheet.views = [{ state: "frozen", ySplit: 3 }];
-  legalSheet.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
-  for (const column of [2, 3, 4, 5]) legalSheet.getColumn(column).alignment = { wrapText: true, vertical: "middle" };
-
-  const assembly=assessParcelAssembly(body.reviewData??null);
-  if(assembly?.isMultiple){
-    const sheet=workbook.addWorksheet("합필 규모검토");
-    sheet.addRow(["LH Plan Lab | 합필 예정지 통합 규모검토"]);
-    sheet.mergeCells("A1:F1");
-    sheet.getRow(1).font={bold:true,size:16,color:{argb:"FF224C63"}};
-    sheet.getRow(1).height=31;
-    sheet.addRow(["합필 대상 필지수",assembly.parcelCount,"면적 합계",assembly.totalArea??"확인 필요","적용 상태",assembly.status]);
-    sheet.addRow(["대상","주소·지번","대지면적(㎡)","용도지역","건폐율 / 용적률 (조례 일반)","PNU / 출처 / 조회오류"]);
-    styleHeader(sheet.getRow(3));
-    assembly.parcels.forEach(p=>{
-      const row=sheet.addRow([p.number===1?"대표 필지":"추가 필지 "+(p.number-1),p.address,p.area??"미확정",p.zone??"미확정",
-        p.bcr!==null&&p.far!==null?p.bcr+"% / "+p.far+"%":"확인 필요",
-        [p.pnu,p.source,...p.errors].filter(Boolean).join(" · ")]);
-      row.height=36;
-    });
-    sheet.addRow(["통합 검토 합계","대상 합산값",assembly.totalArea??"미확정","",assembly.ordinary?
-      assembly.ordinary.bcr+"% / "+assembly.ordinary.far+"% (일반기준)":assembly.weightedCandidate?
-        assembly.weightedCandidate.bcr+"% / "+assembly.weightedCandidate.far+"% (가중 참고값)": "법적 기준 미확정","실제 합필·법정 건축가능성과 별개"]);
-    if(assembly.weightedCandidate){
-      sheet.addRow(["혼합 용도지역","가중 수치 (참고)",assembly.weightedCandidate.farArea,
-        "가장 작은 구역 "+assembly.weightedCandidate.smallestZoneArea+"㎡",
-        assembly.weightedCandidate.eligibleForStatutoryThreshold?"330㎡ 일반 면적요건 가능성":"330㎡ 일반기준 적용 가능성 낮음",
-        "국토계획법 제84조·시행령 제94조 조건부"]);
-    }
-    sheet.addRow([]);
-    sheet.addRow(["합필 검토 유의사항"]);
-    assembly.notes.forEach(n=>sheet.addRow(["검토 필요",n]));
-    sheet.columns=[{width:20},{width:44},{width:22},{width:35},{width:38},{width:72}];
-    sheet.views=[{state:"frozen",ySplit:3}];
-    sheet.pageSetup={paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0};
-    sheet.eachRow(row=>{row.alignment={vertical:"middle",wrapText:true};});
-  }
-
-  const inputs = workbook.addWorksheet("입력값");
-  inputs.addRow(["항목", "값", "단위·상태"]);
-  styleHeader(inputs.getRow(1));
-  const inputRows: Array<[string, string | number | boolean, string]> = [
-    ["사업명", body.input.projectName, "사용자 입력"],
-    ["공동주택 전용률", body.input.apartmentEfficiency ?? 75, "% · 기본 75% / 사용자 변경 가능"],
-    ["오피스텔 계약 전용률", body.input.officetelEfficiency ?? 45, "% · 계약면적 기준 / 기본 45%"],
-    ["오피스텔 지상층 전용률", body.input.officetelFarEfficiency ?? 70, "% · 용적률 산정용 / 기본 70% 가정"],
-    ["주소", body.input.address, "대상지"],
-    ["대지면적", body.input.siteArea, "㎡"],
-    ["건폐율 상한", body.input.buildingCoverageRatio, "%"],
-    ["기본 용적률", body.input.baseFar, "%"],
-    ["완화 용적률", body.input.relaxedFar, "% · 조건부"],
-    ["최고층수", body.input.maxFloors, "층"],
-    ["최고높이", body.input.maxHeight, "m"],
-    ["공동주택 법정주차", body.input.apartmentParkingRatio, "대/세대"],
-    ["오피스텔 법정주차", body.input.officetelParkingRatio, "대/호"],
-    ["LH 주차계수 근거", body.input.lhParkingRatioVerified, body.input.lhParkingRatioVerified ? "확인" : "미확인"],
-    ["0.3대 특례 승인", body.input.specialParkingApproval, "승인상태"],
-  ];
-  inputRows.forEach((row) => inputs.addRow(row));
-  // Derive the site-area cell from the actual label, never a positional guess.
-  // The input sheet changes when new assumptions (e.g. office FAR efficiency) are added.
-  const siteAreaRow = inputRows.findIndex((row) => row[0] === "대지면적") + 2;
-  if (siteAreaRow < 2) throw new Error("엑셀 입력값 시트에서 대지면적 행을 찾지 못했습니다.");
-  inputs.columns = [{ width: 24 }, { width: 48 }, { width: 22 }];
-  inputs.views = [{ state: "frozen", ySplit: 1 }];
-
-  const comparison = workbook.addWorksheet("4개 대안 비교");
-  comparison.addRow(["대안", "용도", "적합성", "계획수량", "계획건축면적(㎡)", "용적률산정면적(㎡)", "계획건폐율(%)", "계획용적률(%)", "원 법정주차", "0.3대 조건부", "최종주차", "지하층", "보조점수", "주거 지상연면적(㎡)", "비주거 지상연면적(㎡)", "계약전용률(%)", "용적률전용률(%)"]);
-  styleHeader(comparison.getRow(1));
-  body.results.forEach((result, index) => {
-    const rowNumber = index + 2;
-    comparison.addRow([
-      result.definition.id,
-      result.definition.useType === "apartment" ? "공동주택" : "오피스텔",
-      result.eligibility,
-      result.unitCount,
-      result.plannedBuildingArea,
-      result.farCountedArea,
-      { formula: `IFERROR(E${rowNumber}/'입력값'!$B$${siteAreaRow}*100,0)`, result: result.plannedBcr },
-      { formula: `IFERROR(F${rowNumber}/'입력값'!$B$${siteAreaRow}*100,0)`, result: result.plannedFar },
-      result.parking.originalLegalCount,
-      result.parking.conditionalCount ?? "-",
-      result.parking.finalCount,
-      result.parking.basementFloors,
-      result.score,
-      result.residentialFarArea,
-      result.nonResidentialFarArea,
-      Number((result.definition.efficiency * 100).toFixed(1)),
-      Number((result.definition.exclusiveArea / result.farGrossAreaPerUnit * 100).toFixed(1)),
-    ]);
-  });
-  comparison.columns = [{ width: 10 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 18 }, { width: 20 }, { width: 17 }, { width: 17 }, { width: 15 }, { width: 15 }, { width: 13 }, { width: 10 }, { width: 12 }, { width: 21 }, { width: 21 }, { width: 19 }, { width: 21 }];
-  comparison.views = [{ state: "frozen", ySplit: 1 }];
-  comparison.autoFilter = { from: "A1", to: "Q5" };
-
-  const formulas = workbook.addWorksheet("산식·제약조건");
-  formulas.addRow(["대안", "구분", "내용"]);
-  styleHeader(formulas.getRow(1));
-  body.results.forEach((result) => {
-    result.formulas.forEach((formula) => formulas.addRow([result.definition.id, "산식", formula]));
-    result.blockingReasons.forEach((reason) => formulas.addRow([result.definition.id, "부적합", reason]));
-    result.conditionalReasons.forEach((reason) => formulas.addRow([result.definition.id, "조건부", reason]));
-  });
-  formulas.columns = [{ width: 10 }, { width: 12 }, { width: 110 }];
-  formulas.getColumn(3).alignment = { wrapText: true, vertical: "top" };
-
-  const evidence = workbook.addWorksheet("법규 근거");
-  evidence.addRow(["유형", "자료명·항목", "상태", "시행일·코드", "출처 URL·기관"]);
-  styleHeader(evidence.getRow(1));
-  const review = body.reviewData;
-  review?.landUse.forEach((item) => evidence.addRow([item.category, item.name, "공간정보 확인", item.code, item.source]));
-  review?.laws.forEach((law) => evidence.addRow(["국가법령", law.name, law.applicationStatus, law.enforcementDate || "", law.link]));
-  review?.ordinances?.forEach((ordinance) => evidence.addRow(["자치법규", ordinance.name, ordinance.applicationStatus, ordinance.enforcementDate || "", ordinance.link]));
-  review?.ruleFindings?.forEach((finding) => evidence.addRow([finding.topic, String(finding.value ?? ""), finding.outcome, finding.article || finding.effectiveDate || "", finding.sourceUrl]));
-  review?.officialDocuments?.documents.forEach((document) => {
-    const label = document.kind === "district-plan" ? "지구단위계획 검색자료" : "LH 공식 검색자료";
-    evidence.addRow([label, document.title, document.status === "analyzed" ? "원문 분석 · 적용 미검증" : "원문 확보 미완료", document.format ?? "", document.sourceUrl]);
-    document.candidates.forEach((candidate) => evidence.addRow([
-      label, candidate.topic + " · " + candidate.quote.slice(0, 130),
-      "수치 후보 · 적용 검증 전", candidate.value === null ? "" : String(candidate.value) + (candidate.unit ?? ""),
-      document.sourceUrl,
-    ]));
-  });
-  review?.unresolved.forEach((item) => evidence.addRow(["미확정", item, "확인 필요", "", ""]));
-  body.reviewedRules?.forEach((rule) => evidence.addRow([
-    "계산에 적용된 입력", rule.field, "검토자 확인 · 법규 자동확정 아님",
-    String(rule.value) + " · " + rule.reviewedAt, rule.sourceTitle + " / " + rule.sourceUrl,
-  ]));
-  evidence.columns = [{ width: 16 }, { width: 42 }, { width: 18 }, { width: 22 }, { width: 70 }];
-  evidence.getColumn(5).alignment = { wrapText: true, vertical: "top" };
-
-  workbook.eachSheet((sheet) => {
-    sheet.eachRow((row) => {
-      row.height = Math.max(row.height || 15, 18);
-      row.eachCell((cell) => { cell.border = { bottom: { style: "hair", color: { argb: "FFDDE5EA" } } }; });
-    });
-  });
-
-  const buffer = await workbook.xlsx.writeBuffer();
+  if (!body || (body.kind !== "legal" && body.kind !== "summary")) return NextResponse.json({ error: "출력 종류(kind)가 필요합니다." }, { status: 400 });
+  if (body.kind === "legal" && !Array.isArray(body.rows)) return NextResponse.json({ error: "법규검토표 행이 필요합니다." }, { status: 400 });
+  if (body.kind === "summary" && (!Array.isArray(body.scenarios) || body.scenarios.length === 0)) return NextResponse.json({ error: "건축개요 대안이 필요합니다." }, { status: 400 });
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "LH Plan Lab";
+  wb.created = new Date();
+  if (body.kind === "legal") legalSheet(wb, body);
+  else summarySheet(wb, body);
+  const buffer = await wb.xlsx.writeBuffer();
+  const name = `${body.kind === "legal" ? "법규검토표" : "건축개요표"}_${(body.projectName || "project").replace(/[\\/:*?"<>|]/g, "_")}.xlsx`;
   return new NextResponse(Buffer.from(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": "attachment; filename=LH-Plan-Lab.xlsx",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
       "Cache-Control": "no-store",
     },
   });

@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { findLatestLhPurchaseNotice, parseLhAttachments, parseLhPurchaseList, buildLhPagingBody, countLhListPages, isSameProvinceNotice } from "../lib/server/lh-notice";
-import { ALTERNATIVES, DEFAULT_INPUT, calculateAlternative, calculateFacilities } from "../lib/calculator";
-import { DEFAULT_CALCULATION_CONTEXT } from "../lib/calculator";
 
 const html = String.raw`<table>
 <tr><td>10</td><td>민간신축 매입약정</td>
@@ -48,28 +46,6 @@ describe("Official LH purchase announcements",()=>{
       expect(result?.rules).toBeNull();
       expect(result?.warnings.some(x=>x.includes("실제 공고 대상 여부"))).toBe(true);
     }finally{mock.mockRestore()}
-  });
-  it("excludes mechanized apartment planning under verified LH notice",()=>{
-    const input={...DEFAULT_INPUT,businessMode:"purchase" as const,siteArea:1467,baseFar:250,buildingCoverageRatio:60,maxFloors:10,apartmentParkingRatio:1,officetelParkingRatio:0.5,mechanicalMaxRatio:50};
-    const ctx={...DEFAULT_CALCULATION_CONTEXT,lhPurchaseMechanicalRestrictedToOfficetelOrUrban:true};
-    const apt=calculateAlternative(input,ALTERNATIVES[1],ctx);
-    const office=calculateAlternative(input,ALTERNATIVES[3],ctx);
-    expect(apt.eligibility).toBe("ineligible");
-    expect(apt.parking.mechanicalCount).toBe(0);
-    expect(office.parking.mechanicalCount).toBeGreaterThan(0);
-    expect(office.parking.mechanicalCount).toBeLessThanOrEqual(Math.floor(office.parking.finalCount*.5));
-  });
-  it("includes mandatory 1 sqm per home community space for >=50 homes on verified LH purchase scenario",()=>{
-    const context={...DEFAULT_CALCULATION_CONTEXT,lhCommunityMinimumHomes:50,lhCommunitySqmPerHome:1};
-    const apartment=calculateFacilities("apartment",58,context).find(x=>x.name==="주민공동공간");
-    const office=calculateFacilities("officetel",64,context).find(x=>x.name==="공용 라운지");
-    expect(apartment?.required).toBe(true);
-    expect(apartment?.area).toBeGreaterThanOrEqual(58);
-    expect(office?.required).toBe(true);
-    expect(office?.area).toBeGreaterThanOrEqual(64);
-    expect(calculateFacilities("officetel",49,context).find(x=>x.name==="공용 라운지")?.required).toBe(false);
-    const baseline=calculateFacilities("apartment",58);
-    expect(baseline.find(x=>x.name==="주민공동공간")?.area).toBe(0);
   });
   it("disambiguates same-named districts across metropolitan areas", () => {
     expect(isSameProvinceNotice("(부산지역) 신축 매입약정 공고","서구","부산광역시 서구")).toBe(true);

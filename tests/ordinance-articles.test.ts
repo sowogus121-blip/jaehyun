@@ -28,3 +28,17 @@ describe("official ordinance source evidence", () => {
     expect(extractOrdinanceArticles({ 자치법규: null, 조문: [] }, "빈조례", "https://www.law.go.kr/")).toEqual([]);
   });
 });
+
+import { findArticlesByKeyword } from "../lib/server/ordinance-articles";
+describe("행별 근거 보완 탐색", () => {
+  it("검색어가 포함된 조문을 항 내용까지 원문 그대로 돌려준다", () => {
+    const payload = { 자치법규: { 조문: { 조: [
+      { 조문번호: "46", 조제목: "용도지역안에서의 용적률", 조내용: "제46조(용도지역안에서의 용적률)", 항: [{ 항내용: "① 제2종일반주거지역: 250퍼센트 이하" }] },
+      { 조문번호: "47", 조제목: "기타", 조내용: "제47조(기타) 관계없는 조문" },
+    ] } } };
+    const found = findArticlesByKeyword(payload, ["안에서의 용적률", "용적률"]);
+    expect(found).toHaveLength(1);
+    expect(found[0].article).toContain("제46조");
+    expect(found[0].text).toContain("250퍼센트");
+  });
+});

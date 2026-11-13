@@ -1,5 +1,5 @@
 import type { SiteReviewResult } from "./types";
-import { getOrdinanceZoneStandards } from "./legal-review-report";
+import { getOrdinanceZoneStandards } from "./review/articles";
 
 export const MAX_ASSEMBLY_PARCELS = 20;
 export const MAX_EXTRA_PARCELS = MAX_ASSEMBLY_PARCELS - 1;

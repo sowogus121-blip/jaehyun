@@ -283,6 +283,7 @@ export interface SiteReviewResult {
     topic: string;
     article: string;
     excerpt: string;
+    fullText?: string;
     verified: false;
   }>;
   ruleFindings: Array<{

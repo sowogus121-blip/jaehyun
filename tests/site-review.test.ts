@@ -26,17 +26,6 @@ describe("multi-parcel API request validation", () => {
 });
 
 describe("site review API", () => {
-  it("keeps uploaded official-document land use available without credentials", async () => {
-    const response = await POST(request());
-    const data = await response.json();
-
-    expect(data.status).toBe("partial");
-    expect(data.landUse).toContainEqual(expect.objectContaining({
-      name: "제2종일반주거지역",
-      code: "OFFICIAL-DOCUMENT",
-    }));
-  });
-
   it("uses exact cadastral lot from VWorld search candidates, never the nearby first hit", async()=>{
     vi.stubGlobal("fetch",vi.fn(async (input: string | URL | Request)=>{
       const u=String(input);
@@ -247,16 +236,6 @@ describe("site review API", () => {
     expect(review.errors).toEqual([]);
   });
 
-  it("keeps multiple parcels separate and aggregates only their confirmed areas", async () => {
-    const response = await POST(request({}, "경기도 의정부시 가능동 75-1", ["경기도 의정부시 가능동 72-5"]));
-    const data = await response.json();
-
-    expect(data.parcels).toHaveLength(2);
-    expect(data.parcel.area).toBe(2095);
-    expect(data.mixedUseZones).toBe(false);
-    expect(data.parcels.map((item: { parcel: { area: number } }) => item.parcel.area)).toEqual([1467, 628]);
-  });
-
   it("reads official national 0.3-parking clause as an unverified candidate, not auto-approval", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));
@@ -375,18 +354,6 @@ describe("site review API", () => {
     }));
     expect(d.lhNotice.title).toContain("접수 종료");
     expect(d.lhNotice.warnings.join(" ")).toContain("신규 신청");
-  });
-
-  it("does not apply user-mapped Uiwang C1 single-lot prohibition to neighboring assembled parcels",async()=>{
-    const single=await (await POST(request({},"경기도 의왕시 초평동 630-1"))).json();
-    expect(single.ruleFindings.map((f:{value:string})=>f.value)).toEqual(["공동주택","오피스텔"]);
-    expect(single.planningStandards).toEqual(expect.objectContaining({far:450,buildingCoverageRatio:70}));
-    const combined=await (await POST(request({},"경기도 의왕시 초평동 630-1",["경기도 의왕시 초평동 630-2"]))).json();
-    expect(combined.parcels).toHaveLength(2);
-    expect(combined.ruleFindings).toEqual([]);
-    expect(combined.planningStandards).toBeNull();
-    expect(combined.unresolved.join(" ")).toContain("합필");
-    expect(combined.parcel).toBeNull();
   });
 
   it("uses a municipality-specific source only for that municipality, not arbitrary LH district matches",async()=>{

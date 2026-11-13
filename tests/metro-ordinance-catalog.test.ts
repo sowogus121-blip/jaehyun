@@ -3,8 +3,6 @@ import {
   METRO_ORDINANCE_RULES, METRO_ORDINANCE_SOURCES,
   findMetroOrdinanceRules, findMetroOrdinanceSource,
 } from "../lib/metro-ordinance-catalog";
-import { buildLegalReviewReport } from "../lib/legal-review-report";
-import { DEFAULT_INPUT } from "../lib/calculator";
 
 describe("capital area ordinance evidence catalog",()=>{
   it("indexes all three metropolitan regions and at least 10 municipal sources",()=>{
@@ -49,20 +47,5 @@ describe("capital area ordinance evidence catalog",()=>{
     expect(findMetroOrdinanceRules("경기도 하남시 덕풍동 419-32").find(r=>r.id==="hanam-commercial-mixed-formula")?.detail).toContain("오피스텔");
     expect(findMetroOrdinanceRules("인천광역시 부평구 1").find(r=>r.id==="incheon-semi-residential-general")?.evidence).toBe("needs-current-recheck");
     expect(findMetroOrdinanceRules("경기도 성남시 1")[0]?.evidence).toBe("source-indexed");
-  });
-  it("injects city-only evidence in legal reports without approving parcel limits",()=>{
-    const report=buildLegalReviewReport({...DEFAULT_INPUT,address:"경기도 파주시 파주읍 봉암리 1343-2"},null);
-    expect(report.rows.find(x=>x.id==="metro-catalog-source")?.status).toBe("source");
-    const paju=report.rows.find(x=>x.id==="metro-paju-public-rental-120");
-    expect(paju?.status).toBe("conditional");
-    expect(paju?.sourceUrl).toContain("law.go.kr");
-    expect(paju?.note).toContain("자동 완화");
-    expect(report.rows.some(x=>x.id==="metro-seoul-rental-long20")).toBe(false);
-  });
-  it("does not confuse unverified source-indexing with verified parcel entitlements",()=>{
-    const report=buildLegalReviewReport({...DEFAULT_INPUT,address:"경기도 성남시 분당구 수내동 10"},null);
-    expect(report.rows.find(x=>x.id==="metro-seongnam-index")?.status).toBe("unknown");
-    expect(report.rows.find(x=>x.id==="metro-seongnam-index")?.note).toContain("자동 완화");
-    expect(report.rows.find(x=>x.id==="metro-seongnam-index")?.sourceUrl).toContain("law.go.kr");
   });
 });
