@@ -20,6 +20,8 @@ type SearchContext = {
   localGovernment: string;
   businessMode?: string;
   regionalOffice?: string;
+  /** 토지이용계획에서 찾은 지구단위계획·특별법 지정명 기반 추가 검색어 */
+  extraQueries?: string[];
 };
 
 const CACHE_TTL = 6 * 60 * 60 * 1000;
@@ -50,6 +52,7 @@ function buildQueries(context: SearchContext) {
     `${local} 공공주택 용적률 완화 역세권 인센티브 고시`,
     `LH ${context.regionalOffice || local} ${context.businessMode === "purchase" ? "신축매입약정" : "공공임대주택"} 공고 설계지침`,
     `${local} 건축선 도시계획시설 경관 고도 제한 고시`,
+    ...(context.extraQueries ?? []).slice(0, 5),
   ];
 }
 

@@ -151,3 +151,48 @@ describe("대지 현황 자동 수집 (토지특성·도로·건축물대장)", 
     } finally { globalThis.fetch = original; }
   });
 });
+
+import { classifyDesignations } from "../lib/review/special-zones";
+describe("상위계획·다른 법령에 따른 지역·지구 자동 연결", () => {
+  const designations = [
+    { name: "제2종일반주거지역", conflict: "포함", code: "UQA122" },
+    { name: "노후계획도시 특별정비예정구역", conflict: "포함", code: null },
+    { name: "지구단위계획구역", conflict: "포함", code: "UQQ300" },
+    { name: "과밀억제권역", conflict: "포함", code: null },
+    { name: "비행안전제5구역", conflict: "저촉", code: null },
+    { name: "어떤특수구역", conflict: "접합", code: null },
+  ];
+  it("지정명을 근거 법률로 분류하고 용도지역 자체는 제외한다", () => {
+    const m = classifyDesignations(designations);
+    const ids = m.map((x) => x.rule?.id ?? "other");
+    expect(ids).toContain("aging-new-town");
+    expect(ids).toContain("district-plan");
+    expect(ids).toContain("capital-region");
+    expect(ids).toContain("military");
+    expect(ids).toContain("other");
+    expect(m.flatMap((x) => x.designations.map((d) => d.name))).not.toContain("제2종일반주거지역");
+    expect(m.find((x) => x.rule?.id === "aging-new-town")?.rule?.law).toBe("노후계획도시 정비 및 지원에 관한 특별법");
+  });
+  it("법규검토표에 상위계획·특별법 행과 토지이용계획 전체 행을 만든다", () => {
+    const addr = "경기도 성남시 분당구 정자동 1";
+    const review = { location: { address: addr, parcelAddress: addr, x: "1", y: "1" }, landUse: [{ category: "용도지역", name: "제2종일반주거지역", code: "x", source: "VWorld", status: "verified" }],
+      parcel: { area: 1000, landCategory: "대", pnu: "1", source: "VWorld 지적속성", approximate: false }, districtPlan: true, mixedUseZones: false, parcels: [],
+      laws: [{ name: "노후계획도시 정비 및 지원에 관한 특별법", enforcementDate: "20240427", link: "https://www.law.go.kr/x" }], ordinances: [], ruleFindings: [], lhNotice: null,
+      siteFacts: { land: null, roads: [], buildings: null, permits: null, designations, notes: [] },
+      errors: [], missing: [], unresolved: [], webSearch: { status: "completed", provider: null, searchedAt: "", results: [{ title: "분당 노후계획도시 특별정비예정구역 지정 고시", url: "https://www.seongnam.go.kr/x", description: "고시", query: "", sourceDomain: "seongnam.go.kr", official: true }], errors: [] } } as unknown as SiteReviewResult;
+    const rows = buildRows({ address: addr, extraParcels: [], business: "lh-purchase", uses: ["apartment"], supplies: [] }, review);
+    const aging = rows.find((r) => r.id === "zone.aging-new-town")!;
+    expect(aging.group).toBe("상위계획·특별법");
+    expect(aging.law).toContain("노후계획도시");
+    expect(aging.sources.some((s) => s.effectiveDate === "20240427")).toBe(true);
+    expect(aging.sources.some((s) => s.kind === "plan")).toBe(true);
+    expect(rows.find((r) => r.id === "site.overlay")?.content).toContain("과밀억제권역");
+    expect(rows.find((r) => r.id === "zone.military")?.content).toContain("저촉");
+    expect(rows.find((r) => r.id === "zone.other")?.sub).toBe("기타 지역·지구");
+    expect(rows.some((r) => r.id === "zone.aging-hint")).toBe(false);
+    const p = applyReview(newProject({ address: addr, uses: ["apartment"] }), review);
+    const items = buildChecklist(p).flatMap((g) => g.items);
+    expect(items.find((i) => i.id === "designations")?.state).toBe("ok");
+    expect(items.find((i) => i.id === "zone.aging-new-town")?.state).toBe("ok");
+  });
+});

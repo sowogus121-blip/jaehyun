@@ -68,6 +68,17 @@ export function buildChecklist(p: Project): CheckGroup[] {
       })(),
       ...(p.site.extraParcels.length ? [{ id: "assembly", label: "합필 필지", state: (r && r.parcels.length > 1 && r.parcels.every((x) => x.parcel?.area)) ? "ok" as const : "partial" as const, detail: `${p.site.extraParcels.length + 1}필지 · 1대지 인정 요건 별도`, rowId: "site.assembly" }] : []),
     ] },
+    { title: "상위계획·특별법 (토지이용계획)", items: [
+      { id: "designations", label: "토지이용계획 지역·지구 전체", rowId: "site.overlay",
+        state: r?.siteFacts?.designations ? "ok" as const : r?.siteFacts ? "missing" as const : "missing" as const,
+        detail: r?.siteFacts?.designations ? `${r.siteFacts.designations.length}건 (국토계획법 + 다른 법령)` : "VWorld 토지이용계획 속성 조회 실패", link: { label: "토지이음", url: EUM } },
+      ...p.rows.filter((x) => x.id.startsWith("zone.")).map((x) => ({
+        id: x.id, label: x.sub ?? x.group, rowId: x.id,
+        state: (x.status === "verified" || x.status === "user") ? "ok" as const : x.sources.some((s) => s.kind === "plan") ? "ok" as const : "partial" as const,
+        detail: `${x.law}${x.sources.some((s) => s.kind === "plan") ? " · 관련 고시 검색결과 확보" : " · 결정고시·계획 원문 확인"}`,
+        link: { label: "토지이음 고시", url: EUM_GOSI },
+      })),
+    ] },
     { title: "도시계획 (규모 상한)", items: [
       { id: "plan-ord", label: "도시계획 조례 원문", state: ordinance("도시계획") ? "ok" : "missing", detail: ordinance("도시계획") ? `${ordinance("도시계획")!.name} (시행 ${ordinance("도시계획")!.enforcementDate ?? "-"})` : lawFail },
       fromCollected("plan.use", "ordinance", "용도지역 건축제한 (허용용도)"),
