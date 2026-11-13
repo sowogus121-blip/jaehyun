@@ -345,6 +345,8 @@ export interface SiteReviewResult {
     }>;
   };
   missing: string[];
+  /** Vercel 배포 환경 (production / preview / development) */
+  deployEnv?: string | null;
   errors: string[];
   unresolved: string[];
 }

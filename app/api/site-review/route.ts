@@ -272,10 +272,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // "독산동 151-10"처럼 시·도를 생략한 입력도 VWorld가 돌려준 전체 지번주소로 관할 지자체·LH 본부를 판정한다.
+  const fullAddress = location?.parcelAddress && location.parcelAddress.trim().split(/\s+/).length >= 3 ? location.parcelAddress.trim() : address;
   const parcels: ParcelReview[] = [{ inputAddress: address, location, parcel, landUse, errors: [] }];
   const rawAdditional = Array.isArray(body?.parcelAddresses) ? body.parcelAddresses : [];
   if (rawAdditional.some(item => typeof item !== "string")) return NextResponse.json({error:"합필 대상 주소는 문자열 목록이어야 합니다."},{status:400});
-  const additionalAddresses = normalizeAssemblyAddresses(address, rawAdditional);
+  const additionalAddresses = normalizeAssemblyAddresses(fullAddress, rawAdditional);
   if (additionalAddresses.length > MAX_EXTRA_PARCELS) return NextResponse.json({error:`합필은 대표 필지를 포함해 최대 ${MAX_EXTRA_PARCELS + 1}필지까지 검토할 수 있습니다. 현재 추가 필지 ${additionalAddresses.length}개입니다.`},{status:400});
   const inspectAdditionalParcel = async (parcelAddress: string): Promise<ParcelReview> => {
     if (!vworldKey) return { inputAddress: parcelAddress, location: null, parcel: null, landUse: [], errors: ["VWorld API 키가 없어 필지를 조회하지 못했습니다."] };
@@ -309,7 +311,7 @@ export async function POST(request: NextRequest) {
         seenPnus.add(pnu);
       }
     }
-    const mainMunicipality = localGovernmentFromAddress(address);
+    const mainMunicipality = localGovernmentFromAddress(fullAddress);
     const mixedJurisdiction = parcels.some(item => localGovernmentFromAddress(item.location?.parcelAddress ?? item.location?.address ?? item.inputAddress) !== mainMunicipality);
     if (duplicatePnu) errors.push("합필 대상 필지 중 동일 PNU가 중복되므로 면적을 합산할 수 없습니다.");
     if (mixedJurisdiction) errors.push("서로 다른 시·군·구 필지가 포함되어 관할 지자체·LH 인수기준을 일괄 적용할 수 없습니다.");
@@ -333,13 +335,13 @@ export async function POST(request: NextRequest) {
   const mixedUseZones = zoneNames.length > 1;
   const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
   const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획"));
-  const localGovernment = lawGovernmentFromAddress(address);
+  const localGovernment = lawGovernmentFromAddress(fullAddress);
   const districtForLh = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? "";
   const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh, localGovernment)
     .then((notice) => ({ notice, error: null as string | null }))
     .catch((error: unknown) => ({ notice: null, error: error instanceof Error ? error.message : "LH 공고 조회 실패" }));
   const webSearchPromise = searchOfficialSources({
-    address,
+    address: fullAddress,
     localGovernment,
     businessMode: body?.businessMode,
     regionalOffice: body?.regionalOffice,
@@ -428,13 +430,13 @@ export async function POST(request: NextRequest) {
     });
   }
   const webSearch = await webSearchPromise;
-  const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, address);
+  const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, fullAddress);
   const officialDocuments = discoveredDocuments;
   const lhNoticeResult = await lhNoticePromise;
   // The live LH board search can miss closed South notices or an abbreviated
   // municipality list. Fall back only to a municipality-matched, exact official
   // PDF and ZIP in the verified archival catalog. Never inherit detailed rules.
-  const regionalArchivedNotice = findLhPurchaseNotice(address);
+  const regionalArchivedNotice = findLhPurchaseNotice(fullAddress);
   const archivedNoticeOpen = regionalArchivedNotice ? noticeIsOpen(regionalArchivedNotice, koreaLocalDay()) : false;
   const archivalNotice = regionalArchivedNotice ? {
     id: new URL(regionalArchivedNotice.noticeUrl).searchParams.get("pchPanSn") ?? regionalArchivedNotice.id,
@@ -489,6 +491,7 @@ export async function POST(request: NextRequest) {
     officialDocuments,
     lhNotice,
     missing,
+    deployEnv: process.env.VERCEL_ENV ?? null,
     errors,
     unresolved: [
       ordinances.length ? "관할 조례 일반 수치와 별개로 지구단위계획·주거복합 별표·특례 적용 여부 검토 필요" : "관할 지자체 건축·주차장 조례 원문",

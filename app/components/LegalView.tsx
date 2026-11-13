@@ -70,7 +70,8 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
         <Field label="0.3대 특례 입지"><label className="inline"><input type="checkbox" checked={Boolean(project.site.transitWithin500m)} onChange={(e: { target: { checked: boolean } }) => setSite({ transitWithin500m: e.target.checked })} />역 출구·대학 교문 500m 이내 확인</label></Field>
       </div>
       {project.review && (project.review.missing.length > 0 || project.review.errors.length > 0) && <div className="alert">
-        {project.review.missing.length > 0 && <p><b>서버 환경변수 미설정:</b> {project.review.missing.join(", ")} — 해당 공식자료는 자동 조회되지 않았습니다.</p>}
+        {project.review.missing.length > 0 && <p><b>서버 환경변수 미설정{project.review.deployEnv ? ` (${project.review.deployEnv} 배포)` : ""}:</b> {project.review.missing.join(", ")} — 해당 공식자료는 자동 조회되지 않았습니다.
+          {project.review.deployEnv === "preview" && <> Vercel → Settings → Environment Variables에서 이 키들의 적용 환경에 <b>Preview</b>를 체크한 뒤 재배포하세요.</>}</p>}
         {project.review.errors.map((e, i) => <p key={i}>{e}</p>)}
       </div>}
       {!project.review && <div className="alert info"><p>아직 공식자료를 조회하지 않았습니다. <b>공식자료 다시 조회</b>를 누르세요.</p></div>}
