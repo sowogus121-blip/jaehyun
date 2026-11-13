@@ -78,7 +78,7 @@ describe("대상지 입력 시 규모검토 필요 조문 자동 수집", () => 
     const p = applyReview(newProject({ address: ADDRESS, uses: ["apartment"] }), review);
     const items = buildChecklist(p).flatMap((g) => g.items);
     expect(items.find((i) => i.id === "area")?.state).toBe("ok");
-    expect(items.find((i) => i.id === "road")?.state).toBe("manual");
+    expect(items.find((i) => i.id === "road")?.state).toBe("missing");
     expect(items.find((i) => i.id === "lh-notice")?.state).toBe("missing");
     expect(items.find((i) => i.label.startsWith("기계식주차"))?.state).not.toBe("missing");
   });
@@ -103,5 +103,51 @@ describe("국가법령정보센터 점검 대응", () => {
     expect(kept.ordinances).toHaveLength(1);
     expect(kept.collected).toHaveLength(1);
     expect(kept.errors.some((e) => e.includes("직전 조회"))).toBe(true);
+  });
+});
+
+import { collectSiteFacts, roadClassWidth, pnuParams } from "../lib/server/site-facts";
+describe("대지 현황 자동 수집 (토지특성·도로·건축물대장)", () => {
+  it("도시계획도로 규모를 폭으로 환산하고 PNU를 건축HUB 파라미터로 바꾼다", () => {
+    expect(roadClassWidth("소로2류")?.text).toBe("폭 8~10m");
+    expect(roadClassWidth("중로 1류")?.min).toBe(20);
+    expect(roadClassWidth("소로3류")?.text).toBe("폭 8m 미만");
+    expect(pnuParams("1154510200101510010")).toEqual({ sigunguCd: "11545", bjdongCd: "10200", platGbCd: "0", bun: "0151", ji: "0010" });
+    expect(pnuParams("1154510200201510010")?.platGbCd).toBe("1");
+  });
+  it("공부 면적·도로접면·인접 도로·건축물대장·인허가를 모아 법규검토표 행으로 만든다", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("getLandCharacteristics")) return new Response(JSON.stringify({ landCharacteristicss: { field: [{ pnu: "1154510200101510010", stdrYear: "2026", lndpclAr: "1093.6", lndcgrCodeNm: "공장용지", roadSideCodeNm: "소로한면", tpgrphHgCodeNm: "평지", tpgrphFrmCodeNm: "사다리형" }] } }));
+      if (url.includes("LT_C_UPISUQ151")) return new Response(JSON.stringify({ response: { status: "OK", result: { featureCollection: { features: [{ properties: { dgm_nm: "소로2류" } }] } } } }));
+      if (url.includes("LT_L_SPRD")) return new Response(JSON.stringify({ response: { status: "OK", result: { featureCollection: { features: [{ properties: { rn: "독산로", road_bt: "8" } }] } } } }));
+      if (url.includes("getBrTitleInfo")) return new Response(JSON.stringify({ response: { header: { resultCode: "00" }, body: { items: { item: { mainPurpsCdNm: "공장", totArea: "812.4", grndFlrCnt: "2", ugrndFlrCnt: "0", useAprDay: "19890512" } } } } }));
+      if (url.includes("getApBasisOulnInfo")) return new Response(JSON.stringify({ response: { header: { resultCode: "00" }, body: { items: { item: [{ mainPurpsCdNm: "업무시설", totArea: "3732.21", archPmsDay: "20250310" }] } } } }));
+      throw new Error("unexpected " + url);
+    }) as typeof fetch;
+    try {
+      const facts = await collectSiteFacts({ pnu: "1154510200101510010", bbox: [126.9, 37.47, 126.901, 37.471], vworldKey: "k", domain: "http://x", dataKey: "d" });
+      expect(facts.land?.officialArea).toBe(1093.6);
+      expect(facts.roads.map((r) => r.widthText)).toEqual(["폭 8~10m", "도로폭 8m"]);
+      expect(facts.buildings?.[0].use).toBe("공장");
+      expect(facts.permits?.[0].permittedAt).toBe("20250310");
+      const addr = "서울특별시 금천구 독산동 151-10";
+      const review = { location: { address: addr, parcelAddress: addr, x: "1", y: "1" }, landUse: [{ category: "용도지역", name: "준공업지역", code: "x", source: "VWorld", status: "verified" }],
+        parcel: { area: 1080.9, landCategory: "공장용지", pnu: "1", source: "VWorld 지적도형", approximate: true }, districtPlan: false, mixedUseZones: false, parcels: [], laws: [], ordinances: [],
+        ruleFindings: [], lhNotice: null, siteFacts: facts, errors: [], missing: [], unresolved: [], webSearch: { status: "completed", provider: null, searchedAt: "", results: [], errors: [] } } as unknown as SiteReviewResult;
+      const rows = buildRows({ address: addr, extraParcels: [], business: "lh-purchase", uses: ["apartment"], supplies: [] }, review);
+      const area = rows.find((r) => r.id === "site.area")!;
+      expect(area.status).toBe("verified");
+      expect(area.params?.siteArea).toBe(1093.6);
+      expect(rows.find((r) => r.id === "site.road")?.content).toContain("소로한면");
+      expect(rows.find((r) => r.id === "site.building")?.content).toContain("허가 20250310");
+      const p = applyReview(newProject({ address: addr, uses: ["apartment"] }), review);
+      const items = buildChecklist(p).flatMap((g) => g.items);
+      expect(items.find((i) => i.id === "road")?.state).toBe("ok");
+      expect(items.find((i) => i.id === "existing")?.state).toBe("ok");
+      expect(items.find((i) => i.id === "area")?.state).toBe("ok");
+      expect(items.some((i) => i.state === "manual")).toBe(false);
+    } finally { globalThis.fetch = original; }
   });
 });

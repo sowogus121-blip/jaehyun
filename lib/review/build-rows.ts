@@ -19,6 +19,8 @@ export const ROW_ORDER: Array<{ id: string; group: string; sub?: string; section
   { id: "site.area", group: "구역면적", section: "site" },
   { id: "site.assembly", group: "합필 검토", section: "site" },
   { id: "site.zone", group: "용도지역·지구", section: "site" },
+  { id: "site.road", group: "접도 조건", section: "site" },
+  { id: "site.building", group: "기존 건축물", section: "site" },
   { id: "site.overlay", group: "중첩 규제", section: "site" },
   { id: "plan.district", group: "지구단위계획", section: "planning" },
   { id: "plan.use", group: "건축행위 가능 여부", section: "planning" },
@@ -115,19 +117,22 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     sources: review?.location ? [{ title: "국가공간정보포털 VWorld", url: "https://www.vworld.kr", kind: "api" }] : [],
   });
 
-  const apiArea = review?.parcel?.area ?? null;
+  const land = review?.siteFacts?.land ?? null;
+  const officialArea = land?.officialArea && (review?.parcels?.length ?? 1) <= 1 ? land.officialArea : null;
+  const apiArea = officialArea ?? review?.parcel?.area ?? null;
   const override = site.siteAreaOverride && site.siteAreaOverride > 0 ? site.siteAreaOverride : null;
   const area = override ?? apiArea;
   put({
     id: "site.area",
     content: area ? `· ${fmt(area)}㎡` : "대지면적 미확보",
-    law: override ? "검토자 입력 (토지대장·측량)" : review?.parcel?.source ?? "토지대장",
+    law: override ? "검토자 입력 (토지대장·측량)" : officialArea ? "토지대장 (VWorld 토지특성정보)" : review?.parcel?.source ?? "토지대장",
     note: override
       ? (apiArea ? `조회값 ${fmt(apiArea)}㎡ 대신 입력값 적용` : "")
+      : officialArea ? [land?.landCategory ? `지목 ${land.landCategory}` : "", "도로 편입·제외면적 별도 확인"].filter(Boolean).join(" · ")
       : review?.parcel?.approximate ? "지적도형 환산 개략면적 · 토지대장 대조 필요" : "도로 편입·제외면적 별도 확인",
-    status: override ? "user" : apiArea ? (review?.parcel?.approximate ? "candidate" : "verified") : "missing",
+    status: override ? "user" : apiArea ? (officialArea || !review?.parcel?.approximate ? "verified" : "candidate") : "missing",
     params: area ? { siteArea: area } : undefined,
-    sources: review?.parcel ? [{ title: review.parcel.source, url: "https://www.vworld.kr", kind: "api" }] : [],
+    sources: officialArea ? [{ title: "VWorld 토지특성정보 (토지대장 면적)", url: "https://www.vworld.kr", kind: "api" }] : review?.parcel ? [{ title: review.parcel.source, url: "https://www.vworld.kr", kind: "api" }] : [],
     missing: area ? undefined : "토지대장 면적",
   });
 
@@ -139,6 +144,36 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     status: zoneNames.length ? (mixed ? "candidate" : "verified") : "missing",
     sources: [{ title: "토지이음 토지이용계획", url: "https://www.eum.go.kr", kind: "api" }],
   });
+
+  const facts = review?.siteFacts;
+  if (facts && (facts.roads.length || land?.roadSide)) {
+    const minWidth = Math.min(...facts.roads.map((r) => r.minWidth ?? Infinity));
+    put({
+      id: "site.road",
+      content: [land?.roadSide ? `· 도로접면: ${land.roadSide}` : "", ...facts.roads.map((r) => `· ${r.name} (${r.widthText})`)].filter(Boolean).join("\n"),
+      law: "건축법 제44조(대지와 도로의 관계)·제46조(건축선의 지정)",
+      note: [Number.isFinite(minWidth) && minWidth < 4 ? "폭 4m 미만 도로 포함: 건축선 후퇴 검토" : "", "인접 여부·건축선·차량 진출입은 지적도 대조", land?.terrainShape ? `지형 ${land.terrainShape}·${land.terrainHeight ?? ""}` : ""].filter(Boolean).join(" · "),
+      status: "verified",
+      sources: [{ title: facts.roads[0]?.source ?? "VWorld 토지특성정보", url: "https://www.vworld.kr", kind: "api" }],
+    });
+  } else if (facts) {
+    put({ id: "site.road", content: "인접 도로 정보 미검출", law: "건축법 제44조·제46조", note: "지적도·도로대장 확인", status: "missing", sources: [], missing: "접도 도로 폭원" });
+  }
+  if (facts && (facts.buildings !== null || facts.permits !== null)) {
+    const b = facts.buildings ?? [];
+    const pm = facts.permits ?? [];
+    put({
+      id: "site.building",
+      content: [
+        ...(b.length ? b.map((x) => `· 건축물대장: ${x.name ? x.name + " · " : ""}${x.use} · 연면적 ${x.totalArea ? fmt(x.totalArea) + "㎡" : "-"} · ${x.floors}층 · 사용승인 ${x.approvedAt ?? "-"}`) : facts.buildings ? ["· 건축물대장 표제부 없음 (나대지 또는 미등재)"] : []),
+        ...pm.slice(0, 5).map((x) => `· 인허가: ${x.use} · 연면적 ${x.totalArea ? fmt(x.totalArea) + "㎡" : "-"} · 허가 ${x.permittedAt ?? "-"} · 착공 ${x.startedAt ?? "-"} · 사용승인 ${x.approvedAt ?? "-"}`),
+      ].join("\n"),
+      law: "건축물대장 · 건축인허가 대장",
+      note: pm.some((x) => x.permittedAt && !x.approvedAt) ? "유효한 허가 존재 가능: 변경·취소 여부 확인" : b.length ? "철거·멸실 및 명도 일정 확인" : "",
+      status: "verified",
+      sources: [{ title: "국토교통부 건축HUB (공공데이터포털)", url: "https://www.hub.go.kr", kind: "api" }],
+    });
+  }
 
   const assembly = review && review.parcels.length > 1 ? assessParcelAssembly(review) : null;
   if (assembly) {

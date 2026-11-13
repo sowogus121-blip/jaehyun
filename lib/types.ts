@@ -1,5 +1,6 @@
 import type { LhNotice } from "./server/lh-notice";
 import type { CollectedArticle } from "./review/collect-topics";
+import type { SiteFacts } from "./server/site-facts";
 export type BusinessMode = "direct" | "purchase" | "other" | "undecided";
 export type EvidenceStatus = "verified" | "user" | "unknown" | "review";
 export type ParkingMode = "self" | "mechanical";
@@ -219,6 +220,7 @@ export interface SiteReviewResult {
     pnu: string | null;
     source: string;
     approximate: boolean;
+    bbox?: [number, number, number, number];
   } | null;
   planningStandards: {
     zone: string;
@@ -289,6 +291,8 @@ export interface SiteReviewResult {
   }>;
   /** 규모검토 필요 조문 자동 수집 결과 (원문, 적용 판정 전) */
   collected?: CollectedArticle[];
+  /** 대지 현황 자동 수집 (토지특성·인접 도로·건축물대장·인허가) */
+  siteFacts?: SiteFacts;
   ruleFindings: Array<{
     id: string;
     topic: string;
