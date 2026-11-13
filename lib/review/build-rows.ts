@@ -79,12 +79,17 @@ function blank(id: string): ReviewRow {
   };
 }
 
+/** VWorld 레이어 또는 토지이용계획 '지구단위계획구역(포함·저촉)' */
+export function districtPlanOf(review: SiteReviewResult | null): boolean {
+  return Boolean(review?.districtPlan) || (review?.siteFacts?.designations ?? []).some((d) => /지구단위계획/.test(d.name) && d.conflict !== "접함");
+}
+
 function siteContext(site: SiteInput, review: SiteReviewResult | null): LibraryContext {
   const zones = [...new Set((review?.landUse ?? []).filter((l) => l.category === "용도지역").map((l) => l.name))];
   return {
     address: review?.location?.parcelAddress || review?.location?.address || site.address,
     zones,
-    districtPlan: review?.districtPlan ?? null,
+    districtPlan: review ? districtPlanOf(review) : null,
     blockNo: compact(site.blockNo ?? "").toUpperCase(),
   };
 }
@@ -147,15 +152,18 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   });
 
   const facts = review?.siteFacts;
-  if (facts && (facts.roads.length || land?.roadSide)) {
-    const minWidth = Math.min(...facts.roads.map((r) => r.minWidth ?? Infinity));
+  const designatedRoads = (facts?.designations ?? []).filter((d) => /^(광로|대로|중로|소로)\s*\d\s*류/.test(d.name))
+    .map((d) => ({ name: d.name.replace(/\(.*$/, "").trim(), widthText: (d.name.match(/\(([^)]*m[^)]*)\)/)?.[1] ?? "") + (d.conflict ? ` · ${d.conflict}` : ""), minWidth: Number(d.name.match(/폭\s*(\d+)/)?.[1] ?? NaN) || null, source: "토지이용계획 도시계획시설(도로)" }));
+  const allRoads = [...designatedRoads, ...(facts?.roads ?? []).filter((r) => !/규모 미표기|도로폭 미표기/.test(r.widthText) && !designatedRoads.some((d) => compact(r.name).startsWith(compact(d.name))))];
+  if (facts && (allRoads.length || land?.roadSide)) {
+    const minWidth = Math.min(...allRoads.map((r) => r.minWidth ?? Infinity));
     put({
       id: "site.road",
-      content: [land?.roadSide ? `· 도로접면: ${land.roadSide}` : "", ...facts.roads.map((r) => `· ${r.name} (${r.widthText})`)].filter(Boolean).join("\n"),
+      content: [land?.roadSide ? `· 도로접면: ${land.roadSide}` : "", ...allRoads.map((r) => `· ${r.name} (${r.widthText})`), ...(facts.roads ?? []).filter((r) => /도로폭 미표기/.test(r.widthText)).slice(0, 3).map((r) => `· 인접 도로명: ${r.name}`)].filter(Boolean).join("\n"),
       law: "건축법 제44조(대지와 도로의 관계)·제46조(건축선의 지정)",
       note: [Number.isFinite(minWidth) && minWidth < 4 ? "폭 4m 미만 도로 포함: 건축선 후퇴 검토" : "", "인접 여부·건축선·차량 진출입은 지적도 대조", land?.terrainShape ? `지형 ${land.terrainShape}·${land.terrainHeight ?? ""}` : ""].filter(Boolean).join(" · "),
       status: "verified",
-      sources: [{ title: facts.roads[0]?.source ?? "VWorld 토지특성정보", url: "https://www.vworld.kr", kind: "api" }],
+      sources: [{ title: allRoads[0]?.source ?? "VWorld 토지특성정보", url: "https://www.vworld.kr", kind: "api" }],
     });
   } else if (facts) {
     put({ id: "site.road", content: "인접 도로 정보 미검출", law: "건축법 제44조·제46조", note: "지적도·도로대장 확인", status: "missing", sources: [], missing: "접도 도로 폭원" });
@@ -215,9 +223,18 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       status: "verified",
       sources: [{ title: "VWorld 토지이용계획 속성정보", url: "https://www.eum.go.kr/web/ar/lu/luLandDet.jsp", kind: "api" }],
     });
+    const minor: Array<{ name: string; conflict: string | null; law: string }> = [];
     for (const m of classifyDesignations(designations)) {
+      // 대지에 '접함'으로만 걸린 지정은 직접 적용 대상이 아니므로 참고 행으로 모은다 (접한 도로는 접도 조건 행).
+      const applied = m.designations.filter((d) => d.conflict !== "접함");
+      if (m.rule?.id === "urban-facility" && !applied.length) continue;
+      if (!m.rule || !m.rule.scale || !applied.length) {
+        for (const d of m.designations) minor.push({ name: d.name, conflict: d.conflict, law: m.rule ? m.rule.law.split(" · ")[0].replace(/\s*제\d.*$/, "") : "" });
+        continue;
+      }
+      m.designations = applied;
       const names = m.designations.map((d) => d.name);
-      const lawNames = m.rule ? m.rule.law.split(" · ").map((x) => x.replace(/\s*제\d.*$/, "").trim()) : [];
+      const lawNames = m.rule.law.split(" · ").map((x) => x.replace(/\s*제\d.*$/, "").trim());
       const lawSources: SourceRef[] = lawNames.filter((n) => !/조례/.test(n)).map((n) => {
         const hit = review?.laws.find((l) => compact(l.name) === compact(n));
         return { title: n, url: hit?.link ?? lawUrl(n), effectiveDate: hit?.enforcementDate ?? undefined, kind: "law" as const };
@@ -225,16 +242,25 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       const docs = (review?.webSearch?.results ?? []).filter((w) => names.some((n) => compact(w.title).includes(compact(n).replace(/구역$|지구$/, "")))).slice(0, 3)
         .map((w) => ({ title: w.title, url: w.url, excerpt: w.description, verbatim: false, kind: "plan" as const }));
       put({
-        id: `zone.${m.rule?.id ?? "other"}`,
+        id: `zone.${m.rule.id}`,
         group: "상위계획·특별법",
-        sub: m.rule ? names.slice(0, 2).join(", ") : "기타 지역·지구",
+        sub: names.slice(0, 2).join(", "),
         section: "planning",
-        content: m.designations.map((d) => `· ${d.name}${d.conflict ? ` (${d.conflict})` : ""}`).join("\n") + (m.rule ? `\n· 확인: ${m.rule.check}` : ""),
-        law: m.rule ? m.rule.law : "근거 법령 확인 필요",
-        note: m.rule?.scale ? "규모(용도·용적률·높이)에 직접 영향 가능 · 결정고시·계획 원문 확인 후 수치 입력" : "행위제한·절차 확인",
+        content: m.designations.map((d) => `· ${d.name}${d.conflict ? ` (${d.conflict})` : ""}`).join("\n") + `\n· 확인: ${m.rule.check}`,
+        law: m.rule.law,
+        note: "규모(용도·용적률·높이)에 직접 영향 가능 · 결정고시·계획 원문 확인 후 수치 입력",
         status: "candidate",
         sources: [...lawSources, ...docs],
-        missing: m.rule?.search ? `${m.rule.search} 원문` : undefined,
+        missing: m.rule.search ? `${m.rule.search} 원문` : undefined,
+      });
+    }
+    if (minor.length) {
+      put({
+        id: "zone.minor", group: "상위계획·특별법", sub: "기타 지역·지구", section: "planning",
+        content: minor.map((d) => `· ${d.name}${d.conflict ? ` (${d.conflict})` : ""}${d.law ? ` — ${d.law}` : ""}`).join("\n"),
+        law: "토지이용계획확인서 · 각 근거 법령",
+        note: "규모 영향 낮음 또는 대지 경계에 접함 · 절차(허가·심의·부담금) 해당 여부만 확인",
+        status: "candidate", sources: [],
       });
     }
   }
@@ -252,10 +278,10 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
 
   // ── 지구단위계획 ──
   const planDocs = review?.officialDocuments?.documents.filter((d) => d.kind === "district-plan") ?? [];
-  if (review?.districtPlan || site.blockNo) {
+  if (districtPlanOf(review) || site.blockNo) {
     put({
       id: "plan.district",
-      content: review?.districtPlan
+      content: districtPlanOf(review)
         ? ((designations ?? []).find((d) => d.name.includes("지구단위계획"))?.name ?? "지구단위계획구역 레이어 검출") + (site.blockNo ? ` · 획지 ${site.blockNo} (검토자 지정)` : " · 획지번호 미확인")
         : `획지 ${site.blockNo} (검토자 지정)`,
       law: "국토계획법 제52조 · 결정조서·결정도·시행지침",
@@ -295,7 +321,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const farPick = zoneName ? [farArticle, ...fromCollected("용도지역별 용적률")].find((a) => a && zoneRatio(a, zoneName)) ?? farArticle : farArticle;
   const bcr = zoneName ? zoneRatio(bcrPick ?? null, zoneName) : null;
   const far = zoneName ? zoneRatio(farPick ?? null, zoneName) : null;
-  const plansGovern = Boolean(review?.districtPlan);
+  const plansGovern = Boolean(districtPlanOf(review));
   const bcrfarStatus: RowStatus = bcr && far ? (plansGovern ? "candidate" : "verified") : bcr || far || zone ? "candidate" : "missing";
   put({
     id: "plan.bcrfar",
@@ -333,9 +359,9 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   put({
     id: "plan.height",
     content: heightOverlay ? `${heightOverlay.name} 지정 · 최고높이 결정내용 확인` : "별도 최고높이 미확정",
-    law: "건축법 제60조, 도시관리계획" + (review?.districtPlan ? "·지구단위계획" : ""),
+    law: "건축법 제60조, 도시관리계획" + (districtPlanOf(review) ? "·지구단위계획" : ""),
     note: "높이 미확정 시 규모검토는 용적률·건폐율 기준으로 산정하고 층수는 참고값으로 표시",
-    status: heightOverlay || review?.districtPlan ? "candidate" : "missing",
+    status: heightOverlay || districtPlanOf(review) ? "candidate" : "missing",
     sources: [ref(LAW.buildingAct, "제60조")],
     missing: "최고높이·층수 제한 여부",
   });
@@ -512,7 +538,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   }
 
   // 지구단위계획 구역인데 획지 기준이 확정되지 않았다면 건폐율·용적률·용도·높이를 후보로 묶는다.
-  if (review?.districtPlan && !site.blockNo) {
+  if (districtPlanOf(review) && !site.blockNo) {
     for (const id of ["plan.bcrfar", "plan.use", "plan.height"]) {
       const row = rows.get(id);
       if (row && (row.status === "verified" || row.status === "user")) {

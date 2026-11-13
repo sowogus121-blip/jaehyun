@@ -3,6 +3,7 @@
  * 자동 수집 결과와 대조해 "확보 / 일부 / 미확보 / 현장·도서 확인"으로 정리한다.
  */
 import type { Project, ReviewRow } from "./types";
+import { districtPlanOf } from "./build-rows";
 
 export type CheckState = "ok" | "partial" | "missing" | "manual";
 export interface CheckItem { id: string; label: string; state: CheckState; detail: string; rowId?: string; link?: { label: string; url: string } }
@@ -74,8 +75,8 @@ export function buildChecklist(p: Project): CheckGroup[] {
         detail: r?.siteFacts?.designations ? `${r.siteFacts.designations.length}건 (국토계획법 + 다른 법령)` : "VWorld 토지이용계획 속성 조회 실패", link: { label: "토지이음", url: EUM } },
       ...p.rows.filter((x) => x.id.startsWith("zone.")).map((x) => ({
         id: x.id, label: x.sub ?? x.group, rowId: x.id,
-        state: (x.status === "verified" || x.status === "user") ? "ok" as const : x.sources.some((s) => s.kind === "plan") ? "ok" as const : "partial" as const,
-        detail: `${x.law}${x.sources.some((s) => s.kind === "plan") ? " · 관련 고시 검색결과 확보" : " · 결정고시·계획 원문 확인"}`,
+        state: (x.status === "verified" || x.status === "user" || x.id === "zone.minor") ? "ok" as const : x.sources.some((s) => s.kind === "plan") ? "ok" as const : "partial" as const,
+        detail: x.id === "zone.minor" ? `${x.content.split("\n").length}건 · 절차 해당 여부만 확인` : `${x.law}${x.sources.some((s) => s.kind === "plan") ? " · 관련 고시 검색결과 확보" : " · 결정고시·계획 원문 확인"}`,
         link: { label: "토지이음 고시", url: EUM_GOSI },
       })),
     ] },
@@ -84,13 +85,13 @@ export function buildChecklist(p: Project): CheckGroup[] {
       fromCollected("plan.use", "ordinance", "용도지역 건축제한 (허용용도)"),
       fromCollected("plan.bcrfar", "ordinance", "건폐율·용적률 조문"),
       fromCollected("plan.relax", "ordinance", "임대주택 용적률 완화"),
-      ...(r?.districtPlan || p.site.blockNo ? [
+      ...(districtPlanOf(r ?? null) || p.site.blockNo ? [
         { id: "dp-doc", label: "지구단위계획 결정조서·결정도·시행지침", state: planDocs.some((d) => d.status === "analyzed") ? "partial" as const : "missing" as const, detail: planDocs.length ? planDocs.map((d) => d.title).join(", ") : "고시문·결정도서 자동 수집 실패 → 토지이음 고시에서 확보 후 업로드", link: { label: "토지이음 고시", url: EUM_GOSI } },
         { id: "dp-block", label: "획지번호", state: p.site.blockNo ? "ok" as const : "missing" as const, detail: p.site.blockNo ? `획지 ${p.site.blockNo}` : "결정도에서 확인 후 대상지 조건에 입력", rowId: "plan.district" },
       ] : []),
       { id: "height", label: "최고높이·층수 제한", rowId: "plan.height",
-        state: rowState(row("plan.height")) === "ok" || (zones.length > 0 && !overlays.some((o) => o.name.includes("고도")) && !r?.districtPlan) || has("plan.height").length ? "ok" : overlays.some((o) => o.name.includes("고도")) || r?.districtPlan ? "partial" : "missing",
-        detail: overlays.some((o) => o.name.includes("고도")) ? "고도지구 지정 · 결정내용(높이) 확인" : r?.districtPlan ? "지구단위계획 높이 기준 확인" : zones.length ? "고도지구·지구단위계획 미검출 → 정북일조·인동거리로 층수 결정" : "용도지구 조회 필요" },
+        state: rowState(row("plan.height")) === "ok" || (zones.length > 0 && !overlays.some((o) => o.name.includes("고도")) && !districtPlanOf(r ?? null) && !row("zone.height-district")) || has("plan.height").length ? "ok" : overlays.some((o) => o.name.includes("고도")) || districtPlanOf(r ?? null) || row("zone.height-district") ? "partial" : "missing",
+        detail: row("zone.height-district") ? `${row("zone.height-district")!.sub} · 결정 높이 확인` : overlays.some((o) => o.name.includes("고도")) ? "고도지구 지정 · 결정내용(높이) 확인" : districtPlanOf(r ?? null) ? "지구단위계획 높이 기준 확인" : zones.length ? "고도지구·지구단위계획 미검출 → 정북일조·인동거리로 층수 결정" : "용도지구 조회 필요" },
     ] },
     { title: "건축 (배치·면적)", items: [
       { id: "bld-ord", label: "건축 조례 원문", state: ordinance("건축") ? "ok" : "missing", detail: ordinance("건축")?.name ?? lawFail },
