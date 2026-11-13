@@ -1,39 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findSitePreset } from "../../../lib/site-presets";
-import { MASOK_555, isMasok555, getMasok555RuleFindings } from "../../../lib/masok-555";
-import { isUiwangChopyeong6301, UIWANG_6301, getUiwangC1UseFindings } from "../../../lib/uiwang-chopyeong-6301";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
-import { extractOrdinanceArticles, type OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
-import { getOrdinanceZoneStandards } from "../../../lib/legal-review-report";
+import type { OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
+import { fetchJson, fetchLawPayload, searchLaw, searchOrdinance, lawGovernmentFromAddress, localGovernmentFromAddress, type LawRecord, type OrdinanceRecord } from "../../../lib/server/law-api";
+import { extractOrdinanceArticles, findArticleByNumber, findArticlesByKeyword } from "../../../lib/server/ordinance-articles";
+import { NATIONAL_ARTICLES, NATIONAL_LAWS, ORDINANCE_TOPICS, type CollectedArticle } from "../../../lib/review/collect-topics";
 import { findLhPurchaseNotice, noticeIsOpen, koreaLocalDay } from "../../../lib/metro-annex-lh-catalog";
-
-type LawRecord = {
-  name: string;
-  promulgationDate: string | null;
-  enforcementDate: string | null;
-  ministry: string | null;
-  detailId: string | null;
-  detailMst: string | null;
-  link: string;
-  retrievalStatus: "metadata-only" | "full-text";
-  applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
-};
-
-type OrdinanceRecord = {
-  name: string;
-  localGovernment: string | null;
-  detailId: string | null;
-  detailMst: string | null;
-  promulgationDate: string | null;
-  enforcementDate: string | null;
-  link: string;
-  retrievalStatus: "metadata-only" | "full-text";
-  applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
-};
 
 type ParcelReview = {
   inputAddress: string;
@@ -50,6 +25,8 @@ const LAW_QUERIES = [
   "공공주택 특별법",
   "공공주택 특별법 시행령",
   "주차장법",
+  "주차장법 시행령",
+  "주차장법 시행규칙",
   "건축법 시행령",
   "국토의 계획 및 이용에 관한 법률 시행령",
   "주택건설기준 등에 관한 규정",
@@ -75,28 +52,6 @@ const LAND_USE_LAYERS = [
 
 function getHeaderOrEnv(request: NextRequest, header: string, envName: string) {
   return request.headers.get(header)?.trim() || process.env[envName]?.trim() || "";
-}
-
-async function fetchJson(url: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "LH-Plan-Lab/0.7" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    try {
-      return JSON.parse(text);
-    } catch {
-      const summary = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
-      throw new Error(summary ? `JSON이 아닌 응답: ${summary}` : "빈 응답");
-    }
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function assertVWorldResponse(data: Record<string, unknown>) {
@@ -285,123 +240,6 @@ async function getParcelInfo(x: string, y: string, key: string, domain: string) 
   return null;
 }
 
-async function searchLaw(query: string, oc: string): Promise<LawRecord | null> {
-  const params = new URLSearchParams({ OC: oc, target: "law", type: "JSON", query, display: "10" });
-  const data = await fetchJson(`https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`);
-  const root = data?.LawSearch;
-  const resultCode = String(root?.resultCode ?? data?.resultCode ?? "");
-  const resultMessage = String(root?.resultMsg ?? data?.resultMsg ?? "");
-  if (resultCode && resultCode !== "00") throw new Error(`${resultCode} · ${resultMessage || "법령 API 요청이 거부되었습니다."}`);
-  if (!root || typeof root !== "object") throw new Error("국가법령정보센터 응답 형식을 확인할 수 없습니다.");
-  const raw = root.law;
-  const rows = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  const exact = rows.find((row: Record<string, unknown>) => String(row["법령명한글"] ?? "").replaceAll(" ", "") === query.replaceAll(" ", "")) ?? rows[0];
-  if (!exact) return null;
-  const detail = String(exact["법령상세링크"] ?? "");
-  return {
-    name: String(exact["법령명한글"] ?? query),
-    promulgationDate: exact["공포일자"] ? String(exact["공포일자"]) : null,
-    enforcementDate: exact["시행일자"] ? String(exact["시행일자"]) : null,
-    ministry: exact["소관부처명"] ? String(exact["소관부처명"]) : null,
-    detailId: exact["법령ID"] ? String(exact["법령ID"]) : null,
-    detailMst: exact["법령일련번호"] ? String(exact["법령일련번호"]) : null,
-    link: detail.startsWith("http") ? detail : `https://www.law.go.kr${detail}`,
-    retrievalStatus: "metadata-only",
-    applicationStatus: "not-assessed",
-  };
-}
-
-async function fetchNationalLawArticleCandidates(law: LawRecord, oc: string): Promise<OrdinanceArticleCandidate[]> {
-  if (!law.detailId && !law.detailMst) return [];
-  const params = new URLSearchParams({ OC: oc, target: "law", type: "JSON" });
-  if (law.detailId) params.set("ID", law.detailId);
-  else if (law.detailMst) params.set("MST", law.detailMst);
-  const data = await fetchJson(`https://www.law.go.kr/DRF/lawService.do?${params.toString()}`);
-  if (data?.resultCode && String(data.resultCode) !== "00") throw new Error(String(data.resultMsg ?? "법령 본문 조회 실패"));
-  return extractOrdinanceArticles(data, law.name, law.link);
-}
-
-async function searchOrdinance(query: string, oc: string, jurisdiction: string): Promise<OrdinanceRecord | null> {
-  const params = new URLSearchParams({ OC: oc, target: "ordin", type: "JSON", query, display: "10" });
-  const data = await fetchJson(`https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`);
-  const root = data?.OrdinSearch ?? data?.LawSearch;
-  const resultCode = String(root?.resultCode ?? data?.resultCode ?? "");
-  const resultMessage = String(root?.resultMsg ?? data?.resultMsg ?? "");
-  if (resultCode && resultCode !== "00") throw new Error(`${resultCode} · ${resultMessage || "자치법규 API 요청이 거부되었습니다."}`);
-  if (!root || typeof root !== "object") throw new Error("국가법령정보센터 자치법규 응답 형식을 확인할 수 없습니다.");
-  const raw = root.ordin ?? root.law;
-  const rows = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  // Do not use the API's first hit: a different municipality's ordinance
-  // can otherwise be presented as the ordinance governing this address.
-  const normalize = (value: unknown) => String(value ?? "").replace(/\s+/g, "");
-  const district = jurisdiction.split(/\s+/).filter(Boolean).at(-1) ?? jurisdiction;
-  const fullScope = normalize(jurisdiction);
-  const subject = query.includes("주차장") ? "주차장" : query.includes("도시계획") ? "도시계획" :
-    query.includes("경관") ? "경관" : "건축";
-  // The Law Information API indexes the local law by '의정부시 ...', not
-  // '경기도 의정부시 ...'. Match the municipality + subject in the title,
-  // and the entire governing agency when the API supplies it.
-  const matches = rows.filter((candidate: Record<string, unknown>) => {
-    const title = normalize(candidate["자치법규명"] ?? candidate["법령명한글"]);
-    const office = normalize(candidate["지자체기관명"]);
-    const stem=normalize(district);
-    const simple=title.startsWith(fullScope) ? title.slice(fullScope.length) :
-      title.startsWith(stem) ? title.slice(stem.length) : "";
-    // Generic word-prefix search previously confused '남동구 건축물관리자의
-    // 제설 조례' with the Building Ordinance, and '도시계획위원회 운영 조례'
-    // with binding urban planning FAR standards. Only accept actual subjects.
-    const subjectValid=subject==="건축" ? simple==="건축조례" :
-      subject==="경관" ? simple==="경관조례" :
-      subject==="도시계획" ? simple==="도시계획조례" :
-      (simple==="주차장조례" || /^주차장설치및관리(?:운영에관한)?조례$/.test(simple));
-    return subjectValid &&
-      (!office || office === fullScope || office.endsWith(stem));
-  }) as Record<string, unknown>[];
-  const row = matches.find((candidate) =>
-    normalize(candidate["자치법규명"] ?? candidate["법령명한글"]) === normalize(query)
-  ) ?? matches[0];
-  if (!row) return null;
-  const detail = String(row["자치법규상세링크"] ?? row["법령상세링크"] ?? "");
-  return {
-    name: String(row["자치법규명"] ?? row["법령명한글"] ?? query),
-    localGovernment: row["지자체기관명"] ? String(row["지자체기관명"]) : null,
-    detailId: row["자치법규ID"] ? String(row["자치법규ID"]) : null,
-    detailMst: row["자치법규일련번호"] ? String(row["자치법규일련번호"]) : null,
-    promulgationDate: row["공포일자"] ? String(row["공포일자"]) : null,
-    enforcementDate: row["시행일자"] ? String(row["시행일자"]) : null,
-    link: detail.startsWith("http") ? detail : `https://www.law.go.kr${detail}`,
-    retrievalStatus: "metadata-only",
-    applicationStatus: "not-assessed",
-  };
-}
-
-async function fetchOrdinanceArticleCandidates(ordinance: OrdinanceRecord, oc: string): Promise<OrdinanceArticleCandidate[]> {
-  if (!ordinance.detailId && !ordinance.detailMst) return [];
-  const params = new URLSearchParams({ OC: oc, target: "ordin", type: "JSON" });
-  if (ordinance.detailId) params.set("ID", ordinance.detailId);
-  else if (ordinance.detailMst) params.set("MST", ordinance.detailMst);
-  const data = await fetchJson(`https://www.law.go.kr/DRF/lawService.do?${params.toString()}`);
-  if (data?.resultCode && String(data.resultCode) !== "00") {
-    throw new Error(String(data.resultMsg ?? "자치법규 본문 API 오류"));
-  }
-  return extractOrdinanceArticles(data, ordinance.name, ordinance.link);
-}
-
-function lawGovernmentFromAddress(address: string) {
-  const parts = localGovernmentFromAddress(address).split(/\s+/).filter(Boolean);
-  // Ordinances are normally enacted by Changwon-si, Suwon-si etc.,
-  // not their Seongsan-gu / Yeongtong-gu subdistricts.
-  if (parts.length >= 3 && parts[1]?.endsWith("시") && parts[2]?.endsWith("구"))
-    return parts.slice(0,2).join(" ");
-  return parts.join(" ");
-}
-
-function localGovernmentFromAddress(address: string) {
-  const parts = address.split(/\s+/).filter(Boolean);
-  if (parts[0]?.includes("세종")) return parts[0];
-  return parts.slice(0, parts[1]?.endsWith("시") && parts[2]?.endsWith("구") ? 3 : 2).join(" ");
-}
-
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as { address?: string; parcelAddresses?: string[]; businessMode?: string; regionalOffice?: string; lhSupplyType?: string } | null;
   const address = body?.address?.trim();
@@ -409,7 +247,6 @@ export async function POST(request: NextRequest) {
 
   const vworldKey = getHeaderOrEnv(request, "x-vworld-api-key", "VWORLD_API_KEY");
   const lawOc = getHeaderOrEnv(request, "x-law-api-oc", "LAW_OPEN_API_OC");
-  const preset = findSitePreset(address);
   const missing: string[] = [];
   const errors: string[] = [];
   if (!vworldKey) missing.push("VWORLD_API_KEY");
@@ -417,79 +254,42 @@ export async function POST(request: NextRequest) {
 
   let location: Awaited<ReturnType<typeof geocode>> | null = null;
   let parcel: Awaited<ReturnType<typeof getParcelInfo>> = null;
-  let landUse = preset ? [{
-    category: "용도지역",
-    name: preset.zone,
-    code: "OFFICIAL-DOCUMENT",
-    source: preset.source,
-    status: "verified" as const,
-  }] : [];
+  let landUse: ParcelReview["landUse"] = [];
   if (vworldKey) {
     try {
-      location = await geocode(preset?.address ?? address, vworldKey, request.nextUrl.origin);
+      location = await geocode(address, vworldKey, request.nextUrl.origin);
       const [vworldLandUse, vworldParcel] = await Promise.all([
         getLandUse(location.x, location.y, vworldKey, request.nextUrl.origin),
         getParcelInfo(location.x, location.y, vworldKey, request.nextUrl.origin),
       ]);
       parcel = vworldParcel;
       // The live zoning layer takes precedence over a cached preset; never mix historically conflicting zone names.
-      landUse = vworldLandUse.items.length ? vworldLandUse.items : landUse;
+      landUse = vworldLandUse.items;
       if (vworldLandUse.errors.length) errors.push(`VWorld 용도지역 일부 조회 실패: ${vworldLandUse.errors.join(" / ")}`);
-      if (vworldLandUse.items.length === 0 && !preset) errors.push("VWorld 좌표는 확인했지만 해당 위치의 용도지역 응답이 없습니다.");
+      if (vworldLandUse.items.length === 0) errors.push("VWorld 좌표는 확인했지만 해당 위치의 용도지역 응답이 없습니다.");
     } catch (error) {
       errors.push(`VWorld 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
     }
   }
 
-  if (preset) parcel = {
-    area: preset.siteArea,
-    landCategory: preset.landCategory,
-    pnu: parcel?.pnu ?? null,
-    source: preset.source,
-    approximate: false,
-  };
-
+  // "독산동 151-10"처럼 시·도를 생략한 입력도 VWorld가 돌려준 전체 지번주소로 관할 지자체·LH 본부를 판정한다.
+  const fullAddress = location?.parcelAddress && location.parcelAddress.trim().split(/\s+/).length >= 3 ? location.parcelAddress.trim() : address;
   const parcels: ParcelReview[] = [{ inputAddress: address, location, parcel, landUse, errors: [] }];
   const rawAdditional = Array.isArray(body?.parcelAddresses) ? body.parcelAddresses : [];
   if (rawAdditional.some(item => typeof item !== "string")) return NextResponse.json({error:"합필 대상 주소는 문자열 목록이어야 합니다."},{status:400});
-  const additionalAddresses = normalizeAssemblyAddresses(address, rawAdditional);
-  const singleMasok = isMasok555(address) && additionalAddresses.length === 0;
+  const additionalAddresses = normalizeAssemblyAddresses(fullAddress, rawAdditional);
   if (additionalAddresses.length > MAX_EXTRA_PARCELS) return NextResponse.json({error:`합필은 대표 필지를 포함해 최대 ${MAX_EXTRA_PARCELS + 1}필지까지 검토할 수 있습니다. 현재 추가 필지 ${additionalAddresses.length}개입니다.`},{status:400});
   const inspectAdditionalParcel = async (parcelAddress: string): Promise<ParcelReview> => {
-    const parcelPreset = findSitePreset(parcelAddress);
-    let additionalLandUse: ParcelReview["landUse"] = parcelPreset ? [{
-      category: "용도지역",
-      name: parcelPreset.zone,
-      code: "OFFICIAL-DOCUMENT",
-      source: parcelPreset.source,
-      status: "verified",
-    }] : [];
-    let additionalParcel: ParcelReview["parcel"] = parcelPreset ? {
-      area: parcelPreset.siteArea,
-      landCategory: parcelPreset.landCategory,
-      pnu: null,
-      source: parcelPreset.source,
-      approximate: false,
-    } : null;
-    if (!vworldKey) return {
-      inputAddress: parcelAddress,
-      location: null,
-      parcel: additionalParcel,
-      landUse: additionalLandUse,
-      errors: parcelPreset ? [] : ["VWorld API 키가 없어 필지를 조회하지 못했습니다."],
-    };
+    if (!vworldKey) return { inputAddress: parcelAddress, location: null, parcel: null, landUse: [], errors: ["VWorld API 키가 없어 필지를 조회하지 못했습니다."] };
     try {
-      const additionalLocation = await geocode(parcelPreset?.address ?? parcelAddress, vworldKey, request.nextUrl.origin);
+      const additionalLocation = await geocode(parcelAddress, vworldKey, request.nextUrl.origin);
       const [additionalUse, cadastral] = await Promise.all([
         getLandUse(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
         getParcelInfo(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
       ]);
-      additionalLandUse = [...additionalUse.items, ...additionalLandUse].filter((item, index, all) => all.findIndex((candidate) => `${candidate.category}-${candidate.name}` === `${item.category}-${item.name}`) === index);
-      if (!parcelPreset && cadastral) additionalParcel = cadastral;
-      else if (additionalParcel && cadastral?.pnu) additionalParcel.pnu = cadastral.pnu;
-      return { inputAddress: parcelAddress, location: additionalLocation, parcel: additionalParcel, landUse: additionalLandUse, errors: additionalUse.errors };
+      return { inputAddress: parcelAddress, location: additionalLocation, parcel: cadastral, landUse: additionalUse.items, errors: additionalUse.errors };
     } catch (error) {
-      return { inputAddress: parcelAddress, location: null, parcel: additionalParcel, landUse: additionalLandUse, errors: [error instanceof Error ? error.message : "필지 조회 실패"] };
+      return { inputAddress: parcelAddress, location: null, parcel: null, landUse: [], errors: [error instanceof Error ? error.message : "필지 조회 실패"] };
     }
   };
   // Limit concurrent VWorld calls; a 20-parcel request could otherwise fan out
@@ -511,7 +311,7 @@ export async function POST(request: NextRequest) {
         seenPnus.add(pnu);
       }
     }
-    const mainMunicipality = localGovernmentFromAddress(preset?.address ?? address);
+    const mainMunicipality = localGovernmentFromAddress(fullAddress);
     const mixedJurisdiction = parcels.some(item => localGovernmentFromAddress(item.location?.parcelAddress ?? item.location?.address ?? item.inputAddress) !== mainMunicipality);
     if (duplicatePnu) errors.push("합필 대상 필지 중 동일 PNU가 중복되므로 면적을 합산할 수 없습니다.");
     if (mixedJurisdiction) errors.push("서로 다른 시·군·구 필지가 포함되어 관할 지자체·LH 인수기준을 일괄 적용할 수 없습니다.");
@@ -533,28 +333,15 @@ export async function POST(request: NextRequest) {
 
   const zoneNames = [...new Set(landUse.filter((item) => item.category === "용도지역").map((item) => item.name))];
   const mixedUseZones = zoneNames.length > 1;
-  // A map-confirmed C1 result is proved for ONE lot only. Merging another
-  // parcel must never transfer the C1 residential prohibition or 450% cap
-  // onto unverified adjoining land.
-  const isUiwang = isUiwangChopyeong6301(address) && additionalAddresses.length === 0;
-  // C1 block placement was user-confirmed by map overlay. Apply C1's general
-  // commercial block envelope (70/450/7 floors), NOT an unverified C1-2 sublot.
-  const isUiwangC1 = isUiwang;
-  const planningStandards = isUiwangC1
-    ? {
-      zone: "준주거지역 · C1 상업시설용지(위치 사용자 지도 대조)",
-      buildingCoverageRatio: 70, far: 450,
-      source: "사용자 2026 결정도 위치 대조 C1 블록 확인 + 의왕초평 2026 지구단위계획 표Ⅱ-4-2; C1-2 세부획지는 미확정",
-    }
-    : mixedUseZones ? null : findZoningStandard(zoneNames);
-  const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획")) || (preset ? preset.districtPlan : null);
-  const localGovernment = lawGovernmentFromAddress(preset?.address ?? address);
+  const planningStandards = mixedUseZones ? null : findZoningStandard(zoneNames);
+  const districtPlan = landUse.some((item) => item.code === "LT_C_UPISUQ161" || item.name.includes("지구단위계획"));
+  const localGovernment = lawGovernmentFromAddress(fullAddress);
   const districtForLh = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? "";
   const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh, localGovernment)
     .then((notice) => ({ notice, error: null as string | null }))
     .catch((error: unknown) => ({ notice: null, error: error instanceof Error ? error.message : "LH 공고 조회 실패" }));
   const webSearchPromise = searchOfficialSources({
-    address: preset?.address ?? address,
+    address: fullAddress,
     localGovernment,
     businessMode: body?.businessMode,
     regionalOffice: body?.regionalOffice,
@@ -598,63 +385,58 @@ export async function POST(request: NextRequest) {
     if(!ordinances.length && !ordinanceFailures.length)
       errors.push("관할 도시계획·건축·주차장 조례를 찾지 못해 용적률·건폐율 확정을 보류했습니다.");
   }
-  // Read two core national parking laws; never equate a search hit with applicability.
+  // 규모검토 필요 조문 자동 수집: 국가법령 핵심 조항 + 관할 조례 주제별 조문 (원문 그대로, 적용 판정 없음)
+  const collected: CollectedArticle[] = [];
   let nationalArticleCandidates: OrdinanceArticleCandidate[] = [];
   if (lawOc) {
-    const targets = laws.filter((item) => ["공공주택 특별법 시행령", "주택건설기준 등에 관한 규정"].includes(item.name));
-    const results = await Promise.allSettled(targets.map((item) => fetchNationalLawArticleCandidates(item, lawOc)));
-    nationalArticleCandidates = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    const targets = laws.filter((item) => NATIONAL_LAWS.includes(item.name) || ["공공주택 특별법 시행령", "주택건설기준 등에 관한 규정"].includes(item.name));
+    const results = await Promise.allSettled(targets.map((item) => fetchLawPayload("law", item, lawOc)));
+    results.forEach((result, index) => {
+      if (result.status !== "fulfilled" || !result.value) return;
+      const law = targets[index];
+      law.retrievalStatus = "full-text";
+      if (["공공주택 특별법 시행령", "주택건설기준 등에 관한 규정"].includes(law.name))
+        nationalArticleCandidates.push(...extractOrdinanceArticles(result.value, law.name, law.link));
+      for (const target of NATIONAL_ARTICLES.filter((a) => a.law === law.name)) {
+        const found = findArticleByNumber(result.value, target.no, target.branch);
+        if (found) collected.push({ topic: target.label, rowId: target.rowId, title: law.name, url: law.link, effectiveDate: law.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "law" });
+      }
+    });
     const failed = results.filter((result) => result.status === "rejected");
     if (failed.length) errors.push(`국가법령 본문 조회 ${failed.length}건 실패`);
-    results.forEach((result, index) => {
-      if (result.status === "fulfilled" && result.value.length > 0) targets[index].retrievalStatus = "full-text";
-    });
+    nationalArticleCandidates = nationalArticleCandidates.slice(0, 120);
   }
   // Reading the official full text is a separate step from finding its title.
   // Keyword matches remain unverified candidates; applicability is NOT inferred.
   let ordinanceArticleCandidates: OrdinanceArticleCandidate[] = [];
   if (lawOc && ordinances.length) {
-    const detailResults = await Promise.allSettled(ordinances.map((ordinance) => fetchOrdinanceArticleCandidates(ordinance, lawOc)));
+    const detailResults = await Promise.allSettled(ordinances.map((ordinance) => fetchLawPayload("ordin", ordinance, lawOc)));
     const detailErrors = detailResults.flatMap((result) => result.status === "rejected"
       ? [result.reason instanceof Error ? result.reason.message : "자치법규 원문 요청 오류"]
       : []);
     if (detailErrors.length) errors.push(`자치법규 본문 조회 ${detailErrors.length}건 실패: ${[...new Set(detailErrors)].join(" / ")}`);
-    ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    detailResults.forEach((result, index) => {
+      if (result.status !== "fulfilled" || !result.value) return;
+      const ordinance = ordinances[index];
+      ordinance.retrievalStatus = "full-text";
+      ordinanceArticleCandidates.push(...extractOrdinanceArticles(result.value, ordinance.name, ordinance.link));
+      const subject = ordinance.name.includes("주차장") ? "주차장" : ordinance.name.includes("도시계획") ? "도시계획" : ordinance.name.replace(/\s+/g, "").endsWith("건축조례") ? "건축" : null;
+      for (const topic of ORDINANCE_TOPICS.filter((t) => t.ordinance === subject)) {
+        for (const found of findArticlesByKeyword(result.value, topic.terms, 2)) {
+          if (collected.some((c) => c.title === ordinance.name && c.article === found.article && c.rowId === topic.rowId)) continue;
+          collected.push({ topic: topic.label, rowId: topic.rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "ordinance" });
+        }
+      }
+    });
   }
   const webSearch = await webSearchPromise;
-  const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, preset?.address ?? address);
-  // Replace an irrelevant old local-government search hit with the exact 2026
-  // official LH district guideline already examined from the source PDF.
-  // Source-text verification is NOT parcel-to-block verification.
-  const officialDocuments = isUiwang ? {
-    ...discoveredDocuments,
-    documents: [
-      {
-        kind: "district-plan" as const,
-        title: UIWANG_6301.districtGuidelineTitle,
-        sourceUrl: UIWANG_6301.districtGuidelineUrl,
-        landingPage: UIWANG_6301.landSupply2026Url,
-        status: "analyzed" as const,
-        format: "pdf" as const,
-        textLength: 74857,
-        pageCount: 113,
-        preview: "사용자 지도·2026 결정도 위치 대조로 630-1의 C1 상업시설용지 블록을 확인. 해당 블록 공통 시행지침 p.38 표Ⅱ-4-2 건폐율70%, 용적률450%, 최고7층; 공동주택 미열거, 오피스텔 명시 제외. C1-2 세부획지·2023 예정지번 401-2 대응은 별도 미확정.",
-        candidates: [
-          {topic: "상업시설용지 C1/C2 용도 제한", quote: "제Ⅱ편 제4장 제2조 표Ⅱ-4-2 · 오피스텔 제외, 공동주택 허용용도 미열거", value: null, unit: null, verified: false as const},
-          {topic: "상업시설용지 C1/C2 용적률", quote: "표Ⅱ-4-2 C1/C2 건폐율 70%, 용적률 450%, 7층", value: 450, unit: "%", verified: false as const},
-        ],
-        warnings: ["630-1의 C1 블록 위치는 사용자가 지도와 지구단위계획 도면을 대조하여 확인했습니다. 본 API의 공식 지적도 중첩검증을 뜻하지 않으며 C1-2 세부획지·2023 예정지번 401-2 대응은 별도 미확정입니다."],
-        siteMatchVerified: false as const,
-        applicable: false as const,
-      },
-      ...discoveredDocuments.documents.filter(item => item.kind !== "district-plan"),
-    ],
-  } : discoveredDocuments;
+  const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, fullAddress);
+  const officialDocuments = discoveredDocuments;
   const lhNoticeResult = await lhNoticePromise;
   // The live LH board search can miss closed South notices or an abbreviated
   // municipality list. Fall back only to a municipality-matched, exact official
   // PDF and ZIP in the verified archival catalog. Never inherit detailed rules.
-  const regionalArchivedNotice = findLhPurchaseNotice(preset?.address ?? address);
+  const regionalArchivedNotice = findLhPurchaseNotice(fullAddress);
   const archivedNoticeOpen = regionalArchivedNotice ? noticeIsOpen(regionalArchivedNotice, koreaLocalDay()) : false;
   const archivalNotice = regionalArchivedNotice ? {
     id: new URL(regionalArchivedNotice.noticeUrl).searchParams.get("pchPanSn") ?? regionalArchivedNotice.id,
@@ -677,24 +459,9 @@ export async function POST(request: NextRequest) {
     ],
   } : null;
   const lhNotice = lhNoticeResult.notice ?? archivalNotice;
-  // The official municipality ordinance is more restrictive than the
-  // national zoning ceiling. Prefer its extracted BCR/FAR only as a clearly
-  // labelled city-wide screening maximum; parcel plans/mixed housing still
-  // require a separate applicability review.
-  const ordinanceMaxima = !mixedUseZones && zoneNames.length === 1
-    ? getOrdinanceZoneStandards({ ordinanceArticleCandidates }, zoneNames[0]) : null;
-  const unverifiedUiwangAssembly = isUiwangChopyeong6301(address) && additionalAddresses.length > 0;
-  const resolvedPlanningStandards = singleMasok ? {
-    zone: MASOK_555.zone,
-    buildingCoverageRatio: MASOK_555.plan.bcrPercent,
-    far: MASOK_555.plan.farPercent,
-    source: "마석택지지구 단독2-A14 · 남양주시 고시 제2025-314호 결정조서 p.43 및 시행지침 제36조 (50/150/3층; 115세대 조건부)",
-  } : unverifiedUiwangAssembly ? null : isUiwang ? planningStandards : ordinanceMaxima ? {
-    zone: zoneNames[0],
-    buildingCoverageRatio: ordinanceMaxima.bcr,
-    far: ordinanceMaxima.far,
-    source: localGovernment + " 도시계획조례 원문 용도지역 일반기준 (지구단위계획·용도별 주거복합 별표·완화 심의는 미확정)",
-  } : planningStandards;
+  // 국토계획법 시행령 일반 상한은 참고값이다. 필지 적용 수치는 클라이언트 법규검토표에서
+  // 조례 조문 추출·검증 근거 라이브러리·검토자 확인을 거쳐서만 확정된다.
+  const resolvedPlanningStandards = planningStandards;
   if (lhNoticeResult.error) errors.push("LH 지역별 공식 공고 조사: " + lhNoticeResult.error);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
@@ -716,28 +483,23 @@ export async function POST(request: NextRequest) {
     ordinances,
     ordinanceArticleCandidates,
     nationalArticleCandidates,
+    collected,
     // C1 use restriction is sourced to the 2026 LH guideline and user-
     // confirmed C1 map placement. It does NOT assert an official C1-2 sublot.
-    ruleFindings: singleMasok ? getMasok555RuleFindings() : isUiwang ? getUiwangC1UseFindings() : [],
+    ruleFindings: [],
     webSearch,
     officialDocuments,
     lhNotice,
     missing,
+    deployEnv: process.env.VERCEL_ENV ?? null,
     errors,
     unresolved: [
-      ...(singleMasok ? MASOK_555.unresolved : []),
-      ordinances.length ? (isUiwang ? "C1 허용용도는 사용자 지도확인 + 2026 원문 적용. 허가용 공식 지적도 중첩확인 및 조례 별표 적용관계 별도 점검" : "관할 조례 일반 용도지역 수치 확인 여부와 별개로 대상 필지 지구단위계획·주거복합 별표·특례 승인 검토 필요") : "관할 지자체 건축·주차장 조례 원문",
-      ...(additionalAddresses.length && isUiwangChopyeong6301(address) ? ["초평동 630-1 C1 확인은 단일 필지에 한정. 추가 필지가 포함된 합필은 획지별 허용용도·용적률을 별도로 검증해야 합니다."] : []),
-      ...(isUiwang ? UIWANG_6301.warnings : []),
+      ordinances.length ? "관할 조례 일반 수치와 별개로 지구단위계획·주거복합 별표·특례 적용 여부 검토 필요" : "관할 지자체 건축·주차장 조례 원문",
       ...(mixedUseZones ? ["복수 필지 혼합 용도지역별 적용면적 및 규제 분리"] : []),
-      singleMasok
-        ? "마석 단독2-A14 지구단위계획 결정조서(p.43~44)와 시행지침 제36조 원문 확보; 기존 조성승인·경과규정과 115세대 전환은 인허가 확인 필요"
-        : officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
+      officialDocuments.documents.some((item) => item.kind === "district-plan" && item.status === "analyzed")
         ? "지구단위계획 관련 문서를 추출했지만 해당 필지·획지별 결정도서와 변경고시 검증 필요"
         : "지구단위계획 결정도서 및 시행지침 원문 확보 필요",
-      singleMasok
-        ? "경기북부 26-4차 LH 공고 p.1·3·9·26 확보; 주차 및 인수 적합성·건축허용 여부는 선택 주택유형별 별도 심사"
-        : lhNotice?.rules || officialDocuments.documents.some((item) => item.kind === "lh-notice" && item.status === "analyzed")
+      lhNotice?.rules || officialDocuments.documents.some((item) => item.kind === "lh-notice" && item.status === "analyzed")
         ? "LH 관련 문서를 추출했지만 해당 지역본부·공급유형·공고 연도와 인수기준 대조 필요"
         : "해당 연도 LH 지역본부 매입공고 원문 확보 필요",
       "일조·인동거리·소방활동공간 배치 검토",

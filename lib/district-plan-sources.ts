@@ -4,7 +4,6 @@
  * parcel's block/allowed uses merely from a district name or street.
  */
 import { findMetroOrdinanceSource, METRO_ORDINANCE_SOURCES, type MetroRegion } from "./metro-ordinance-catalog";
-import { UIWANG_6301, isUiwangChopyeong6301 } from "./uiwang-chopyeong-6301";
 
 export type PlanEvidenceLevel="official-notice" | "official-notice-and-guidance";
 export type PlanMatchLevel="user-map-confirmed-block" | "district-name-candidate" | "city-only-source";
@@ -31,9 +30,9 @@ export const DISTRICT_PLAN_SOURCES:ReadonlyArray<DistrictPlanSource>=[
     applicabilityRule:"exact-user-map",checkedAt:"2026-11-01",
     documents:[
       {kind:"공식 지형도면 고시",url:"https://www.eum.go.kr/web/gs/gv/gvGosiDet.jsp?seq=637163",note:"2026-308호 고시 첨부 총괄·01·02 지형도면"},
-      {kind:"건축물 등에 관한 결정도",url:UIWANG_6301.controlPlanUrl,note:"2026 LH 토지공급 안내 첨부 06; 블록 번호 확인용"},
+      {kind:"건축물 등에 관한 결정도",url:"https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68944315",note:"2026 LH 토지공급 안내 첨부 06; 블록 번호 확인용"},
       {kind:"획지 결정도",url:"https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68944318",note:"2026 LH 토지공급 안내 첨부 07; 630-1과 C1-2 세부 필지번호 공식 동일성은 미확보"},
-      {kind:"지구단위계획 시행지침",url:UIWANG_6301.districtGuidelineUrl,note:"2026 LH PDF 113쪽; C1 상업시설용지 허용용도 표Ⅱ-4-2"},
+      {kind:"지구단위계획 시행지침",url:"https://apply.lh.or.kr/lhapply/lhFile.do?fileid=68944321",note:"2026 LH PDF 113쪽; C1 상업시설용지 허용용도 표Ⅱ-4-2"},
       {kind:"LH 상업시설용지 공급자료",url:"https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancInfo.do?aisTpCd=01&ccrCnntSysDsCd=01&mi=1062&panId=BN-0008074&uppAisTpCd=01",note:"부동산 공급 관련 자료, 토지이용·획지 지도의 인허가 최종 증거는 아님"},
     ],
     warnings:["630-1의 C1 블록 위치는 사용자가 지도를 대조해 확인한 실무근거이고 공식 지적도 중첩 결과는 아님.","세부 획지 C1-2와 기존 예정지번 401-2→현재 630-1의 이력은 확정하지 않음.","C1 공통 주거불허와 70/450/7층을 초평동 전체 또는 다른 주소에 적용하지 말 것."],
@@ -151,7 +150,7 @@ export function findDistrictPlanEvidence(address:string, opts:{includeCitySource
   const matches:DistrictPlanEvidenceMatch[]=[];
   for(const p of DISTRICT_PLAN_SOURCES){
     if(p.city!==city)continue;
-    if(p.id==="uiwang-chopyeong-2026-308" && isUiwangChopyeong6301(address)){
+    if(p.id==="uiwang-chopyeong-2026-308" && /초평동630-1$/.test(a)){
       matches.push({plan:p,level:"user-map-confirmed-block",message:"초평동 630-1 C1 블록 지도 위치는 사용자 대조 확인. 세부 획지 및 법정 지적 중첩 별도.",automaticallyApply:false});
     } else if(p.id==="bucheon-eunha-2026-107" && (a.includes("은하마을") || /중동1036(?:-|$|번지|일원)/.test(a))){
       matches.push({plan:p,level:"district-name-candidate",message:"은하마을·중동1036 지명 일치만 확인. 정확한 지형도면 경계 포함 미검증.",automaticallyApply:false});

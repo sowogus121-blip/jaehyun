@@ -4,8 +4,6 @@ import {
   findMetroAnnexRecords, findLhPurchaseNotice, findLhGuidelines,
   matchLhRegion, noticeIsOpen,
 } from "../lib/metro-annex-lh-catalog";
-import {DEFAULT_INPUT} from "../lib/calculator";
-import {buildLegalReviewReport} from "../lib/legal-review-report";
 
 describe("metropolitan ordinance annex source index",()=>{
   it("covers at least 4 targeted annex categories for every currently tracked municipality",()=>{
@@ -80,17 +78,5 @@ describe("LH 2026 region-specific purchase notices and guide archive",()=>{
     const inch=findLhGuidelines("인천광역시 남동구 1");
     expect(inch.find(x=>x.id==="lh-incheon-minimum20")?.detail).toContain("20호");
     expect(LH_GUIDELINE_EVIDENCE.every(x=>x.automaticApplication===false)).toBe(true);
-  });
-  it("links annex and correct LH region in the user's parcel legal review, with no approved FAR claim",()=>{
-    const legal=buildLegalReviewReport({...DEFAULT_INPUT,address:"경기도 파주시 파주읍 봉암리 1343-2"},null);
-    expect(legal.rows.find(x=>x.id==="annex-paju-building-annex3")?.status).toBe("conditional");
-    expect(legal.rows.find(x=>x.id==="annex-파주시-parking-general")?.status).toBe("unknown");
-    expect(legal.rows.find(x=>x.id==="lh-regional-notice-north-4th-2026")?.detail).toContain("경기북부");
-    expect(legal.rows.find(x=>x.id==="lh-regional-guide-north-4th-2026")?.sourceUrl).toContain("68899893");
-    expect(legal.rows.some(x=>x.id==="lh-regional-notice-south-3rd-2026")).toBe(false);
-    expect(legal.rows.find(x=>x.id==="annex-파주시-parking-general")?.note).toContain("자동 수치");
-    const bucheon=buildLegalReviewReport({...DEFAULT_INPUT,address:"경기도 부천시 중동 101"},null);
-    expect(bucheon.rows.find(x=>x.id==="lh-regional-minimum-incheon-3rd-2026")?.detail).toContain("20호");
-    expect(bucheon.rows.find(x=>x.id==="lh-regional-notice-north-4th-2026")).toBeUndefined();
   });
 });

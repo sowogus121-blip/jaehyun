@@ -1,4 +1,5 @@
 import type { LhNotice } from "./server/lh-notice";
+import type { CollectedArticle } from "./review/collect-topics";
 export type BusinessMode = "direct" | "purchase" | "other" | "undecided";
 export type EvidenceStatus = "verified" | "user" | "unknown" | "review";
 export type ParkingMode = "self" | "mechanical";
@@ -283,8 +284,11 @@ export interface SiteReviewResult {
     topic: string;
     article: string;
     excerpt: string;
+    fullText?: string;
     verified: false;
   }>;
+  /** 규모검토 필요 조문 자동 수집 결과 (원문, 적용 판정 전) */
+  collected?: CollectedArticle[];
   ruleFindings: Array<{
     id: string;
     topic: string;
@@ -341,6 +345,8 @@ export interface SiteReviewResult {
     }>;
   };
   missing: string[];
+  /** Vercel 배포 환경 (production / preview / development) */
+  deployEnv?: string | null;
   errors: string[];
   unresolved: string[];
 }

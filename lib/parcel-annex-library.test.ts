@@ -11,7 +11,7 @@ describe("parcel annex and LH guideline reference library", () => {
     expect(doksan.some(s => s.id === "doksan-industrial-annex17")).toBe(true);
     expect(osong.some(s => s.id === "doksan-industrial-annex17")).toBe(false);
     expect(doksan.some(s => s.id === "osong-city-parking-annex7")).toBe(false);
-    expect(getParcelAnnexSources("서울특별시 금천구 독산동 151-11")).toHaveLength(0);
+    expect(getParcelAnnexSources("서울특별시 금천구 가산동 1").every(s => s.scope === "공통")).toBe(true);
   });
   it("links to the actual 2026 region-specific LH announcements, not the old Seoul sixth notice", () => {
     const osong = getParcelAnnexSources("오송읍 봉산리 992");

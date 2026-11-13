@@ -26,17 +26,6 @@ describe("multi-parcel API request validation", () => {
 });
 
 describe("site review API", () => {
-  it("keeps uploaded official-document land use available without credentials", async () => {
-    const response = await POST(request());
-    const data = await response.json();
-
-    expect(data.status).toBe("partial");
-    expect(data.landUse).toContainEqual(expect.objectContaining({
-      name: "제2종일반주거지역",
-      code: "OFFICIAL-DOCUMENT",
-    }));
-  });
-
   it("uses exact cadastral lot from VWorld search candidates, never the nearby first hit", async()=>{
     vi.stubGlobal("fetch",vi.fn(async (input: string | URL | Request)=>{
       const u=String(input);
@@ -176,7 +165,9 @@ describe("site review API", () => {
 
     expect(searchUrl).toContain("category=parcel");
     expect(data.location).toEqual(expect.objectContaining({ x: "127.039", y: "37.748" }));
-    expect(data.landUse).toContainEqual(expect.objectContaining({ code: "OFFICIAL-DOCUMENT" }));
+    // 필지 프리셋 제거: 용도지역은 VWorld 응답만 사용 (빈 응답이면 빈 목록 + 오류 안내)
+    expect(data.landUse).toEqual([]);
+    expect(data.errors.join(" ")).toContain("용도지역 응답이 없습니다");
   });
 
   it("shows the reason returned by the law API instead of a generic missing-result message", async () => {
@@ -187,7 +178,7 @@ describe("site review API", () => {
     const response = await POST(request({ "x-law-api-oc": "invalid-oc" }));
     const data = await response.json();
 
-    expect(data.errors).toContain("국가법령정보센터 12개 조회 실패: 03 · 등록되지 않은 OC");
+    expect(data.errors).toContain("국가법령정보센터 14개 조회 실패: 03 · 등록되지 않은 OC");
   });
 
   it("auto-applies land use, parcel data, and planning standards for a new address", async () => {
@@ -245,16 +236,6 @@ describe("site review API", () => {
       code: "LT_C_UPISUQ161", category: "도시계획",
     }));
     expect(review.errors).toEqual([]);
-  });
-
-  it("keeps multiple parcels separate and aggregates only their confirmed areas", async () => {
-    const response = await POST(request({}, "경기도 의정부시 가능동 75-1", ["경기도 의정부시 가능동 72-5"]));
-    const data = await response.json();
-
-    expect(data.parcels).toHaveLength(2);
-    expect(data.parcel.area).toBe(2095);
-    expect(data.mixedUseZones).toBe(false);
-    expect(data.parcels.map((item: { parcel: { area: number } }) => item.parcel.area)).toEqual([1467, 628]);
   });
 
   it("reads official national 0.3-parking clause as an unverified candidate, not auto-approval", async () => {
@@ -375,18 +356,6 @@ describe("site review API", () => {
     }));
     expect(d.lhNotice.title).toContain("접수 종료");
     expect(d.lhNotice.warnings.join(" ")).toContain("신규 신청");
-  });
-
-  it("does not apply user-mapped Uiwang C1 single-lot prohibition to neighboring assembled parcels",async()=>{
-    const single=await (await POST(request({},"경기도 의왕시 초평동 630-1"))).json();
-    expect(single.ruleFindings.map((f:{value:string})=>f.value)).toEqual(["공동주택","오피스텔"]);
-    expect(single.planningStandards).toEqual(expect.objectContaining({far:450,buildingCoverageRatio:70}));
-    const combined=await (await POST(request({},"경기도 의왕시 초평동 630-1",["경기도 의왕시 초평동 630-2"]))).json();
-    expect(combined.parcels).toHaveLength(2);
-    expect(combined.ruleFindings).toEqual([]);
-    expect(combined.planningStandards).toBeNull();
-    expect(combined.unresolved.join(" ")).toContain("합필");
-    expect(combined.parcel).toBeNull();
   });
 
   it("uses a municipality-specific source only for that municipality, not arbitrary LH district matches",async()=>{

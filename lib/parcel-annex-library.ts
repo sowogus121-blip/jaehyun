@@ -3,7 +3,6 @@
  * Reference availability != approval, annex content extracted, or parcel applicability.
  * No restricted appraisals, leases, ownership, or user uploads in this public module.
  */
-import { getParcelLegalGuide } from "./parcel-legal-guides";
 
 export type AnnexScope = "공통" | "오송" | "독산";
 export type AnnexKind = "별표" | "법령" | "조례" | "고시" | "지구단위 지침" | "결정도" | "LH 공고" | "LH 첨부파일" | "LH 가이드라인" | "인허가";
@@ -50,8 +49,8 @@ export const PARCEL_ANNEX_SOURCES: readonly ParcelAnnexSource[] = [
 ];
 
 export function getParcelAnnexSources(address: string): ParcelAnnexSource[] {
-  const parcel = getParcelLegalGuide(address);
-  if (!parcel) return [];
-  const scope: AnnexScope = parcel.id === "osong-bongsan-992" ? "오송" : "독산";
+  const key = (address || "").replace(/[\s-]/g, "");
+  const scope: AnnexScope | null = key.includes("오송읍") ? "오송" : key.includes("독산동") ? "독산" : null;
+  if (!scope) return PARCEL_ANNEX_SOURCES.filter(s => s.scope === "공통");
   return PARCEL_ANNEX_SOURCES.filter(s => s.scope === "공통" || s.scope === scope);
 }
