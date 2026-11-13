@@ -83,3 +83,25 @@ describe("대상지 입력 시 규모검토 필요 조문 자동 수집", () => 
     expect(items.find((i) => i.label.startsWith("기계식주차"))?.state).not.toBe("missing");
   });
 });
+
+import { keepPreviousLawData } from "../lib/project/store";
+import { fetchJson } from "../lib/server/law-api";
+describe("국가법령정보센터 점검 대응", () => {
+  it("점검 HTML 페이지를 짧은 점검 안내로 바꾼다", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("<html><style>html,body{width:100%}</style><body>시스템 점검 안내</body></html>")) as typeof fetch;
+    let message = "";
+    try { await fetchJson("https://www.law.go.kr/DRF/lawSearch.do"); } catch (e) { message = e instanceof Error ? e.message : ""; }
+    try { expect(message).toBe("국가법령정보센터 시스템 점검 중"); }
+    finally { globalThis.fetch = original; }
+  });
+  it("점검으로 법령을 못 받으면 같은 대상지의 직전 조례·수집 조문을 유지한다", () => {
+    const base = { location: { address: "a", parcelAddress: "서울특별시 금천구 독산동 151-10", x: "1", y: "1" }, laws: [], ordinanceArticleCandidates: [], nationalArticleCandidates: [], errors: [] } as unknown as SiteReviewResult;
+    const prev = { ...base, checkedAt: "2026-11-13T00:00:00Z", ordinances: [{ name: "서울특별시 도시계획 조례" }], collected: [{ rowId: "plan.bcrfar" }] } as unknown as SiteReviewResult;
+    const next = { ...base, checkedAt: "2026-11-13T01:00:00Z", ordinances: [], collected: [], errors: ["국가법령정보센터 14개 조회 실패: 국가법령정보센터 시스템 점검 중"] } as unknown as SiteReviewResult;
+    const kept = keepPreviousLawData(prev, next)!;
+    expect(kept.ordinances).toHaveLength(1);
+    expect(kept.collected).toHaveLength(1);
+    expect(kept.errors.some((e) => e.includes("직전 조회"))).toBe(true);
+  });
+});
