@@ -8,6 +8,7 @@ import type { OrdinanceArticleCandidate } from "../../../lib/server/ordinance-ar
 import { fetchJson, fetchLawPayload, searchLaw, searchOrdinance, lawGovernmentFromAddress, localGovernmentFromAddress, type LawRecord, type OrdinanceRecord } from "../../../lib/server/law-api";
 import { extractOrdinanceArticles, findArticleByNumber, findArticlesByKeyword } from "../../../lib/server/ordinance-articles";
 import { collectSiteFacts } from "../../../lib/server/site-facts";
+import { classifyDesignations } from "../../../lib/review/special-zones";
 import { NATIONAL_ARTICLES, NATIONAL_LAWS, ORDINANCE_TOPICS, type CollectedArticle } from "../../../lib/review/collect-topics";
 import { findLhPurchaseNotice, noticeIsOpen, koreaLocalDay } from "../../../lib/metro-annex-lh-catalog";
 
@@ -355,11 +356,10 @@ export async function POST(request: NextRequest) {
   const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh, localGovernment)
     .then((notice) => ({ notice, error: null as string | null }))
     .catch((error: unknown) => ({ notice: null, error: error instanceof Error ? error.message : "LH 공고 조회 실패" }));
-  const webSearchPromise = searchOfficialSources({
-    address: fullAddress,
-    localGovernment,
-    businessMode: body?.businessMode,
-    regionalOffice: body?.regionalOffice,
+  const webSearchPromise = siteFactsPromise.then((facts) => {
+    const matches = classifyDesignations(facts.designations ?? []);
+    const extraQueries = matches.filter((m) => m.rule?.search).flatMap((m) => m.designations.slice(0, 1).map((d) => `${localGovernment} ${d.name} ${m.rule!.search}`));
+    return searchOfficialSources({ address: fullAddress, localGovernment, businessMode: body?.businessMode, regionalOffice: body?.regionalOffice, extraQueries });
   });
 
   let laws: LawRecord[] = [];
@@ -378,8 +378,11 @@ export async function POST(request: NextRequest) {
           ...kinds.map(suffix=>({query:`${metro} ${suffix}`,jurisdiction:metro})),
         ]
       : kinds.map(suffix=>({query:`${district} ${suffix}`,jurisdiction:localGovernment}));
+    const specialLaws = classifyDesignations((await siteFactsPromise).designations ?? [])
+      .flatMap((m) => m.rule ? m.rule.law.split(" · ").map((x) => x.replace(/\s*제\d.*$/, "").trim()) : [])
+      .filter((name) => name && !LAW_QUERIES.includes(name) && !/조례/.test(name));
     const [settled, ordinanceSettled] = await Promise.all([
-      Promise.allSettled(LAW_QUERIES.map((query) => searchLaw(query, lawOc))),
+      Promise.allSettled([...LAW_QUERIES, ...new Set(specialLaws)].map((query) => searchLaw(query, lawOc))),
       Promise.allSettled(ordinanceQueries.map(({query,jurisdiction}) => searchOrdinance(query, lawOc, jurisdiction))),
     ]);
     laws = settled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);

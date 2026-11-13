@@ -10,6 +10,7 @@ import { matchLibrary, type LibraryContext, type RowPatch } from "./library";
 import { findArticle, zoneRatio, type Article } from "./articles";
 import { assessParcelAssembly } from "../parcel-assembly";
 import { ORDINANCE_TOPICS, NATIONAL_ARTICLES, lhCriterionRow } from "./collect-topics";
+import { classifyDesignations, NEW_TOWN_HINT } from "./special-zones";
 import type { ReviewRow, RowStatus, SiteInput, SourceRef, UseKind } from "./types";
 import { USE_SHORT } from "./types";
 
@@ -203,13 +204,59 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     });
   }
 
+  // ── 상위계획·다른 법령에 따른 지역·지구 (토지이용계획확인서 전체) ──
+  const designations = review?.siteFacts?.designations ?? null;
+  if (designations && designations.length) {
+    put({
+      id: "site.overlay",
+      content: designations.map((d) => `· ${d.name}${d.conflict ? ` (${d.conflict})` : ""}`).join("\n"),
+      law: "토지이용계획확인서 (토지이용규제 기본법 제10조)",
+      note: "국토계획법 및 다른 법령에 따른 지역·지구 전체. 저촉·접합 표기는 필지 일부만 걸린 경우",
+      status: "verified",
+      sources: [{ title: "VWorld 토지이용계획 속성정보", url: "https://www.eum.go.kr/web/ar/lu/luLandDet.jsp", kind: "api" }],
+    });
+    for (const m of classifyDesignations(designations)) {
+      const names = m.designations.map((d) => d.name);
+      const lawNames = m.rule ? m.rule.law.split(" · ").map((x) => x.replace(/\s*제\d.*$/, "").trim()) : [];
+      const lawSources: SourceRef[] = lawNames.filter((n) => !/조례/.test(n)).map((n) => {
+        const hit = review?.laws.find((l) => compact(l.name) === compact(n));
+        return { title: n, url: hit?.link ?? lawUrl(n), effectiveDate: hit?.enforcementDate ?? undefined, kind: "law" as const };
+      });
+      const docs = (review?.webSearch?.results ?? []).filter((w) => names.some((n) => compact(w.title).includes(compact(n).replace(/구역$|지구$/, "")))).slice(0, 3)
+        .map((w) => ({ title: w.title, url: w.url, excerpt: w.description, verbatim: false, kind: "plan" as const }));
+      put({
+        id: `zone.${m.rule?.id ?? "other"}`,
+        group: "상위계획·특별법",
+        sub: m.rule ? names.slice(0, 2).join(", ") : "기타 지역·지구",
+        section: "planning",
+        content: m.designations.map((d) => `· ${d.name}${d.conflict ? ` (${d.conflict})` : ""}`).join("\n") + (m.rule ? `\n· 확인: ${m.rule.check}` : ""),
+        law: m.rule ? m.rule.law : "근거 법령 확인 필요",
+        note: m.rule?.scale ? "규모(용도·용적률·높이)에 직접 영향 가능 · 결정고시·계획 원문 확인 후 수치 입력" : "행위제한·절차 확인",
+        status: "candidate",
+        sources: [...lawSources, ...docs],
+        missing: m.rule?.search ? `${m.rule.search} 원문` : undefined,
+      });
+    }
+  }
+  if (NEW_TOWN_HINT.test(place) && !(designations ?? []).some((d) => /노후계획도시|특별정비/.test(d.name))) {
+    put({
+      id: "zone.aging-hint", group: "상위계획·특별법", sub: "노후계획도시 해당 여부", section: "planning",
+      content: "택지조성사업 완료 후 20년 이상 경과한 100만㎡ 이상 지역이면 노후계획도시 특별법 대상 가능 · 지자체 노후계획도시정비 기본계획 수립 여부 확인",
+      law: "노후계획도시 정비 및 지원에 관한 특별법 제2조",
+      note: "특별정비예정구역 지정 시 용적률 상향·통합재건축 특례 → 신축매입약정 일정·대상지 가치에 영향",
+      status: "candidate",
+      sources: [{ title: "노후계획도시 정비 및 지원에 관한 특별법", article: "제2조", url: lawUrl("노후계획도시 정비 및 지원에 관한 특별법", "제2조"), kind: "law" }],
+      missing: "노후계획도시정비 기본계획 포함 여부",
+    });
+  }
+
   // ── 지구단위계획 ──
   const planDocs = review?.officialDocuments?.documents.filter((d) => d.kind === "district-plan") ?? [];
   if (review?.districtPlan || site.blockNo) {
     put({
       id: "plan.district",
       content: review?.districtPlan
-        ? "지구단위계획구역 레이어 검출" + (site.blockNo ? ` · 획지 ${site.blockNo} (검토자 지정)` : " · 획지번호 미확인")
+        ? ((designations ?? []).find((d) => d.name.includes("지구단위계획"))?.name ?? "지구단위계획구역 레이어 검출") + (site.blockNo ? ` · 획지 ${site.blockNo} (검토자 지정)` : " · 획지번호 미확인")
         : `획지 ${site.blockNo} (검토자 지정)`,
       law: "국토계획법 제52조 · 결정조서·결정도·시행지침",
       note: site.blockNo

@@ -6,6 +6,7 @@
  * 모든 값은 공공 데이터 원본이며, 건축선·진출입 허가 여부는 판정하지 않는다.
  */
 import { fetchJson } from "./law-api";
+import type { LandUseDesignation } from "../review/special-zones";
 
 export interface RoadInfo { name: string; widthText: string; minWidth: number | null; source: string }
 export interface BuildingRecord { name: string; use: string; totalArea: number | null; floors: string; approvedAt: string | null; households: number | null; source: string }
@@ -15,6 +16,8 @@ export interface SiteFacts {
   roads: RoadInfo[];
   buildings: BuildingRecord[] | null;   // null: 조회 불가(키 없음·실패)
   permits: PermitRecord[] | null;
+  /** 토지이용계획확인서 전체 지역·지구 (국토계획법 + 다른 법령) */
+  designations: LandUseDesignation[] | null;
   notes: string[];
 }
 
@@ -62,6 +65,15 @@ async function landCharacteristics(pnu: string, key: string, domain: string): Pr
     };
   }
   return null;
+}
+
+async function landUseAttributes(pnu: string, key: string, domain: string): Promise<LandUseDesignation[]> {
+  const params = new URLSearchParams({ key, domain, pnu, format: "json", numOfRows: "100", pageNo: "1" });
+  const data = await fetchJson(`https://api.vworld.kr/ned/data/getLandUseAttr?${params.toString()}`);
+  const rows = findObjects(data, (o) => "prposAreaDstrcCodeNm" in o);
+  const seen = new Set<string>();
+  return rows.map((r) => ({ name: text(r, ["prposAreaDstrcCodeNm"]) ?? "", conflict: text(r, ["cnflcAtNm"]), code: text(r, ["prposAreaDstrcCode"]) }))
+    .filter((d) => d.name && !seen.has(d.name) && Boolean(seen.add(d.name)));
 }
 
 async function nearbyFeatures(layer: string, bbox: [number, number, number, number], key: string, domain: string) {
@@ -122,9 +134,10 @@ async function dataGoKr(paths: string[], query: Record<string, string>, serviceK
 
 export async function collectSiteFacts(opts: { pnu: string | null; bbox: [number, number, number, number] | null; vworldKey: string; domain: string; dataKey: string }): Promise<SiteFacts> {
   const notes: string[] = [];
-  const facts: SiteFacts = { land: null, roads: [], buildings: null, permits: null, notes };
+  const facts: SiteFacts = { land: null, roads: [], buildings: null, permits: null, designations: null, notes };
   const tasks: Promise<void>[] = [];
   if (opts.pnu && opts.vworldKey) tasks.push(landCharacteristics(opts.pnu, opts.vworldKey, opts.domain).then((v) => { facts.land = v; }).catch((e) => { notes.push("토지특성정보 조회 실패: " + (e instanceof Error ? e.message : "")); }));
+  if (opts.pnu && opts.vworldKey) tasks.push(landUseAttributes(opts.pnu, opts.vworldKey, opts.domain).then((v) => { facts.designations = v; }).catch((e) => { notes.push("토지이용계획 속성 조회 실패: " + (e instanceof Error ? e.message : "")); }));
   if (opts.bbox && opts.vworldKey) tasks.push(roads(opts.bbox, opts.vworldKey, opts.domain).then((v) => { facts.roads = v; }).catch((e) => { notes.push("인접 도로 조회 실패: " + (e instanceof Error ? e.message : "")); }));
   const p = opts.pnu ? pnuParams(opts.pnu) : null;
   if (p && opts.dataKey) {
