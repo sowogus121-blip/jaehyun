@@ -165,7 +165,9 @@ describe("site review API", () => {
 
     expect(searchUrl).toContain("category=parcel");
     expect(data.location).toEqual(expect.objectContaining({ x: "127.039", y: "37.748" }));
-    expect(data.landUse).toContainEqual(expect.objectContaining({ code: "OFFICIAL-DOCUMENT" }));
+    // 필지 프리셋 제거: 용도지역은 VWorld 응답만 사용 (빈 응답이면 빈 목록 + 오류 안내)
+    expect(data.landUse).toEqual([]);
+    expect(data.errors.join(" ")).toContain("용도지역 응답이 없습니다");
   });
 
   it("shows the reason returned by the law API instead of a generic missing-result message", async () => {
