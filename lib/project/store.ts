@@ -41,9 +41,29 @@ export function newProject(site: Partial<SiteInput> & { address: string }, name?
 }
 
 /** 공식자료 조회 결과 반영: 검토자 수정 행은 유지 */
-export function applyReview(project: Project, review: SiteReviewResult | null): Project {
+export function applyReview(project: Project, incoming: SiteReviewResult | null): Project {
+  const review = keepPreviousLawData(project.review, incoming);
   const rows = mergeRows(project.rows, buildRows(project.site, review));
   return { ...project, review: slimReview(review, rows), reviewedAt: now(), rows, updatedAt: now() };
+}
+
+/**
+ * 국가법령정보센터 점검·장애로 이번 조회에서 법령·조례를 받지 못했다면
+ * 같은 대상지의 직전 조회 결과(법령·조례·수집 조문)를 유지하고 그 사실을 표시한다.
+ */
+export function keepPreviousLawData(previous: SiteReviewResult | null, next: SiteReviewResult | null): SiteReviewResult | null {
+  if (!previous || !next) return next;
+  const lawFailed = !next.ordinances.length && !(next.collected?.length) && next.errors.some((e) => /국가법령|자치법규/.test(e));
+  const sameSite = (previous.location?.parcelAddress ?? previous.location?.address) === (next.location?.parcelAddress ?? next.location?.address);
+  const hadLaw = previous.ordinances.length > 0 || (previous.collected?.length ?? 0) > 0;
+  if (!lawFailed || !sameSite || !hadLaw) return next;
+  return {
+    ...next,
+    laws: previous.laws, ordinances: previous.ordinances,
+    ordinanceArticleCandidates: previous.ordinanceArticleCandidates, nationalArticleCandidates: previous.nationalArticleCandidates,
+    collected: previous.collected,
+    errors: [...next.errors, `법령·조례는 직전 조회(${new Date(previous.checkedAt).toLocaleString("ko-KR")}) 자료를 유지했습니다.`],
+  };
 }
 
 /** 저장 용량 관리: 법규검토표 행이 인용한 조문만 전문을 유지하고 나머지는 발췌만 저장 */

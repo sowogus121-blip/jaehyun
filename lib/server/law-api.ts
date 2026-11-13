@@ -25,6 +25,8 @@ export type OrdinanceRecord = {
   applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
 };
 
+const MAINTENANCE_MESSAGE = (url: string) => (url.includes("law.go.kr") ? "국가법령정보센터" : "공공 API") + " 시스템 점검 중";
+
 export async function fetchJson(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
@@ -39,8 +41,9 @@ export async function fetchJson(url: string) {
     try {
       return JSON.parse(text);
     } catch {
-      const summary = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
-      throw new Error(summary ? `JSON이 아닌 응답: ${summary}` : "빈 응답");
+      const plainText = text.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (/점검/.test(text)) throw new Error(MAINTENANCE_MESSAGE(url));
+      throw new Error(plainText ? `JSON이 아닌 응답: ${plainText.slice(0, 120)}` : "빈 응답");
     }
   } finally {
     clearTimeout(timeout);

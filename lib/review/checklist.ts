@@ -29,7 +29,7 @@ export function buildChecklist(p: Project): CheckGroup[] {
     return {
       id: rowId + "-" + kind, label: what, rowId, state,
       detail: hits.length ? hits.map((h) => `${h.title} ${h.article.split(" · ")[0]}`).join(", ") + (state === "ok" ? "" : " · 수치 확인 필요")
-        : state === "ok" ? (x?.law || "확정") : "자동 수집 실패 · 행에서 조문 탐색",
+        : state === "ok" ? (x?.law || "확정") : lawDown ? "국가법령정보센터 점검 중 · 점검 후 다시 수집" : "자동 수집 실패 · 행에서 조문 탐색",
     };
   };
   const zones = (r?.landUse ?? []).filter((l) => l.category === "용도지역").map((l) => l.name);
@@ -37,6 +37,8 @@ export function buildChecklist(p: Project): CheckGroup[] {
   const planDocs = r?.officialDocuments?.documents.filter((d) => d.kind === "district-plan") ?? [];
   const notice = r?.lhNotice;
   const lh = p.site.business === "lh-purchase";
+  const lawDown = (r?.errors ?? []).some((e) => e.includes("국가법령정보센터 시스템 점검"));
+  const lawFail = lawDown ? "국가법령정보센터 점검 중 · 점검 후 '자료 다시 수집'" : "국가법령정보센터 조회 실패 또는 키 미설정";
 
   const groups: CheckGroup[] = [
     { title: "대지 현황", items: [
@@ -49,7 +51,7 @@ export function buildChecklist(p: Project): CheckGroup[] {
       ...(p.site.extraParcels.length ? [{ id: "assembly", label: "합필 필지", state: (r && r.parcels.length > 1 && r.parcels.every((x) => x.parcel?.area)) ? "ok" as const : "partial" as const, detail: `${p.site.extraParcels.length + 1}필지 · 1대지 인정 요건 별도`, rowId: "site.assembly" }] : []),
     ] },
     { title: "도시계획 (규모 상한)", items: [
-      { id: "plan-ord", label: "도시계획 조례 원문", state: ordinance("도시계획") ? "ok" : "missing", detail: ordinance("도시계획") ? `${ordinance("도시계획")!.name} (시행 ${ordinance("도시계획")!.enforcementDate ?? "-"})` : "국가법령정보센터 조회 실패 또는 키 미설정" },
+      { id: "plan-ord", label: "도시계획 조례 원문", state: ordinance("도시계획") ? "ok" : "missing", detail: ordinance("도시계획") ? `${ordinance("도시계획")!.name} (시행 ${ordinance("도시계획")!.enforcementDate ?? "-"})` : lawFail },
       fromCollected("plan.use", "ordinance", "용도지역 건축제한 (허용용도)"),
       fromCollected("plan.bcrfar", "ordinance", "건폐율·용적률 조문"),
       fromCollected("plan.relax", "ordinance", "임대주택 용적률 완화"),
@@ -60,7 +62,7 @@ export function buildChecklist(p: Project): CheckGroup[] {
       { id: "height", label: "최고높이·층수 제한", state: rowState(row("plan.height")) === "ok" ? "ok" : overlays.some((o) => o.name.includes("고도")) || has("plan.height").length ? "partial" : "manual", detail: overlays.some((o) => o.name.includes("고도")) ? "고도지구 지정 · 결정내용 확인" : "고도지구·경관·비행안전구역 등 해당 시 입력", rowId: "plan.height" },
     ] },
     { title: "건축 (배치·면적)", items: [
-      { id: "bld-ord", label: "건축 조례 원문", state: ordinance("건축") ? "ok" : "missing", detail: ordinance("건축")?.name ?? "조회 실패" },
+      { id: "bld-ord", label: "건축 조례 원문", state: ordinance("건축") ? "ok" : "missing", detail: ordinance("건축")?.name ?? lawFail },
       fromCollected("bld.sunlight", "law", "정북일조 (건축법 시행령 제86조)"),
       fromCollected("bld.sunlight", "ordinance", "일조 조례"),
       fromCollected("bld.setback", "ordinance", "대지 안의 공지 (조례 별표)"),
@@ -69,7 +71,7 @@ export function buildChecklist(p: Project): CheckGroup[] {
       fromCollected("bld.amenity", "law", "부대복리시설 (주택건설기준)"),
     ] },
     { title: "주차", items: [
-      { id: "park-ord", label: "주차장 조례 원문", state: ordinance("주차장") ? "ok" : "missing", detail: ordinance("주차장")?.name ?? "조회 실패" },
+      { id: "park-ord", label: "주차장 조례 원문", state: ordinance("주차장") ? "ok" : "missing", detail: ordinance("주차장")?.name ?? lawFail },
       fromCollected("park.ordinance", "ordinance", "부설주차장 설치기준 (별표)"),
       { id: "park-ratio", label: "용도별 법정 주차대수 (대/세대·호)", state: ["park.apartment", "park.urban", "park.officetel"].some((id) => rowState(row(id)) === "ok") ? "ok" : "missing", detail: "조례 별표 수치를 주차 행에 입력해야 지하층 산정", rowId: "park.apartment" },
       fromCollected("park.mech.ord", "ordinance", "기계식주차 (조례)"),
