@@ -496,7 +496,8 @@ export async function POST(request: NextRequest) {
     landUse,
     parcel,
     planningStandards: resolvedPlanningStandards,
-    districtPlan,
+    // VWorld 지구단위계획 레이어가 비어도 토지이용계획에 '지구단위계획구역(포함·저촉)'이 있으면 구역으로 본다.
+    districtPlan: districtPlan || (siteFacts.designations ?? []).some((d) => /지구단위계획/.test(d.name) && d.conflict !== "접함"),
     mixedUseZones,
     parcels,
     laws,

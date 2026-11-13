@@ -188,11 +188,51 @@ describe("상위계획·다른 법령에 따른 지역·지구 자동 연결", (
     expect(aging.sources.some((s) => s.kind === "plan")).toBe(true);
     expect(rows.find((r) => r.id === "site.overlay")?.content).toContain("과밀억제권역");
     expect(rows.find((r) => r.id === "zone.military")?.content).toContain("저촉");
-    expect(rows.find((r) => r.id === "zone.other")?.sub).toBe("기타 지역·지구");
+    expect(rows.find((r) => r.id === "zone.minor")?.content).toContain("어떤특수구역");
+    expect(rows.find((r) => r.id === "zone.minor")?.content).toContain("과밀억제권역");
+    expect(rows.some((r) => r.id === "zone.capital-region")).toBe(false);
     expect(rows.some((r) => r.id === "zone.aging-hint")).toBe(false);
     const p = applyReview(newProject({ address: addr, uses: ["apartment"] }), review);
     const items = buildChecklist(p).flatMap((g) => g.items);
     expect(items.find((i) => i.id === "designations")?.state).toBe("ok");
     expect(items.find((i) => i.id === "zone.aging-new-town")?.state).toBe("ok");
+  });
+});
+
+import simFixture from "./fixtures/sim-2026-11-14.json";
+import { resolveParams } from "../lib/review/params";
+import { runScenario } from "../lib/massing/engine";
+describe("운영 서버 실데이터 회귀 (2026-11-14 수도권 시뮬레이션)", () => {
+  const run = (key: keyof typeof simFixture) => {
+    const review = simFixture[key] as unknown as SiteReviewResult;
+    const p = applyReview(newProject({ address: review.location!.parcelAddress!, uses: ["apartment", "officetel"], supplies: ["youth"] }), review);
+    const params = resolveParams(p.rows);
+    return { p, params, results: p.scenarios.map((s) => runScenario({ params, scenario: s, assumptions: p.assumptions, site: p.site })) };
+  };
+  it("분당 정자동 178-1: 토지이용계획의 지구단위계획구역(포함)을 구역으로 보고 획지 확인 전 계산을 막는다", () => {
+    const { p, params, results } = run("bundang");
+    expect(p.rows.find((r) => r.id === "plan.district")).toBeDefined();
+    expect(params.far).toBeUndefined();
+    expect(results.every((r) => r.feasibility === "insufficient")).toBe(true);
+    expect(p.rows.find((r) => r.id === "site.area")?.params?.siteArea).toBe(6600);
+    expect(p.rows.find((r) => r.id === "site.road")?.content).toContain("대로1류");
+    expect(p.rows.some((r) => r.id === "zone.aging-hint")).toBe(true);
+    expect(p.rows.filter((r) => r.group === "상위계획·특별법").length).toBeLessThanOrEqual(6);
+  });
+  it("독산동 151-10: 서울 준공업 250% 기준으로 규모를 산정하고 가로구역 최고높이 지정을 높이 행으로 연결한다", () => {
+    const { p, params, results } = run("doksan");
+    expect(params.far?.value).toBe(250);
+    expect(params.siteArea?.value).toBe(1093.6);
+    expect(results[0].units).toBeGreaterThan(0);
+    expect(results[0].plannedFar).toBeLessThanOrEqual(250);
+    expect(p.rows.some((r) => r.id === "zone.height-district")).toBe(true);
+    expect(p.rows.some((r) => r.id === "zone.district-plan")).toBe(false);
+    expect(p.rows.find((r) => r.id === "zone.minor")?.content).toContain("지구단위계획구역 (접함)");
+  });
+  it("상계동 701-1: 공공청사(포함) 도시계획시설과 교육환경보호구역을 규모 영향 행으로 표시한다", () => {
+    const { p } = run("sanggye");
+    expect(p.rows.find((r) => r.id === "zone.urban-facility")?.content).toContain("공공청사");
+    expect(p.rows.some((r) => r.id === "zone.education")).toBe(false);
+    expect(p.rows.find((r) => r.id === "zone.minor")?.content).toContain("절대보호구역");
   });
 });
