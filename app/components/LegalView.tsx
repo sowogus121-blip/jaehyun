@@ -5,6 +5,7 @@ import type { LhSupply, ParamKey, Project, ReviewRow, RowStatus, RuleParams, Sou
 import { STATUS_LABEL, SUPPLY_LABEL } from "@/lib/review/types";
 import { NUMERIC_PARAMS, PARAM_LABEL, VERDICT_PARAMS, resolveParams } from "@/lib/review/params";
 import { lookupHint, officialLinks } from "@/lib/review/lookup-hints";
+import { buildChecklist, checklistSummary, CHECK_LABEL } from "@/lib/review/checklist";
 import { citeLine } from "@/lib/report/format";
 import { findMetroOrdinanceRules, findMetroOrdinanceSource } from "@/lib/metro-ordinance-catalog";
 import { findLhGuidelines, findMetroAnnexRecords } from "@/lib/metro-annex-lh-catalog";
@@ -75,6 +76,8 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
       {!project.review && <div className="alert info"><p>아직 공식자료를 조회하지 않았습니다. <b>공식자료 다시 조회</b>를 누르세요.</p></div>}
     </Panel>
 
+    <ChecklistPanel project={project} refreshing={refreshing} onRefresh={onRefresh} onJump={(id) => { const r = rows.find((x) => x.id === id); if (r) open(r); }} />
+
     <Panel title="법규검토표" sub={`${project.reviewedAt ? "조회 " + new Date(project.reviewedAt).toLocaleString("ko-KR") + " · " : ""}행을 누르면 내용·근거·수치를 수정할 수 있습니다. 원문 확인·검토자 입력 행의 수치만 규모검토에 연동됩니다.`}
       actions={<>
         <div className="seg"><button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>전체 {rows.length}</button><button className={filter === "open" ? "on" : ""} onClick={() => setFilter("open")}>미확정 {counts.candidate + counts.missing}</button></div>
@@ -96,6 +99,25 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
       sources: [{ title: doc.name, excerpt: c.quote, verbatim: true, kind: "upload" }],
     })} />
   </div>;
+}
+
+function ChecklistPanel({ project, refreshing, onRefresh, onJump }: { project: Project; refreshing: boolean; onRefresh: () => void; onJump: (rowId: string) => void }) {
+  const groups = useMemo(() => buildChecklist(project), [project]);
+  const sum = checklistSummary(groups);
+  const [open, setOpen] = useState(true);
+  return <Panel title="규모검토 필요자료" sub={`대상지 조회 시 자동 수집 · 확보 ${sum.ok} / 일부 ${sum.partial} / 미확보 ${sum.missing} / 직접 확인 ${sum.manual}`}
+    actions={<><button className="btn" onClick={onRefresh} disabled={refreshing}>{refreshing ? "수집 중…" : "자료 다시 수집"}</button><button className="btn" onClick={() => setOpen((v) => !v)}>{open ? "접기" : "펼치기"}</button></>}>
+    {open && <div className="checklist">
+      {groups.map((g) => <div className="check-group" key={g.title}>
+        <h4>{g.title}</h4>
+        {g.items.map((item) => <div key={item.id} className={`check-item ${item.rowId ? "clickable" : ""}`} onClick={() => item.rowId && onJump(item.rowId)} title={item.rowId ? "법규검토표 해당 행 열기" : ""}>
+          <span className={`cs cs-${item.state}`}>{CHECK_LABEL[item.state]}</span>
+          <span className="ci-body"><b>{item.label}</b><small>{item.detail}</small></span>
+          {item.link && <a href={item.link.url} target="_blank" rel="noreferrer" onClick={(e: { stopPropagation: () => void }) => e.stopPropagation()}>{item.link.label} ↗</a>}
+        </div>)}
+      </div>)}
+    </div>}
+  </Panel>;
 }
 
 export function LegalTable({ rows, selected, onSelect, print = false }: { rows: ReviewRow[]; selected?: string | null; onSelect?: (r: ReviewRow) => void; print?: boolean }) {

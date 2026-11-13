@@ -73,7 +73,6 @@ h1, h2, h3, h4 { margin: 0; }
 .toggle.on { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); font-weight: 600; }
 .inline { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .field .inline { padding-top: 5px; white-space: normal; justify-content: flex-start; }
-.field .inline input, .checks input { width: auto; flex: none; }
 .muted { color: var(--muted); }
 .error { color: var(--miss); }
 
@@ -122,6 +121,22 @@ h1, h2, h3, h4 { margin: 0; }
 .alert p { margin: 2px 0; }
 .alert.info { border-color: #c4d6f2; background: #f2f7fe; color: #234a85; }
 .status-strip { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+
+.field .checks input, .field .inline input { width: auto; flex: none; padding: 0; }
+
+/* 규모검토 필요자료 */
+.checklist { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.check-group h4 { font-size: 12px; color: var(--navy-dark); border-bottom: 2px solid var(--navy); padding-bottom: 3px; margin-bottom: 4px; }
+.check-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 4px; border-bottom: 1px dotted var(--line-soft); }
+.check-item.clickable:hover { background: #f5f8fc; }
+.check-item .ci-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.check-item .ci-body small { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.check-item a { font-size: 11.5px; white-space: nowrap; }
+.cs { flex: none; width: 52px; text-align: center; border-radius: 3px; font-size: 11px; font-weight: 700; padding: 1px 0; }
+.cs-ok { background: var(--ok-soft); color: var(--ok); }
+.cs-partial { background: var(--cand-soft); color: var(--cand); }
+.cs-missing { background: var(--miss-soft); color: var(--miss); }
+.cs-manual { background: #eef1f5; color: #4a5565; }
 
 /* 법규검토표 — 납품 양식 */
 .law-table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1.5px solid #6b7890; }

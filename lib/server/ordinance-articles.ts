@@ -81,6 +81,20 @@ export function extractOrdinanceArticles(
 
 export interface ArticleText { article: string; text: string }
 
+function recordText(record: Record<string, unknown>): string {
+  const own = plain(record["조문내용"] ?? record["조내용"] ?? record["별표내용"]);
+  const nested = plain(JSON.stringify(record["항"] ?? "")).replace(/["{}[\]:,]|항내용|호내용|목내용|항번호|호번호|목번호/g, " ").replace(/\s+/g, " ");
+  return (own + " " + nested).trim().slice(0, 4000);
+}
+function recordLabel(record: Record<string, unknown>): string {
+  const heading = plain(record["조제목"] ?? record["조문제목"] ?? record["별표제목"]);
+  const number = plain(record["조문번호"] ?? record["조번호"] ?? record["별표번호"]);
+  const branch = plain(record["조문가지번호"]);
+  const isAnnex = record["별표내용"] !== undefined;
+  const no = number ? (isAnnex ? `별표 ${number}` : `제${number}조${branch ? "의" + branch : ""}`) : "";
+  return [no, heading].filter(Boolean).join(" · ") || "조문";
+}
+
 /** 조문(또는 별표) 본문에 검색어가 포함된 항목을 그대로 돌려준다. 적용 판정은 하지 않는다. */
 export function findArticlesByKeyword(payload: unknown, terms: string[], limit = 8): ArticleText[] {
   const out: ArticleText[] = [];
@@ -91,17 +105,11 @@ export function findArticlesByKeyword(payload: unknown, terms: string[], limit =
     if (visited++ > 20000 || out.length >= limit || value === null || typeof value !== "object") return;
     if (Array.isArray(value)) { for (const item of value) visit(item); return; }
     const record = value as Record<string, unknown>;
-    const heading = plain(record["조제목"] ?? record["조문제목"] ?? record["별표제목"]);
-    const number = plain(record["조문번호"] ?? record["조번호"] ?? record["별표번호"]);
-    const isAnnex = record["별표내용"] !== undefined;
-    const article = [number ? (isAnnex ? `별표 ${number}` : `제${number}조`) : "", heading].filter(Boolean).join(" · ") || "조문";
-    for (const key of ["조문내용", "조내용", "별표내용"]) {
-      const own = plain(record[key]);
-      if (own.length < 4) continue;
-      const nested = plain(JSON.stringify(record["항"] ?? "")).replace(/["{}[\]:,]|항내용|호내용|목내용|항번호|호번호|목번호/g, " ").replace(/\s+/g, " ");
-      const text = (own + " " + nested).trim().slice(0, 4000);
+    if (["조문내용", "조내용", "별표내용"].some((k) => typeof record[k] === "string") && plain(record["조문여부"]) !== "전문") {
+      const text = recordText(record);
+      const article = recordLabel(record);
       const compactText = text.replace(/\s+/g, "");
-      if (needles.some((n) => compactText.includes(n)) && !seen.has(article)) {
+      if (text.length > 4 && needles.some((n) => compactText.includes(n)) && !seen.has(article)) {
         seen.add(article);
         out.push({ article, text });
       }
@@ -110,4 +118,25 @@ export function findArticlesByKeyword(payload: unknown, terms: string[], limit =
   }
   visit(payload);
   return out;
+}
+
+/** 조문번호(가지번호)로 조문 하나를 찾는다. 예: 제80조의2 → (80, 2) */
+export function findArticleByNumber(payload: unknown, no: number, branch?: number): ArticleText | null {
+  let found: ArticleText | null = null;
+  let visited = 0;
+  function visit(value: unknown): void {
+    if (found || visited++ > 30000 || value === null || typeof value !== "object") return;
+    if (Array.isArray(value)) { for (const item of value) visit(item); return; }
+    const record = value as Record<string, unknown>;
+    const number = plain(record["조문번호"] ?? record["조번호"]);
+    const br = plain(record["조문가지번호"]);
+    if (number === String(no) && (branch ? br === String(branch) : !br || br === "0") && plain(record["조문여부"]) !== "전문"
+      && (typeof record["조문내용"] === "string" || typeof record["조내용"] === "string")) {
+      found = { article: recordLabel(record), text: recordText(record) };
+      return;
+    }
+    for (const nested of Object.values(record)) if (nested && typeof nested === "object") visit(nested);
+  }
+  visit(payload);
+  return found;
 }

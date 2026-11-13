@@ -9,6 +9,7 @@ import { findZone, LAW, lawUrl, ref, useRestrictionRef, SUNLIGHT_TEXT, SUNLIGHT_
 import { matchLibrary, type LibraryContext, type RowPatch } from "./library";
 import { findArticle, zoneRatio, type Article } from "./articles";
 import { assessParcelAssembly } from "../parcel-assembly";
+import { ORDINANCE_TOPICS, NATIONAL_ARTICLES, lhCriterionRow } from "./collect-topics";
 import type { ReviewRow, RowStatus, SiteInput, SourceRef, UseKind } from "./types";
 import { USE_SHORT } from "./types";
 
@@ -206,8 +207,12 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   // ── 건폐율 / 용적률 ──
   const bcrArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건폐율", "용도지역 안에서의 건폐율"]);
   const farArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 용적률", "용도지역 안에서의 용적률"]);
-  const bcr = zoneName ? zoneRatio(bcrArticle, zoneName) : null;
-  const far = zoneName ? zoneRatio(farArticle, zoneName) : null;
+  const fromCollected = (label: string) => (review?.collected ?? []).filter((c) => c.topic === label)
+    .map((c) => ({ sourceTitle: c.title, sourceUrl: c.url, topic: label, article: c.article, excerpt: c.text.slice(0, 270), fullText: c.text, verified: false as const }));
+  const bcrPick = zoneName ? [bcrArticle, ...fromCollected("용도지역별 건폐율")].find((a) => a && zoneRatio(a, zoneName)) ?? bcrArticle : bcrArticle;
+  const farPick = zoneName ? [farArticle, ...fromCollected("용도지역별 용적률")].find((a) => a && zoneRatio(a, zoneName)) ?? farArticle : farArticle;
+  const bcr = zoneName ? zoneRatio(bcrPick ?? null, zoneName) : null;
+  const far = zoneName ? zoneRatio(farPick ?? null, zoneName) : null;
   const plansGovern = Boolean(review?.districtPlan);
   const bcrfarStatus: RowStatus = bcr && far ? (plansGovern ? "candidate" : "verified") : bcr || far || zone ? "candidate" : "missing";
   put({
@@ -215,16 +220,16 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     content: bcr || far
       ? `건폐율 ${bcr ? bcr.value + "%" : "미추출"} 이하\n용적률 ${far ? fmt(far.value) + "%" : "미추출"} 이하`
       : zone ? `조례 수치 미추출 (국토계획법 시행령 상한: 건폐율 ${zone.bcr}%, 용적률 ${fmt(zone.far)}%)` : "용도지역 미확정",
-    law: [bcrArticle ? `${bcrArticle.sourceTitle} ${bcrArticle.article}` : "", farArticle ? `${farArticle.sourceTitle} ${farArticle.article}` : ""].filter(Boolean).join(",\n")
+    law: [bcrPick ? `${bcrPick.sourceTitle} ${bcrPick.article}` : "", farPick ? `${farPick.sourceTitle} ${farPick.article}` : ""].filter(Boolean).join(",\n")
       || "국토계획법 시행령 제84조·제85조 / 관할 도시계획 조례",
     note: plansGovern ? "지구단위계획구역: 획지별 기준 확인 전까지 조례 일반값은 계산에 쓰지 않음"
       : bcr && far ? "조례 원문 자동추출값 · 특별계획·완화 별도" : "조례 조문에서 수치를 입력하면 규모검토에 반영",
     status: bcrfarStatus,
     params: bcr && far ? { bcr: bcr.value, far: far.value } : undefined,
     sources: [
-      ...(bcrArticle ? [articleRef(bcrArticle, bcr ? [zoneName, bcr.match] : [zoneName])] : []),
-      ...(farArticle ? [articleRef(farArticle, far ? [zoneName, far.match] : [zoneName])] : []),
-      ...(!bcrArticle && !farArticle ? [ref(LAW.planningDecree, "제84조"), ref(LAW.planningDecree, "제85조")] : []),
+      ...(bcrPick ? [articleRef(bcrPick, bcr ? [zoneName, bcr.match] : [zoneName])] : []),
+      ...(farPick ? [articleRef(farPick, far ? [zoneName, far.match] : [zoneName])] : []),
+      ...(!bcrPick && !farPick ? [ref(LAW.planningDecree, "제84조"), ref(LAW.planningDecree, "제85조")] : []),
     ],
     missing: bcr && far ? undefined : "관할 조례의 용도지역별 건폐율·용적률 조문",
   });
@@ -438,7 +443,38 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     if (row && row.status === "verified") rows.set("plan.bcrfar", { ...row, status: "candidate", note: "혼합 용도지역: 면적별 분리 산정 필요" });
   }
 
+  attachCollected(rows, review, zoneName);
   return orderRows([...rows.values()]);
+}
+
+/** 자동 수집 조문·LH 공고 문구를 해당 행 근거로 첨부. 근거 누락 행은 '후보'로 올리되 수치는 확정하지 않는다. */
+function attachCollected(rows: Map<string, ReviewRow>, review: SiteReviewResult | null, zoneName: string) {
+  const add = (rowId: string, src: SourceRef) => {
+    const row = rows.get(rowId);
+    if (!row) return;
+    const key = (x: SourceRef) => compact(x.title) + "|" + (x.article ?? "").match(/^[^·]+/)?.[0]?.trim() + "|" + (x.excerpt ?? "").slice(0, 24);
+    if (row.sources.some((x) => key(x) === key(src) || (x.verbatim && compact(x.title) === compact(src.title) && (x.article ?? "").split(" · ")[0] === (src.article ?? "").split(" · ")[0]))) return;
+    rows.set(rowId, {
+      ...row,
+      sources: [...row.sources, src],
+      status: row.status === "missing" ? "candidate" : row.status,
+      note: row.status === "missing" ? [row.note, "조문 자동 수집 · 내용 확인 후 수치 입력·확정"].filter(Boolean).join(" · ") : row.note,
+    });
+  };
+  for (const c of review?.collected ?? []) {
+    const topic = ORDINANCE_TOPICS.find((t) => t.label === c.topic);
+    const national = NATIONAL_ARTICLES.find((n) => n.label === c.topic);
+    const highlights = [...(topic?.terms ?? []), ...(zoneName && c.kind === "ordinance" ? [zoneName] : []), ...(national?.no === 86 ? SUNLIGHT_HIGHLIGHTS : [])];
+    add(c.rowId, { title: c.title, article: c.article, url: c.url, effectiveDate: c.effectiveDate ?? undefined, excerpt: c.text, verbatim: true, highlights, kind: c.kind });
+  }
+  const notice = review?.lhNotice;
+  const perRow = new Map<string, number>();
+  for (const q of notice?.extractedCriteria ?? []) {
+    const rowId = lhCriterionRow(q.quote);
+    if (!rowId || (perRow.get(rowId) ?? 0) >= 4) continue;
+    perRow.set(rowId, (perRow.get(rowId) ?? 0) + 1);
+    add(rowId, { title: `${notice!.title} (공고문 PDF 추출)`, url: notice!.pdfUrl ?? notice!.url, excerpt: q.quote, verbatim: true, highlights: q.value !== null ? [String(q.value)] : [], kind: "lh" });
+  }
 }
 
 function applyPatch(rows: Map<string, ReviewRow>, patch: RowPatch, entryTitle: string) {

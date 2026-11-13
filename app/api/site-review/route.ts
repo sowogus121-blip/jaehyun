@@ -5,7 +5,9 @@ import { collectOfficialDocuments } from "../../../lib/server/official-document-
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
 import type { OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
-import { fetchJson, searchLaw, searchOrdinance, fetchNationalLawArticleCandidates, fetchOrdinanceArticleCandidates, lawGovernmentFromAddress, localGovernmentFromAddress, type LawRecord, type OrdinanceRecord } from "../../../lib/server/law-api";
+import { fetchJson, fetchLawPayload, searchLaw, searchOrdinance, lawGovernmentFromAddress, localGovernmentFromAddress, type LawRecord, type OrdinanceRecord } from "../../../lib/server/law-api";
+import { extractOrdinanceArticles, findArticleByNumber, findArticlesByKeyword } from "../../../lib/server/ordinance-articles";
+import { NATIONAL_ARTICLES, NATIONAL_LAWS, ORDINANCE_TOPICS, type CollectedArticle } from "../../../lib/review/collect-topics";
 import { findLhPurchaseNotice, noticeIsOpen, koreaLocalDay } from "../../../lib/metro-annex-lh-catalog";
 
 type ParcelReview = {
@@ -23,6 +25,8 @@ const LAW_QUERIES = [
   "공공주택 특별법",
   "공공주택 특별법 시행령",
   "주차장법",
+  "주차장법 시행령",
+  "주차장법 시행규칙",
   "건축법 시행령",
   "국토의 계획 및 이용에 관한 법률 시행령",
   "주택건설기준 등에 관한 규정",
@@ -379,28 +383,49 @@ export async function POST(request: NextRequest) {
     if(!ordinances.length && !ordinanceFailures.length)
       errors.push("관할 도시계획·건축·주차장 조례를 찾지 못해 용적률·건폐율 확정을 보류했습니다.");
   }
-  // Read two core national parking laws; never equate a search hit with applicability.
+  // 규모검토 필요 조문 자동 수집: 국가법령 핵심 조항 + 관할 조례 주제별 조문 (원문 그대로, 적용 판정 없음)
+  const collected: CollectedArticle[] = [];
   let nationalArticleCandidates: OrdinanceArticleCandidate[] = [];
   if (lawOc) {
-    const targets = laws.filter((item) => ["공공주택 특별법 시행령", "주택건설기준 등에 관한 규정"].includes(item.name));
-    const results = await Promise.allSettled(targets.map((item) => fetchNationalLawArticleCandidates(item, lawOc)));
-    nationalArticleCandidates = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    const targets = laws.filter((item) => NATIONAL_LAWS.includes(item.name) || ["공공주택 특별법 시행령", "주택건설기준 등에 관한 규정"].includes(item.name));
+    const results = await Promise.allSettled(targets.map((item) => fetchLawPayload("law", item, lawOc)));
+    results.forEach((result, index) => {
+      if (result.status !== "fulfilled" || !result.value) return;
+      const law = targets[index];
+      law.retrievalStatus = "full-text";
+      if (["공공주택 특별법 시행령", "주택건설기준 등에 관한 규정"].includes(law.name))
+        nationalArticleCandidates.push(...extractOrdinanceArticles(result.value, law.name, law.link));
+      for (const target of NATIONAL_ARTICLES.filter((a) => a.law === law.name)) {
+        const found = findArticleByNumber(result.value, target.no, target.branch);
+        if (found) collected.push({ topic: target.label, rowId: target.rowId, title: law.name, url: law.link, effectiveDate: law.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "law" });
+      }
+    });
     const failed = results.filter((result) => result.status === "rejected");
     if (failed.length) errors.push(`국가법령 본문 조회 ${failed.length}건 실패`);
-    results.forEach((result, index) => {
-      if (result.status === "fulfilled" && result.value.length > 0) targets[index].retrievalStatus = "full-text";
-    });
+    nationalArticleCandidates = nationalArticleCandidates.slice(0, 120);
   }
   // Reading the official full text is a separate step from finding its title.
   // Keyword matches remain unverified candidates; applicability is NOT inferred.
   let ordinanceArticleCandidates: OrdinanceArticleCandidate[] = [];
   if (lawOc && ordinances.length) {
-    const detailResults = await Promise.allSettled(ordinances.map((ordinance) => fetchOrdinanceArticleCandidates(ordinance, lawOc)));
+    const detailResults = await Promise.allSettled(ordinances.map((ordinance) => fetchLawPayload("ordin", ordinance, lawOc)));
     const detailErrors = detailResults.flatMap((result) => result.status === "rejected"
       ? [result.reason instanceof Error ? result.reason.message : "자치법규 원문 요청 오류"]
       : []);
     if (detailErrors.length) errors.push(`자치법규 본문 조회 ${detailErrors.length}건 실패: ${[...new Set(detailErrors)].join(" / ")}`);
-    ordinanceArticleCandidates = detailResults.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    detailResults.forEach((result, index) => {
+      if (result.status !== "fulfilled" || !result.value) return;
+      const ordinance = ordinances[index];
+      ordinance.retrievalStatus = "full-text";
+      ordinanceArticleCandidates.push(...extractOrdinanceArticles(result.value, ordinance.name, ordinance.link));
+      const subject = ordinance.name.includes("주차장") ? "주차장" : ordinance.name.includes("도시계획") ? "도시계획" : ordinance.name.replace(/\s+/g, "").endsWith("건축조례") ? "건축" : null;
+      for (const topic of ORDINANCE_TOPICS.filter((t) => t.ordinance === subject)) {
+        for (const found of findArticlesByKeyword(result.value, topic.terms, 2)) {
+          if (collected.some((c) => c.title === ordinance.name && c.article === found.article && c.rowId === topic.rowId)) continue;
+          collected.push({ topic: topic.label, rowId: topic.rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "ordinance" });
+        }
+      }
+    });
   }
   const webSearch = await webSearchPromise;
   const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, address);
@@ -456,6 +481,7 @@ export async function POST(request: NextRequest) {
     ordinances,
     ordinanceArticleCandidates,
     nationalArticleCandidates,
+    collected,
     // C1 use restriction is sourced to the 2026 LH guideline and user-
     // confirmed C1 map placement. It does NOT assert an official C1-2 sublot.
     ruleFindings: [],
