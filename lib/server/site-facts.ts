@@ -118,18 +118,26 @@ export function pnuParams(pnu: string) {
 
 async function dataGoKr(paths: string[], query: Record<string, string>, serviceKey: string) {
   const keyParam = serviceKey.includes("%") ? serviceKey : encodeURIComponent(serviceKey);
-  let lastError: unknown = null;
+  const errors: string[] = [];
   for (const path of paths) {
+    const qs = new URLSearchParams({ ...query, _type: "json", numOfRows: "30", pageNo: "1" }).toString();
     try {
-      const qs = new URLSearchParams({ ...query, _type: "json", numOfRows: "30", pageNo: "1" }).toString();
-      const data = await fetchJson(`https://apis.data.go.kr/1613000/${path}?serviceKey=${keyParam}&${qs}`);
+      const res = await fetch(`https://apis.data.go.kr/1613000/${path}?serviceKey=${keyParam}&${qs}`, { cache: "no-store", signal: AbortSignal.timeout(12_000), headers: { Accept: "application/json" } });
+      const body = await res.text();
+      let data: Record<string, any> | null = null;
+      try { data = JSON.parse(body); } catch { data = null; }
+      if (!res.ok || !data) {
+        const reason = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+        errors.push(`${path.split("/")[0]} HTTP ${res.status}${reason ? ` (${reason})` : ""}`);
+        continue;
+      }
       const code = String(data?.response?.header?.resultCode ?? "00");
-      if (code !== "00" && code !== "000") throw new Error(String(data?.response?.header?.resultMsg ?? code));
+      if (code !== "00" && code !== "000") { errors.push(`${path.split("/")[0]} ${code} ${String(data?.response?.header?.resultMsg ?? "")}`); continue; }
       const items = data?.response?.body?.items?.item;
       return (Array.isArray(items) ? items : items ? [items] : []) as Record<string, unknown>[];
-    } catch (e) { lastError = e; }
+    } catch (e) { errors.push(`${path.split("/")[0]} ${e instanceof Error ? e.message : "오류"}`); }
   }
-  throw lastError ?? new Error("건축HUB 조회 실패");
+  throw new Error(errors.join(" / ") || "건축HUB 조회 실패");
 }
 
 export async function collectSiteFacts(opts: { pnu: string | null; bbox: [number, number, number, number] | null; vworldKey: string; domain: string; dataKey: string }): Promise<SiteFacts> {
