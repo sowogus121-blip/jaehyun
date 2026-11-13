@@ -7,6 +7,7 @@ import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parc
 import type { OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
 import { fetchJson, fetchLawPayload, searchLaw, searchOrdinance, lawGovernmentFromAddress, localGovernmentFromAddress, type LawRecord, type OrdinanceRecord } from "../../../lib/server/law-api";
 import { extractOrdinanceArticles, findArticleByNumber, findArticlesByKeyword } from "../../../lib/server/ordinance-articles";
+import { collectSiteFacts } from "../../../lib/server/site-facts";
 import { NATIONAL_ARTICLES, NATIONAL_LAWS, ORDINANCE_TOPICS, type CollectedArticle } from "../../../lib/review/collect-topics";
 import { findLhPurchaseNotice, noticeIsOpen, koreaLocalDay } from "../../../lib/metro-annex-lh-catalog";
 
@@ -199,6 +200,14 @@ async function getLandUse(x: string, y: string, key: string, domain: string) {
   };
 }
 
+function geometryBox(geometry: { coordinates?: unknown } | undefined): [number, number, number, number] | undefined {
+  const points: number[][] = [];
+  const walk = (v: unknown) => { if (Array.isArray(v) && typeof v[0] === "number") points.push(v as number[]); else if (Array.isArray(v)) v.forEach(walk); };
+  walk(geometry?.coordinates);
+  if (!points.length) return undefined;
+  return [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1])), Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))];
+}
+
 async function getParcelInfo(x: string, y: string, key: string, domain: string) {
   for (const dataCode of ["LP_PA_CBND_BUBUN", "LP_PA_CBND_BONBUN"]) {
     const params = new URLSearchParams({
@@ -232,6 +241,7 @@ async function getParcelInfo(x: string, y: string, key: string, domain: string) 
         pnu: propertyText(properties, ["pnu", "PNU"]),
         source: Number.isFinite(exactArea) && exactArea > 0 ? "국가공간정보포털 VWorld 지적속성" : "국가공간정보포털 VWorld 지적도형",
         approximate: !(Number.isFinite(exactArea) && exactArea > 0),
+        bbox: geometryBox(feature.geometry),
       };
     } catch {
       // Some VWorld keys do not include cadastral data access; continue with land-use review.
@@ -271,6 +281,10 @@ export async function POST(request: NextRequest) {
       errors.push(`VWorld 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
     }
   }
+
+  // 대지 현황 자동 수집: 토지특성(공부 면적·도로접면), 인접 도로, 건축물대장·인허가
+  const dataKey = process.env.DATA_GO_KR_API_KEY?.trim() ?? "";
+  const siteFactsPromise = collectSiteFacts({ pnu: parcel?.pnu ?? null, bbox: parcel?.bbox ?? null, vworldKey, domain: request.nextUrl.origin, dataKey });
 
   // "독산동 151-10"처럼 시·도를 생략한 입력도 VWorld가 돌려준 전체 지번주소로 관할 지자체·LH 본부를 판정한다.
   const fullAddress = location?.parcelAddress && location.parcelAddress.trim().split(/\s+/).length >= 3 ? location.parcelAddress.trim() : address;
@@ -324,6 +338,7 @@ export async function POST(request: NextRequest) {
         pnu: null,
         source: "복수 필지 개별 조회 합계",
         approximate: parcels.some((item) => item.parcel?.approximate),
+        bbox: undefined,
       };
     } else {
       // Never leak the primary parcel area into a supposedly combined feasibility study.
@@ -462,6 +477,8 @@ export async function POST(request: NextRequest) {
   // 국토계획법 시행령 일반 상한은 참고값이다. 필지 적용 수치는 클라이언트 법규검토표에서
   // 조례 조문 추출·검증 근거 라이브러리·검토자 확인을 거쳐서만 확정된다.
   const resolvedPlanningStandards = planningStandards;
+  const siteFacts = await siteFactsPromise;
+  if (!dataKey) missing.push("DATA_GO_KR_API_KEY");
   if (lhNoticeResult.error) errors.push("LH 지역별 공식 공고 조사: " + lhNoticeResult.error);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
   if (webSearch.status === "failed") errors.push(`공식 웹 후속검색 실패: ${webSearch.errors.join(" / ")}`);
@@ -484,6 +501,7 @@ export async function POST(request: NextRequest) {
     ordinanceArticleCandidates,
     nationalArticleCandidates,
     collected,
+    siteFacts,
     // C1 use restriction is sourced to the 2026 LH guideline and user-
     // confirmed C1 map placement. It does NOT assert an official C1-2 sublot.
     ruleFindings: [],
