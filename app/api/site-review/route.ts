@@ -516,8 +516,8 @@ export async function POST(request: NextRequest) {
         annexNotes.push(...got.annexErrors);
         return got.payload;
       }
-      // 국가법령정보센터 본문은 별표가 파일 링크뿐인 경우가 많다 → 주차장 조례는 ELIS 별표(HWP)를 읽어 붙인다.
-      if (subject === "주차장") {
+      // 국가법령정보센터 본문은 별표가 파일 링크뿐인 경우가 많다 → 주차장(설치기준)·건축(대지안의 공지)·도시계획(용도지역 건축제한) 조례는 ELIS 별표(HWP)를 읽어 붙인다.
+      if (subject === "주차장" || subject === "건축" || subject === "도시계획") {
         try {
           const alt = await searchOrdinanceElis(ordinance.name, ordinance.localGovernment ?? localGovernment);
           if (alt?.elis) {
