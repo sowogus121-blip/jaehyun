@@ -4,8 +4,9 @@
  * 배치·면적 효율 같은 설계 가정은 Assumptions / Scenario에서 받는다.
  * 모든 결과는 설계도서 이전의 개략 검토값이다.
  */
+import { tierRatio, describeTiers } from "../review/parking-rules";
 import type { ResolvedParams } from "../review/params";
-import type { Assumptions, BusinessType, Scenario, SiteInput, UnitType, UseKind, UseVerdict } from "../review/types";
+import type { Assumptions, BusinessType, ParkingTier, Scenario, SiteInput, UnitType, UseKind, UseVerdict } from "../review/types";
 import { USE_SHORT, UNIT_WORD } from "../review/types";
 
 export type Feasibility = "ok" | "conditional" | "blocked" | "insufficient";
@@ -77,10 +78,10 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 const fmt = (v: number, d = 1) => v.toLocaleString("ko-KR", { maximumFractionDigits: d });
 const ceil = (v: number) => Math.ceil(Math.max(0, v) - 1e-9);
 
-const VERDICT_KEY: Record<UseKind, { use: "useApartment" | "useUrban" | "useOfficetel"; mech: "mechApartment" | "mechUrban" | "mechOfficetel"; lh: "lhMechApartment" | "lhMechUrban" | "lhMechOfficetel"; parking: "parkingApartment" | "parkingUrban" | "parkingOfficetel" }> = {
-  apartment: { use: "useApartment", mech: "mechApartment", lh: "lhMechApartment", parking: "parkingApartment" },
-  urban: { use: "useUrban", mech: "mechUrban", lh: "lhMechUrban", parking: "parkingUrban" },
-  officetel: { use: "useOfficetel", mech: "mechOfficetel", lh: "lhMechOfficetel", parking: "parkingOfficetel" },
+const VERDICT_KEY: Record<UseKind, { use: "useApartment" | "useUrban" | "useOfficetel"; mech: "mechApartment" | "mechUrban" | "mechOfficetel"; lh: "lhMechApartment" | "lhMechUrban" | "lhMechOfficetel"; parking: "parkingApartment" | "parkingUrban" | "parkingOfficetel"; tiers: "parkingApartmentTiers" | "parkingUrbanTiers" | "parkingOfficetelTiers" }> = {
+  apartment: { use: "useApartment", mech: "mechApartment", lh: "lhMechApartment", parking: "parkingApartment", tiers: "parkingApartmentTiers" },
+  urban: { use: "useUrban", mech: "mechUrban", lh: "lhMechUrban", parking: "parkingUrban", tiers: "parkingUrbanTiers" },
+  officetel: { use: "useOfficetel", mech: "mechOfficetel", lh: "lhMechOfficetel", parking: "parkingOfficetel", tiers: "parkingOfficetelTiers" },
 };
 
 export const DEFAULT_ASSUMPTIONS: Assumptions = {
@@ -226,8 +227,13 @@ export function runScenario({ params, scenario, assumptions: a, site }: MassingI
 
   // 주차
   const ratio = params[keys.parking]?.value as number | undefined;
-  if (ratio === undefined) conditions.push(`${USE_SHORT[scenario.use]} 법정 주차기준(대/${word}) 미확정: 주차·지하층 산정 보류`);
-  const legal = ratio !== undefined ? ceil(units * ratio) : null;
+  const tiers = params[keys.tiers]?.value as ParkingTier[] | undefined;
+  if (ratio === undefined && !tiers?.length) conditions.push(`${USE_SHORT[scenario.use]} 법정 주차기준(대/${word}) 미확정: 주차·지하층 산정 보류`);
+  // 조례 별표의 세대(호)당 최소대수 구간: 타입별 전용면적으로 대수를 합산
+  const byTiers = tiers?.length ? ceil(types.reduce((s, t, i) => s + counts[i] * tierRatio(tiers, t.exclusive), 0)) : null;
+  const byRatio = ratio !== undefined ? ceil(units * ratio) : null;
+  const legal = byTiers !== null || byRatio !== null ? Math.max(byTiers ?? 0, byRatio ?? 0) : null;
+  if (byTiers !== null && byRatio === null) conditions.push(`법정주차 = 조례 별표 ${word}당 최소대수(${describeTiers(tiers!, word as "세대" | "호")}) 적용 · 「주택건설기준」 제27조 전용면적 합계 기준 산정치가 더 크면 그 값`);
   let special03: number | null = null;
   if (scenario.apply03) {
     const v03 = params.lhParking03?.value as UseVerdict | undefined;

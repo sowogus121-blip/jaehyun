@@ -16,6 +16,7 @@ export const PARAM_LABEL: Record<ParamKey, string> = {
   siteArea: "대지면적(㎡)", bcr: "건폐율(%)", far: "기본 용적률(%)", relaxedFar: "완화 용적률(%)",
   maxFloors: "최고층수(층)", maxHeight: "최고높이(m)", landscapeRatio: "조경비율(%)",
   parkingApartment: "공동주택 주차(대/세대)", parkingUrban: "도시형생활주택 주차(대/세대)", parkingOfficetel: "오피스텔 주차(대/호)",
+  parkingApartmentTiers: "공동주택 세대당 최소주차(구간)", parkingUrbanTiers: "도시형생활주택 세대당 최소주차(구간)", parkingOfficetelTiers: "오피스텔 호당 최소주차(구간)",
   useApartment: "공동주택 허용", useUrban: "도시형생활주택 허용", useOfficetel: "오피스텔 허용",
   mechApartment: "조례 기계식(공동주택)", mechUrban: "조례 기계식(도생)", mechOfficetel: "조례 기계식(오피스텔)",
   mechMaxPercent: "조례 기계식 최대비율(%)", mechMinStalls: "조례 기계식 최소대수(대)",

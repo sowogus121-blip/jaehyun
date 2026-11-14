@@ -43,6 +43,8 @@ export interface SourceRef {
   kind?: "law" | "ordinance" | "plan" | "lh" | "upload" | "api" | "other";
 }
 
+export interface ParkingTier { maxArea?: number; ratio: number }
+
 /** 규모검토로 연동되는 수치. 모든 값은 선택적이며 단위는 키 이름에 맞춘다. */
 export interface RuleParams {
   siteArea?: number;            // ㎡
@@ -55,6 +57,10 @@ export interface RuleParams {
   parkingApartment?: number;    // 대/세대
   parkingUrban?: number;        // 대/세대
   parkingOfficetel?: number;    // 대/호
+  /** 조례 별표의 세대(호)당 최소대수 구간 (전용면적 이하 → 대수) */
+  parkingApartmentTiers?: ParkingTier[];
+  parkingUrbanTiers?: ParkingTier[];
+  parkingOfficetelTiers?: ParkingTier[];
   useApartment?: UseVerdict;
   useUrban?: UseVerdict;
   useOfficetel?: UseVerdict;
