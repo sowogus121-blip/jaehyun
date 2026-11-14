@@ -320,7 +320,13 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const annexHit = (re: RegExp) => useAnnex ? sentencesOf("plan.use", re, 2).filter((x) => x.src === useAnnex).map((x) => x.line) : [];
   const aptHit = annexHit(/공동주택/), offHit = annexHit(/업무시설|오피스텔/);
   const verdictOf = (hit: string[]) => annexBan === null ? undefined : annexBan ? (hit.length ? "conditional" as const : "allowed" as const) : hit.length ? "allowed" as const : "prohibited" as const;
-  const annexVerdict = useAnnex ? { useApartment: verdictOf(aptHit), useUrban: verdictOf(aptHit), useOfficetel: verdictOf(offHit) } : null;
+  const commercial = !useAnnex && zoneName ? (/유통상업/.test(zoneName) ? "dist" : /(중심|일반|근린)상업/.test(zoneName) ? "comm" : null) : null;
+  const annexVerdict = useAnnex ? { useApartment: verdictOf(aptHit), useUrban: verdictOf(aptHit), useOfficetel: verdictOf(offHit) }
+    : commercial === "comm" ? { useApartment: "conditional" as const, useUrban: "conditional" as const, useOfficetel: "allowed" as const }
+    : commercial === "dist" ? { useApartment: "prohibited" as const, useUrban: "prohibited" as const, useOfficetel: "allowed" as const } : null;
+  if (commercial && !aptHit.length) aptHit.push(commercial === "comm"
+    ? `국토계획법 시행령 별표: ${zoneName}은 공동주택(주거용 외 용도와 복합된 건축물 제외)을 도시·군계획조례로 금지할 수 있는 용도 → 주거복합 또는 조례 별표 확인`
+    : `국토계획법 시행령 별표 11: 유통상업지역 안에서 건축할 수 없는 건축물에 공동주택 포함`);
   put({
     id: "plan.use",
     content: annexVerdict ? [
@@ -330,7 +336,8 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       ? uses.map((u) => `· ${USE_SHORT[u]}: ${zone.zone} 건축제한 별표에서 허용 여부 확인`).join("\n")
       : "용도지역 확정 후 계획 용도별 허용 여부 확인",
     law: [cityPlan?.title ? `${cityPlan.title} 용도지역 건축제한 조항·별표` : "", zone ? `국토계획법 시행령 제71조 별표 ${zone.annex}` : ""].filter(Boolean).join(", "),
-    note: annexVerdict ? `검토요망: ${useAnnex!.title} ${useAnnex!.article.split(" · ")[0]} 원문으로 자동 판정 · 별표 단서(층수·비율 제한) 확인` : "허용·조건부·불허를 행 편집에서 지정해야 규모검토에 반영됨",
+    note: useAnnex ? `검토요망: ${useAnnex.title} ${useAnnex.article.split(" · ")[0]} 원문으로 자동 판정 · 별표 단서(층수·비율 제한) 확인`
+      : commercial ? "검토요망: 조례 별표 미확보 → 국토계획법 시행령 별표 기준으로 우선 판정 (주거복합 여부·조례 금지 여부 확인)" : "허용·조건부·불허를 행 편집에서 지정해야 규모검토에 반영됨",
     status: annexVerdict ? "verified" : useArticle || zone ? "candidate" : "missing",
     params: annexVerdict ? (Object.fromEntries(Object.entries(annexVerdict).filter(([, v]) => v)) as ReviewRow["params"]) : undefined,
     sources: [
@@ -411,8 +418,11 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     status: zone ? "candidate" : "missing",
     sources: [lawRef(review, LAW.buildingDecree, "제86조"), ...(sunArticle ? [articleRef(sunArticle, ["정북"])] : [])].map((s, i) => i === 0 ? { ...s, excerpt: zone?.sunlight ? SUNLIGHT_TEXT : undefined, highlights: SUNLIGHT_HIGHLIGHTS } : s),
   });
-  const spacingLines = sentencesOf("bld.spacing", /(높이의\s*\d(?:\.\d+)?\s*배|\d+(?:\.\d+)?\s*미터)\s*이상/, 4)
-    .concat(sentencesOf("bld.sunlight", /(채광|마주|인동|동일한\s*대지)[^.]*높이의\s*\d(?:\.\d+)?\s*배/, 3)).slice(0, 5);
+  // 채광창·인동거리 문장만 (정북일조 인접대지 이격·조경 산입 문장 제외)
+  const spacingRe = /(채광|마주\s*보|인동|동일한\s*대지\s*안에서|건축물\s*각\s*부분\s*사이)[^.]{0,120}(높이의\s*\d(?:\.\d+)?\s*배|높이의\s*\d분의\s*\d|\d+(?:\.\d+)?\s*미터)\s*이상/;
+  const spacingLines = [...sentencesOf("bld.spacing", spacingRe, 4), ...sentencesOf("bld.sunlight", spacingRe, 4)]
+    .filter((x) => !/조경|온실|정북/.test(x.line))
+    .sort((a, b) => Number(b.src.kind === "ordinance") - Number(a.src.kind === "ordinance")).slice(0, 4);
   put({
     id: "bld.spacing",
     content: spacingLines.length ? spacingLines.map((x) => "· " + x.line).join("\n") : "공동주택 채광창 방향 이격 및 동간 인동거리: 조례로 정하는 거리 적용",
@@ -433,7 +443,10 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     missing: "조례 별표 이격거리",
   });
   const landscapeArticle = findArticle(review, "건축 조례", ["대지의 조경", "조경"]);
-  const landTiers = sentencesOf("bld.landscape", /(연면적|대지면적)[^.]{0,60}\d[\d,]*\s*(제곱미터|㎡)[^.]{0,80}\d+(?:\.\d+)?\s*(퍼센트|%)\s*이상/, 5);
+  // 조례 구간(연면적 2천㎡ 이상 15% 등) 우선. '2천제곱미터'처럼 천 단위 표기도 인식
+  const landTiers = sentencesOf("bld.landscape", /(연면적|대지면적)[^.]{0,60}\d[\d,천백]*\s*(제곱미터|㎡)[^.]{0,80}\d+(?:\.\d+)?\s*(퍼센트|%)\s*이상/, 8)
+    .filter((x) => !/산입|온실|옥상/.test(x.line))
+    .sort((a, b) => Number(b.src.kind === "ordinance") - Number(a.src.kind === "ordinance")).slice(0, 4);
   const landPcts = landTiers.map((x) => Number(x.line.match(/(\d+(?:\.\d+)?)\s*(?:퍼센트|%)\s*이상/)?.[1])).filter((v) => v > 0 && v <= 30);
   const landMax = landPcts.length ? Math.max(...landPcts) : undefined;
   put({
@@ -656,10 +669,12 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     return { lines, pages: pageLabel(qs.map((c) => c.page)) };
   };
   const scaleQ0 = noticeLines("lh.scale");
-  const scaleExtra = scaleQ0.lines.length ? [] : [...new Set((notice?.extractedCriteria ?? []).map((c) => c.quote).filter((q) => /(청년|신혼|신생아|고령자|다자녀)[^.]{0,40}전용\s*\d+\s*㎡|\d+\s*호\s*이상|\d\s*룸|방\s*\d\s*개/.test(q)))]
+  const scaleExtra = scaleQ0.lines.length ? [] : [...new Set((notice?.extractedCriteria ?? []).map((c) => c.quote).filter((q) => /전용\s*(면적\s*)?\d+(\.\d+)?\s*(㎡|m2|제곱미터)|\d+\s*(호|세대)\s*이상|\d\s*룸|방\s*\d\s*개/.test(q) && !/주차|기계식|0[.]3\s*대/.test(q)))]
     .map((l) => l.replace(/\s+/g, " ").slice(0, 170)).slice(0, 3);
   const scaleQ = scaleQ0.lines.length ? scaleQ0 : { lines: scaleExtra, pages: pageLabel((notice?.extractedCriteria ?? []).filter((c) => scaleExtra.some((l) => c.quote.replace(/\s+/g, " ").startsWith(l.slice(0, 40)))).map((c) => c.page)) };
-  const commQ = noticeLines("lh.community");
+  const commQ0 = noticeLines("lh.community");
+  const commExtra = commQ0.lines.length ? [] : [...new Set((notice?.extractedCriteria ?? []).map((c) => c.quote).filter((q) => /커뮤니티|관리사무소|경비실/.test(q)))].map((l) => l.replace(/\s+/g, " ").slice(0, 170)).slice(0, 3);
+  const commQ = commQ0.lines.length ? commQ0 : { lines: commExtra, pages: pageLabel((notice?.extractedCriteria ?? []).filter((c) => /커뮤니티|관리사무소|경비실/.test(c.quote)).map((c) => c.page)) };
   put({
     id: "lh.scale",
     content: rules
