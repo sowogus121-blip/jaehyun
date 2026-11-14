@@ -351,6 +351,8 @@ export interface SiteReviewResult {
   missing: string[];
   /** Vercel 배포 환경 (production / preview / development) */
   deployEnv?: string | null;
+  /** 국가법령정보센터 외 대체 출처 사용 표시 (예: ELIS) */
+  lawSources?: string[];
   errors: string[];
   unresolved: string[];
 }

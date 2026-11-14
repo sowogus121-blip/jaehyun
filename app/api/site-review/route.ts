@@ -5,6 +5,7 @@ import { collectOfficialDocuments } from "../../../lib/server/official-document-
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
 import type { OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
+import { searchOrdinanceElis, fetchOrdinanceElis } from "../../../lib/server/elis";
 import { fetchJson, fetchLawPayload, searchLaw, searchOrdinance, lawGovernmentFromAddress, localGovernmentFromAddress, type LawRecord, type OrdinanceRecord } from "../../../lib/server/law-api";
 import { extractOrdinanceArticles, findArticleByNumber, findArticlesByKeyword } from "../../../lib/server/ordinance-articles";
 import { collectSiteFacts } from "../../../lib/server/site-facts";
@@ -251,6 +252,10 @@ async function getParcelInfo(x: string, y: string, key: string, domain: string) 
   return null;
 }
 
+export const runtime = "nodejs";
+// 국내 공공 시스템(법령·ELIS·VWorld) 접근 안정성: 서울 리전 우선
+export const preferredRegion = "icn1";
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as { address?: string; parcelAddresses?: string[]; businessMode?: string; regionalOffice?: string; lhSupplyType?: string } | null;
   const address = body?.address?.trim();
@@ -364,6 +369,7 @@ export async function POST(request: NextRequest) {
 
   let laws: LawRecord[] = [];
   let ordinances: OrdinanceRecord[] = [];
+  const lawSources: string[] = [];
   if (lawOc) {
     const district = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? localGovernment;
     const metro = localGovernment.split(/\s+/)[0];
@@ -393,13 +399,21 @@ export async function POST(request: NextRequest) {
       const reasons = [...new Set(failures)];
       errors.push(`국가법령정보센터 ${failures.length}개 조회 실패: ${reasons.join(" / ")}`);
     }
-    ordinances = ordinanceSettled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
+    // 국가법령정보센터 자치법규 검색이 실패(점검·장애·키 없음)한 항목만 행정안전부 자치법규정보시스템(ELIS)으로 다시 찾는다.
+    const fallbackIdx = ordinanceSettled.flatMap((result, index) => result.status === "rejected" ? [index] : []);
+    const elisSettled = await Promise.allSettled(fallbackIdx.map((index) => searchOrdinanceElis(ordinanceQueries[index].query, ordinanceQueries[index].jurisdiction)));
+    const merged: PromiseSettledResult<OrdinanceRecord | null>[] = ordinanceSettled.map((result) => result);
+    fallbackIdx.forEach((index, k) => { merged[index] = elisSettled[k]; });
+    if (fallbackIdx.length && elisSettled.some((r) => r.status === "fulfilled" && r.value)) lawSources.push("ELIS 자치법규정보시스템(국가법령정보센터 대체)");
+    ordinances = merged.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
     // Optional metro / borough ordinance subjects may not exist locally.
     // A successful 0-result search is not a service failure.
-    const ordinanceFailures=ordinanceSettled.flatMap(result=>result.status==="rejected"
+    const ordinanceFailures=merged.flatMap(result=>result.status==="rejected"
       ? [result.reason instanceof Error?result.reason.message:"알 수 없는 오류"] : []);
     if(ordinanceFailures.length)
-      errors.push(`관할 자치법규 요청 ${ordinanceFailures.length}건 오류: ${[...new Set(ordinanceFailures)].join(" / ")}`);
+      errors.push(`관할 자치법규 요청 ${ordinanceFailures.length}건 오류(ELIS 대체 포함): ${[...new Set(ordinanceFailures)].join(" / ")}`);
+    else if (fallbackIdx.length && ordinances.length)
+      errors.push(`국가법령정보센터 자치법규 조회 불가 → 자치법규정보시스템(ELIS)에서 ${ordinances.filter((o) => o.source === "elis").length}건 대체 확보`);
     if(!ordinances.length && !ordinanceFailures.length)
       errors.push("관할 도시계획·건축·주차장 조례를 찾지 못해 용적률·건폐율 확정을 보류했습니다.");
   }
@@ -428,7 +442,27 @@ export async function POST(request: NextRequest) {
   // Keyword matches remain unverified candidates; applicability is NOT inferred.
   let ordinanceArticleCandidates: OrdinanceArticleCandidate[] = [];
   if (lawOc && ordinances.length) {
-    const detailResults = await Promise.allSettled(ordinances.map((ordinance) => fetchLawPayload("ordin", ordinance, lawOc)));
+    // 본문: 국가법령정보센터 레코드는 DRF 본문, 실패하면 같은 조례를 ELIS에서 읽는다. ELIS 레코드는 바로 ELIS.
+    const readBody = async (ordinance: OrdinanceRecord): Promise<unknown> => {
+      if (ordinance.source === "elis" && ordinance.elis) {
+        const got = await fetchOrdinanceElis(ordinance.elis.alrNo, ordinance.elis.histNo);
+        ordinance.elis.histNo = got.histNo;
+        ordinance.link = got.link;
+        ordinance.enforcementDate = got.enforcementDate ?? ordinance.enforcementDate;
+        return got.payload;
+      }
+      try {
+        return await fetchLawPayload("ordin", ordinance, lawOc);
+      } catch (error) {
+        const alt = await searchOrdinanceElis(ordinance.name, ordinance.localGovernment ?? localGovernment).catch(() => null);
+        if (!alt?.elis) throw error;
+        const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo);
+        Object.assign(ordinance, { source: "elis", elis: { alrNo: alt.elis.alrNo, histNo: got.histNo }, link: got.link, enforcementDate: got.enforcementDate ?? ordinance.enforcementDate });
+        if (!lawSources.length) lawSources.push("ELIS 자치법규정보시스템(국가법령정보센터 대체)");
+        return got.payload;
+      }
+    };
+    const detailResults = await Promise.allSettled(ordinances.map(readBody));
     const detailErrors = detailResults.flatMap((result) => result.status === "rejected"
       ? [result.reason instanceof Error ? result.reason.message : "자치법규 원문 요청 오류"]
       : []);
@@ -514,6 +548,7 @@ export async function POST(request: NextRequest) {
     lhNotice,
     missing,
     deployEnv: process.env.VERCEL_ENV ?? null,
+    lawSources,
     errors,
     unresolved: [
       ordinances.length ? "관할 조례 일반 수치와 별개로 지구단위계획·주거복합 별표·특례 적용 여부 검토 필요" : "관할 지자체 건축·주차장 조례 원문",

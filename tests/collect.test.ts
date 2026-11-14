@@ -97,12 +97,54 @@ describe("국가법령정보센터 점검 대응", () => {
   });
   it("점검으로 법령을 못 받으면 같은 대상지의 직전 조례·수집 조문을 유지한다", () => {
     const base = { location: { address: "a", parcelAddress: "서울특별시 금천구 독산동 151-10", x: "1", y: "1" }, laws: [], ordinanceArticleCandidates: [], nationalArticleCandidates: [], errors: [] } as unknown as SiteReviewResult;
-    const prev = { ...base, checkedAt: "2026-11-13T00:00:00Z", ordinances: [{ name: "서울특별시 도시계획 조례" }], collected: [{ rowId: "plan.bcrfar" }] } as unknown as SiteReviewResult;
+    const prev = { ...base, checkedAt: "2026-11-13T00:00:00Z", ordinances: [{ name: "서울특별시 도시계획 조례" }], collected: [{ rowId: "plan.bcrfar", kind: "ordinance" }, { rowId: "bld.sunlight", kind: "law" }] } as unknown as SiteReviewResult;
     const next = { ...base, checkedAt: "2026-11-13T01:00:00Z", ordinances: [], collected: [], errors: ["국가법령정보센터 14개 조회 실패: 국가법령정보센터 시스템 점검 중"] } as unknown as SiteReviewResult;
     const kept = keepPreviousLawData(prev, next)!;
     expect(kept.ordinances).toHaveLength(1);
-    expect(kept.collected).toHaveLength(1);
+    expect(kept.collected).toHaveLength(2);
     expect(kept.errors.some((e) => e.includes("직전 조회"))).toBe(true);
+  });
+  it("조례는 ELIS로 받고 국가법령만 못 받으면 다른 대상지 국가법령 캐시로 채운다", () => {
+    const base = { location: { address: "b", parcelAddress: "경기도 성남시 분당구 정자동 1", x: "1", y: "1" }, laws: [], ordinanceArticleCandidates: [], nationalArticleCandidates: [] } as unknown as SiteReviewResult;
+    const next = { ...base, checkedAt: "2026-11-14T01:00:00Z", ordinances: [{ name: "성남시 건축 조례", source: "elis" }], collected: [{ rowId: "bld.setback", kind: "ordinance" }], errors: ["국가법령정보센터 14개 조회 실패: 국가법령정보센터 시스템 점검 중"] } as unknown as SiteReviewResult;
+    const cache = { savedAt: "2026-11-12T00:00:00Z", laws: [{ name: "건축법 시행령" }], collected: [{ rowId: "bld.sunlight", kind: "law" }] } as never;
+    const out = keepPreviousLawData(null, next, cache)!;
+    expect(out.ordinances).toHaveLength(1);
+    expect(out.collected!.map((c) => c.kind).sort()).toEqual(["law", "ordinance"]);
+    expect(out.laws).toHaveLength(1);
+    expect(out.errors.some((e) => e.includes("받아둔 공식 원문"))).toBe(true);
+  });
+});
+
+import { parseElisList, parseElisBody, parseElisHistory } from "../lib/server/elis";
+import { ordinanceTitleMatches } from "../lib/server/law-api";
+describe("자치법규정보시스템(ELIS) 대체 경로", () => {
+  const list = `<td><span class="tagset bg-nice-04">예</span> <a class="a-link ellipsis" href="javascript:void(0)" onclick="fnSrchDtls('43990229333006','017'); return false;"> 청주시 <hword>주차장</hword> 조례 </a> </td> <td>2026-11-06</td> <td>조례</td>
+  <td><span class="tagset bg-nice-01">현</span> <a class="a-link ellipsis" href="javascript:void(0)" onclick="fnSrchDtls('11650112215006','010'); return false;"> 서울특별시 서초구 도시계획조례 </a> </td> <td>2024-12-05</td> <td>조례</td>`;
+  it("검색 결과에서 현행/예정 구분·alrNo·histNo·제목을 읽는다", () => {
+    const hits = parseElisList(list);
+    expect(hits).toHaveLength(2);
+    expect(hits[0]).toMatchObject({ tag: "예", alrNo: "43990229333006", histNo: "017", title: "청주시 주차장 조례", kind: "조례" });
+    expect(hits[1].title).toBe("서울특별시 서초구 도시계획조례");
+  });
+  it("관할·주제 판정은 국가법령정보센터와 같은 규칙", () => {
+    expect(ordinanceTitleMatches("청주시 주차장 조례", "청주시 주차장 설치 및 관리 조례", "충청북도 청주시")).toBe(true);
+    expect(ordinanceTitleMatches("서울특별시 서초구 도시계획조례", "서울특별시 서초구 도시계획 조례", "서울특별시 서초구")).toBe(true);
+    expect(ordinanceTitleMatches("성남시 건축물관리 조례", "성남시 건축 조례", "경기도 성남시")).toBe(false);
+    expect(ordinanceTitleMatches("진천군 주차장 조례", "청주시 주차장 설치 및 관리 조례", "충청북도 청주시")).toBe(false);
+  });
+  it("본문 HTML을 조문 JSON으로 바꾸고 연혁의 시행일을 읽는다", () => {
+    const html = `<a onclick="lawPopup('자치법규','','','43990229333006','017')" class="t2false"><strong>청주시 주차장 조례</strong><br /> [시행 2027.01.01] </a>
+    <a onclick="lawPopup('자치법규','','','43990229333006','015')" class="t2false"><strong>청주시 주차장 조례</strong><br /> [시행 2025.07.11] </a>
+    <div class="txt" id="0014006"><strong class="color-jo">제14조(삭제 2015. 2. 27.)</strong></div>
+    <div class="txt" id="0015006"><p class="p-01"><strong class="color-jo">제15조(부설주차장의 설치대상시설물 및 설치기준)</strong>&nbsp;① 부설주차장의 설치기준은 별표 7과 같다.</p><p class="p-02">③ 1. 부설주차장의 기계식주차장은 30대 이상 설치하는 경우에만 허용하며</p></div>
+    <div class="txt" id="0002026"><p><strong class="color-jo">제2조의2(주차장 수급실태조사)</strong> 내용</p></div>`;
+    const body = parseElisBody(html);
+    expect(body.조문).toHaveLength(2);
+    expect(body.조문[0]).toMatchObject({ 조문번호: "15", 조제목: "부설주차장의 설치대상시설물 및 설치기준" });
+    expect(body.조문[0].조문내용).toContain("30대 이상");
+    expect(body.조문[1]).toMatchObject({ 조문번호: "2", 조문가지번호: "2" });
+    expect(parseElisHistory(html).map((h) => h.enforcementDate)).toEqual(["20270101", "20250711"]);
   });
 });
 

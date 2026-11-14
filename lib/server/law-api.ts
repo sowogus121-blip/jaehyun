@@ -23,6 +23,9 @@ export type OrdinanceRecord = {
   link: string;
   retrievalStatus: "metadata-only" | "full-text";
   applicationStatus: "not-assessed" | "applicable" | "not-applicable" | "conditional";
+  /** 출처 시스템. 없으면 국가법령정보센터 */
+  source?: "law.go.kr" | "elis";
+  elis?: { alrNo: string; histNo: string };
 };
 
 const MAINTENANCE_MESSAGE = (url: string) => (url.includes("law.go.kr") ? "국가법령정보센터" : "공공 API") + " 시스템 점검 중";
@@ -86,6 +89,28 @@ export async function fetchNationalLawArticleCandidates(law: LawRecord, oc: stri
   return extractOrdinanceArticles(data, law.name, law.link);
 }
 
+/**
+ * 조례 제목이 이 주소 관할의 해당 주제 조례인지 판정한다 (국가법령정보센터·ELIS 공용).
+ * '남동구 건축물관리자의 제설 조례'나 '도시계획위원회 운영 조례'를 본 조례로 오인하지 않는다.
+ */
+export function ordinanceTitleMatches(titleRaw: string, query: string, jurisdiction: string, officeRaw?: string | null) {
+  const normalize = (value: unknown) => String(value ?? "").replace(/\s+/g, "");
+  const district = jurisdiction.split(/\s+/).filter(Boolean).at(-1) ?? jurisdiction;
+  const fullScope = normalize(jurisdiction);
+  const subject = query.includes("주차장") ? "주차장" : query.includes("도시계획") ? "도시계획" :
+    query.includes("경관") ? "경관" : "건축";
+  const title = normalize(titleRaw);
+  const office = normalize(officeRaw);
+  const stem = normalize(district);
+  const simple = title.startsWith(fullScope) ? title.slice(fullScope.length) :
+    title.startsWith(stem) ? title.slice(stem.length) : "";
+  const subjectValid = subject === "건축" ? simple === "건축조례" :
+    subject === "경관" ? simple === "경관조례" :
+    subject === "도시계획" ? simple === "도시계획조례" :
+    (simple === "주차장조례" || /^주차장설치및관리(?:운영에관한)?조례$/.test(simple));
+  return subjectValid && (!office || office === fullScope || office.endsWith(stem));
+}
+
 export async function searchOrdinance(query: string, oc: string, jurisdiction: string): Promise<OrdinanceRecord | null> {
   const params = new URLSearchParams({ OC: oc, target: "ordin", type: "JSON", query, display: "10" });
   const data = await fetchJson(`https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`);
@@ -99,29 +124,9 @@ export async function searchOrdinance(query: string, oc: string, jurisdiction: s
   // Do not use the API's first hit: a different municipality's ordinance
   // can otherwise be presented as the ordinance governing this address.
   const normalize = (value: unknown) => String(value ?? "").replace(/\s+/g, "");
-  const district = jurisdiction.split(/\s+/).filter(Boolean).at(-1) ?? jurisdiction;
-  const fullScope = normalize(jurisdiction);
-  const subject = query.includes("주차장") ? "주차장" : query.includes("도시계획") ? "도시계획" :
-    query.includes("경관") ? "경관" : "건축";
-  // The Law Information API indexes the local law by '의정부시 ...', not
-  // '경기도 의정부시 ...'. Match the municipality + subject in the title,
-  // and the entire governing agency when the API supplies it.
-  const matches = rows.filter((candidate: Record<string, unknown>) => {
-    const title = normalize(candidate["자치법규명"] ?? candidate["법령명한글"]);
-    const office = normalize(candidate["지자체기관명"]);
-    const stem=normalize(district);
-    const simple=title.startsWith(fullScope) ? title.slice(fullScope.length) :
-      title.startsWith(stem) ? title.slice(stem.length) : "";
-    // Generic word-prefix search previously confused '남동구 건축물관리자의
-    // 제설 조례' with the Building Ordinance, and '도시계획위원회 운영 조례'
-    // with binding urban planning FAR standards. Only accept actual subjects.
-    const subjectValid=subject==="건축" ? simple==="건축조례" :
-      subject==="경관" ? simple==="경관조례" :
-      subject==="도시계획" ? simple==="도시계획조례" :
-      (simple==="주차장조례" || /^주차장설치및관리(?:운영에관한)?조례$/.test(simple));
-    return subjectValid &&
-      (!office || office === fullScope || office.endsWith(stem));
-  }) as Record<string, unknown>[];
+  const matches = rows.filter((candidate: Record<string, unknown>) =>
+    ordinanceTitleMatches(String(candidate["자치법규명"] ?? candidate["법령명한글"] ?? ""), query, jurisdiction, candidate["지자체기관명"] ? String(candidate["지자체기관명"]) : null),
+  ) as Record<string, unknown>[];
   const row = matches.find((candidate) =>
     normalize(candidate["자치법규명"] ?? candidate["법령명한글"]) === normalize(query)
   ) ?? matches[0];

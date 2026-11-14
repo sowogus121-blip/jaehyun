@@ -40,30 +40,72 @@ export function newProject(site: Partial<SiteInput> & { address: string }, name?
   };
 }
 
+export const NATIONAL_LAW_CACHE_KEY = "lh-plan-lab:v2:national-law-cache";
+type NationalLawCache = { savedAt: string; laws: SiteReviewResult["laws"]; collected: NonNullable<SiteReviewResult["collected"]> };
+
+function readNationalCache(): NationalLawCache | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(NATIONAL_LAW_CACHE_KEY);
+    return raw ? JSON.parse(raw) as NationalLawCache : null;
+  } catch { return null; }
+}
+function writeNationalCache(review: SiteReviewResult | null) {
+  try {
+    if (typeof window === "undefined" || !review) return;
+    const collected = (review.collected ?? []).filter((c) => c.kind === "law");
+    if (!collected.length) return;
+    window.localStorage.setItem(NATIONAL_LAW_CACHE_KEY, JSON.stringify({ savedAt: review.checkedAt, laws: review.laws, collected } satisfies NationalLawCache));
+  } catch { /* 저장 공간 부족 등은 무시 */ }
+}
+
 /** 공식자료 조회 결과 반영: 검토자 수정 행은 유지 */
 export function applyReview(project: Project, incoming: SiteReviewResult | null): Project {
-  const review = keepPreviousLawData(project.review, incoming);
+  const review = keepPreviousLawData(project.review, incoming, readNationalCache());
+  writeNationalCache(incoming);
   const rows = mergeRows(project.rows, buildRows(project.site, review));
   return { ...project, review: slimReview(review, rows), reviewedAt: now(), rows, updatedAt: now() };
 }
 
 /**
- * 국가법령정보센터 점검·장애로 이번 조회에서 법령·조례를 받지 못했다면
- * 같은 대상지의 직전 조회 결과(법령·조례·수집 조문)를 유지하고 그 사실을 표시한다.
+ * 국가법령정보센터 점검·장애 대응.
+ * - 국가법령 조문(전국 공통)을 못 받으면: 같은 대상지 직전 조회 → 다른 프로젝트에서 받아둔 국가법령 캐시 순으로 채운다.
+ * - 관할 조례를 못 받으면(ELIS 대체도 실패): 같은 대상지 직전 조회의 조례·조례 조문을 유지한다.
+ * 어느 경우든 그 사실과 원래 수집 시각을 오류/안내 목록에 남긴다.
  */
-export function keepPreviousLawData(previous: SiteReviewResult | null, next: SiteReviewResult | null): SiteReviewResult | null {
-  if (!previous || !next) return next;
-  const lawFailed = !next.ordinances.length && !(next.collected?.length) && next.errors.some((e) => /국가법령|자치법규/.test(e));
-  const sameSite = (previous.location?.parcelAddress ?? previous.location?.address) === (next.location?.parcelAddress ?? next.location?.address);
-  const hadLaw = previous.ordinances.length > 0 || (previous.collected?.length ?? 0) > 0;
-  if (!lawFailed || !sameSite || !hadLaw) return next;
-  return {
-    ...next,
-    laws: previous.laws, ordinances: previous.ordinances,
-    ordinanceArticleCandidates: previous.ordinanceArticleCandidates, nationalArticleCandidates: previous.nationalArticleCandidates,
-    collected: previous.collected,
-    errors: [...next.errors, `법령·조례는 직전 조회(${new Date(previous.checkedAt).toLocaleString("ko-KR")}) 자료를 유지했습니다.`],
-  };
+export function keepPreviousLawData(previous: SiteReviewResult | null, next: SiteReviewResult | null, nationalCache?: NationalLawCache | null): SiteReviewResult | null {
+  if (!next) return next;
+  const lawTrouble = next.errors.some((e) => /국가법령|자치법규/.test(e));
+  if (!lawTrouble) return next;
+  const sameSite = !!previous && (previous.location?.parcelAddress ?? previous.location?.address) === (next.location?.parcelAddress ?? next.location?.address);
+  const when = (iso: string) => new Date(iso).toLocaleString("ko-KR");
+  let out: SiteReviewResult = { ...next, collected: [...(next.collected ?? [])], errors: [...next.errors] };
+
+  const hasNational = out.collected!.some((c) => c.kind === "law");
+  if (!hasNational) {
+    const prevNational = sameSite ? (previous!.collected ?? []).filter((c) => c.kind === "law") : [];
+    if (prevNational.length) {
+      out.collected!.push(...prevNational);
+      if (!out.laws.length) out.laws = previous!.laws;
+      out.errors.push(`국가법령 조문은 직전 조회(${when(previous!.checkedAt)}) 자료를 유지했습니다.`);
+    } else if (nationalCache?.collected.length) {
+      out.collected!.push(...nationalCache.collected);
+      if (!out.laws.length) out.laws = nationalCache.laws;
+      out.errors.push(`국가법령 조문은 다른 대상지에서 ${when(nationalCache.savedAt)}에 받아둔 공식 원문을 사용했습니다(전국 공통 조항).`);
+    }
+  }
+
+  if (!next.ordinances.length && sameSite && previous!.ordinances.length) {
+    out = {
+      ...out,
+      ordinances: previous!.ordinances,
+      ordinanceArticleCandidates: previous!.ordinanceArticleCandidates,
+      collected: [...out.collected!, ...(previous!.collected ?? []).filter((c) => c.kind === "ordinance")],
+    };
+    out.errors.push(`관할 조례는 직전 조회(${when(previous!.checkedAt)}) 자료를 유지했습니다.`);
+  }
+  if (!out.nationalArticleCandidates?.length && sameSite && previous!.nationalArticleCandidates?.length) out.nationalArticleCandidates = previous!.nationalArticleCandidates;
+  return out;
 }
 
 /** 저장 용량 관리: 법규검토표 행이 인용한 조문만 전문을 유지하고 나머지는 발췌만 저장 */
