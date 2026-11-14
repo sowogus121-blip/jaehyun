@@ -155,7 +155,7 @@ export function sourceStatuses(p: Project): SourceStatus[] {
   return [
     { name: "VWorld 지적·용도지역", state: r.location && r.landUse.length ? "ok" : "fail", detail: r.location ? `${r.landUse.length}건` : "주소 조회 실패" },
     { name: "토지특성·토지이용계획", state: f?.land || f?.designations ? "ok" : "fail", detail: f?.designations ? `지역·지구 ${f.designations.length}건` : "조회 실패" },
-    { name: "건축HUB 대장·인허가", state: f && (f.buildings !== null || f.permits !== null) ? "ok" : "fail", detail: f && (f.buildings !== null || f.permits !== null) ? `대장 ${f.buildings?.length ?? 0} · 인허가 ${f.permits?.length ?? 0}` : "조회 실패" },
+    { name: "건축HUB 대장·인허가", state: f && (f.buildings !== null || f.permits !== null) ? "ok" : "fail", detail: f && (f.buildings !== null || f.permits !== null) ? `대장 ${f.buildings?.length ?? 0} · 인허가 ${f.permits?.length ?? 0}` : (f?.notes ?? []).some((n) => n.includes("일시 장애")) ? "포털 일시 장애 · 다시 수집" : "조회 실패" },
     { name: "국가법령정보센터", state: lawGot && !lawDown ? "ok" : lawGot ? "alt" : "fail", detail: lawDown ? (lawGot ? (lawCache ? "점검 중 · 저장된 원문 사용" : "점검 중") : "점검 중 · 점검 후 다시 수집") : lawGot ? `법령 ${r.laws.length}건` : "조회 실패" },
     { name: "관할 조례", state: r.ordinances.length ? (elis ? "alt" : "ok") : "fail", detail: r.ordinances.length ? (elis ? `ELIS 대체 ${elis}건` : `${r.ordinances.length}건`) : "미확보" },
     { name: "토지이음 고시", state: !inPlan && !gosi.length ? "na" : gosi.length ? (gosiKept ? "alt" : "ok") : "fail", detail: !inPlan && !gosi.length ? "지구단위·정비구역 아님" : gosi.length ? `${gosi.length}건${gosiKept ? " · 직전 조회 유지" : ""}` : eumErr ? "연결 불가 · 잠시 후 다시 수집" : "해당 고시 없음" },

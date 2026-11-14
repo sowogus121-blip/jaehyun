@@ -119,7 +119,11 @@ export function pnuParams(pnu: string) {
 async function dataGoKr(paths: string[], query: Record<string, string>, serviceKey: string) {
   const keyParam = serviceKey.includes("%") ? serviceKey : encodeURIComponent(serviceKey);
   const errors: string[] = [];
-  for (const path of paths) {
+  // 공공데이터포털 SERVICETIMEOUT(503)은 일시 장애가 잦아 2초 뒤 한 번 더 시도한다.
+  const attempts = paths.flatMap((p) => [p, p]);
+  for (const [index, path] of attempts.entries()) {
+    if (index % 2 === 1 && !errors.at(-1)?.includes("HTTP 503")) continue;
+    if (index % 2 === 1) await new Promise((r) => setTimeout(r, 2000));
     const qs = new URLSearchParams({ ...query, _type: "json", numOfRows: "30", pageNo: "1" }).toString();
     try {
       const res = await fetch(`https://apis.data.go.kr/1613000/${path}?serviceKey=${keyParam}&${qs}`, { cache: "no-store", signal: AbortSignal.timeout(12_000), headers: { Accept: "application/json" } });
@@ -127,7 +131,8 @@ async function dataGoKr(paths: string[], query: Record<string, string>, serviceK
       let data: Record<string, any> | null = null;
       try { data = JSON.parse(body); } catch { data = null; }
       if (!res.ok || !data) {
-        const reason = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+        const raw = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const reason = raw.match(/"returnAuthMsg"\s*:\s*"([^"]+)"/)?.[1] ?? raw.match(/"errMsg"\s*:\s*"([^"]+)"/)?.[1] ?? raw.slice(0, 140);
         errors.push(`${path.split("/")[0]} HTTP ${res.status}${reason ? ` (${reason})` : ""}`);
         continue;
       }
@@ -137,7 +142,8 @@ async function dataGoKr(paths: string[], query: Record<string, string>, serviceK
       return (Array.isArray(items) ? items : items ? [items] : []) as Record<string, unknown>[];
     } catch (e) { errors.push(`${path.split("/")[0]} ${e instanceof Error ? e.message : "오류"}`); }
   }
-  throw new Error(errors.join(" / ") || "건축HUB 조회 실패");
+  const last = errors.at(-1) ?? "";
+  throw new Error(/HTTP 503|SERVICETIMEOUT|연결실패/.test(last) ? "공공데이터포털 일시 장애(서비스 연결 실패) · 잠시 후 다시 수집" : (last || "건축HUB 조회 실패"));
 }
 
 export async function collectSiteFacts(opts: { pnu: string | null; bbox: [number, number, number, number] | null; vworldKey: string; domain: string; dataKey: string }): Promise<SiteFacts> {
@@ -149,14 +155,14 @@ export async function collectSiteFacts(opts: { pnu: string | null; bbox: [number
   if (opts.bbox && opts.vworldKey) tasks.push(roads(opts.bbox, opts.vworldKey, opts.domain).then((v) => { facts.roads = v; }).catch((e) => { notes.push("인접 도로 조회 실패: " + (e instanceof Error ? e.message : "")); }));
   const p = opts.pnu ? pnuParams(opts.pnu) : null;
   if (p && opts.dataKey) {
-    tasks.push(dataGoKr(["BldRgstHubService/getBrTitleInfo", "BldRgstService_v2/getBrTitleInfo"], p, opts.dataKey).then((items) => {
+    tasks.push(dataGoKr(["BldRgstHubService/getBrTitleInfo"], p, opts.dataKey).then((items) => {
       facts.buildings = items.map((i) => ({
         name: text(i, ["bldNm"]) ?? "", use: text(i, ["mainPurpsCdNm", "etcPurps"]) ?? "", totalArea: num(text(i, ["totArea"])),
         floors: `지하 ${text(i, ["ugrndFlrCnt"]) ?? "0"} / 지상 ${text(i, ["grndFlrCnt"]) ?? "?"}`, approvedAt: text(i, ["useAprDay"]),
         households: num(text(i, ["hhldCnt"])), source: "국토교통부 건축HUB 건축물대장 표제부",
       }));
     }).catch((e) => { notes.push("건축물대장 조회 실패: " + (e instanceof Error ? e.message : "")); }));
-    tasks.push(dataGoKr(["ArchPmsHubService/getApBasisOulnInfo", "ArchPmsService_v2/getApBasisOulnInfo"], p, opts.dataKey).then((items) => {
+    tasks.push(dataGoKr(["ArchPmsHubService/getApBasisOulnInfo"], p, opts.dataKey).then((items) => {
       facts.permits = items.map((i) => ({
         use: text(i, ["mainPurpsCdNm"]) ?? "", totalArea: num(text(i, ["totArea"])), permittedAt: text(i, ["archPmsDay"]),
         startedAt: text(i, ["realStcnsDay", "stcnsSchedDay"]), approvedAt: text(i, ["useAprDay"]), source: "국토교통부 건축HUB 건축인허가 기본개요",
