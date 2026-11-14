@@ -392,7 +392,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       : bcr && far ? "조례 원문 자동추출값 · 특별계획·완화 별도" : "조례 조문에서 수치를 입력하면 규모검토에 반영",
     status: bcrfarStatus,
     // 확정(원문 확인)은 조례 수치 둘 다 읽었을 때만. 후보 상태면 조례값(없으면 국토계획법 시행령 상한)을 규모검토 '검토요망' 계산용으로 둔다.
-    params: bcr && far ? { bcr: bcr.value, far: far.value } : zone && (bcr || far) ? { bcr: bcr?.value ?? zone.bcr, far: far?.value ?? zone.far } : undefined,
+    params: bcr && far ? { bcr: bcr.value, far: far.value } : zone ? { bcr: bcr?.value ?? zone.bcr, far: far?.value ?? zone.far } : undefined,
     sources: [
       ...(bcrPick ? [articleRef(bcrPick, bcr ? [zoneName, bcr.match] : [zoneName])] : []),
       ...(farPick ? [articleRef(farPick, far ? [zoneName, far.match] : [zoneName])] : []),
@@ -590,7 +590,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     const std27 = (review?.collected ?? []).find((c) => /주택건설기준/.test(c.title) && /제27조/.test(c.article));
     const m27 = std27?.text.replace(/\s+/g, " ").match(/소형\s*주택은[^.]*?주차대수가\s*(\d(?:\.\d+)?)대\s*\(세대당\s*전용면적이\s*(\d+)\s*제곱미터\s*미만인\s*경우에는\s*(\d(?:\.\d+)?)대\)[^.]*\./);
     const smallStd = { base: m27 ? Number(m27[1]) : 0.6, under: m27 ? Number(m27[2]) : 30, low: m27 ? Number(m27[3]) : 0.5, quote: m27?.[0] ?? null };
-    const urbanNoRule = use === "urban" && parkingAnnexes.length > 0 && (!found || (found.rule.use !== "urban" && !/도시형\s*생활주택/.test(found.rule.quote)));
+    const urbanNoRule = use === "urban" && (parkingAnnexes.length > 0 || !!std27) && (!found || (found.rule.use !== "urban" && !/도시형\s*생활주택/.test(found.rule.quote)));
     // 도시형생활주택(소형주택): 조례 별표가 도시형생활주택을 「주택건설기준」 제27조로 돌리거나 따로 정하지 않으면
     // 제27조제1항제2호(세대당 0.6대, 전용 30㎡ 미만 0.5대)를 적용한다. 단지형 연립·다세대는 공동주택 조례 구간.
     if (urbanNoRule || (use === "urban" && found && /도시형\s*생활주택[^.]{0,60}주택건설기준[^.]{0,30}제27조/.test(found.rule.quote))) {
