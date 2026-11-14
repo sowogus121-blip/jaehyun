@@ -374,11 +374,14 @@ export async function POST(request: NextRequest) {
     const tokens = fullAddress.split(/\s+/);
     const gu = tokens.find((t, i) => i > 0 && /구$/.test(t));
     const planNames = [
-      ...landUse.filter((l) => /지구단위/.test(l.name)).map((l) => l.name.replace(/지구단위계획(?:구역)?|\(.*?\)|구역/g, "").trim()),
+      ...landUse.filter((l) => /지구단위|택지개발지구/.test(l.name) && l.category !== "용도지역")
+        .map((l) => l.name.replace(/\d*택지개발지구|지구단위계획(?:구역)?|\(.*?\)|구역/g, "").replace(/\d+$/, "").trim()),
       gu ? gu.replace(/구$/, "") : "",
       lotMatch ? lotMatch[1].replace(/\d*(?:동|가|읍|면|리)$/, "") : "",
     ].filter((n) => n.length >= 2);
-    const ctx = { sggCd: pnu ? pnu.slice(0, 5) : null, dong: lotMatch?.[1] ?? null, lot: lotMatch?.[2] ?? null, planNames: [...new Set(planNames)], renewal };
+    const govParts = localGovernment.split(/\s+/).filter(Boolean);
+    const agencyHints = [...new Set([govParts.at(-1) ?? "", /(?:특별시|광역시|특별자치시)$/.test(govParts[0] ?? "") ? govParts[0] : ""].filter(Boolean))];
+    const ctx = { sggCd: pnu ? pnu.slice(0, 5) : null, dong: lotMatch?.[1] ?? null, lot: lotMatch?.[2] ?? null, planNames: [...new Set(planNames)], renewal, agencyHints };
     let found = await collectEumPlanDocuments(ctx);
     // 구 단위 코드에서 못 찾으면 시 단위(예: 41135 → 41130)로 다시 찾는다.
     if (!found.documents.length && ctx.sggCd && !ctx.sggCd.endsWith("0")) found = await collectEumPlanDocuments({ ...ctx, sggCd: ctx.sggCd.slice(0, 4) + "0" });

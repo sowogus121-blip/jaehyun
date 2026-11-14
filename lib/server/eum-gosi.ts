@@ -58,11 +58,11 @@ async function timed(url: string, init: RequestInit = {}, ms = 10_000) {
   if (!response.ok) throw new Error(`토지이음 HTTP ${response.status}`);
   return response;
 }
-async function getHtml(url: string) {
-  return (await getHtmlWithCookie(url)).html;
+async function getHtml(url: string, ms = 10_000) {
+  return (await getHtmlWithCookie(url, ms)).html;
 }
-async function getHtmlWithCookie(url: string) {
-  const response = await timed(url);
+async function getHtmlWithCookie(url: string, ms = 10_000) {
+  const response = await timed(url, {}, ms);
   const headers = response.headers as Headers & { getSetCookie?: () => string[] };
   const cookie = (headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
   return { html: new TextDecoder("euc-kr").decode(await response.arrayBuffer()), cookie };
@@ -173,6 +173,8 @@ export interface EumSearchContext {
   planNames: string[];
   /** 노후계획도시·정비구역 관련 고시도 찾을지 */
   renewal: boolean;
+  /** 시군구 코드 없이 찾을 때 담당기관 필터 (예: 서울특별시, 부천시). 광역시·도 결정 고시는 시군구 코드로 안 걸린다. */
+  agencyHints?: string[];
 }
 
 const PLAN_TITLE = /지구단위계획|지구단위|시행지침/;
@@ -270,21 +272,35 @@ async function analyzeGosi(row: GosiListRow, ctx: EumSearchContext): Promise<Eum
  * 대상지 시군구의 지구단위계획(+노후계획도시·정비) 결정고시를 토지이음에서 찾아 최대 limit건 분석한다.
  * 검색어: 지구단위 / 동 이름 / 계획 이름(분당 등) / (노후계획도시면) 특별정비
  */
+async function inBatches<T, R>(items: T[], size: number, fn: (item: T, index: number) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const out: PromiseSettledResult<R>[] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(...await Promise.allSettled(items.slice(i, i + size).map((item, k) => fn(item, i + k))));
+  }
+  return out;
+}
+
 export async function collectEumPlanDocuments(ctx: EumSearchContext, limit = 3): Promise<{ documents: EumPlanDocument[]; errors: string[] }> {
-  const keywords = [
-    "지구단위",
-    ...(ctx.dong ? [ctx.dong] : []),
-    ...ctx.planNames.slice(0, 2),
-    ...(ctx.renewal ? ["특별정비"] : []),
+  const hints = (ctx.agencyHints ?? []).filter(Boolean);
+  const searches: Array<{ keyword: string; sgg: string | null; pages: number }> = [
+    { keyword: "지구단위", sgg: ctx.sggCd, pages: 2 },
+    ...(ctx.dong ? [{ keyword: ctx.dong, sgg: ctx.sggCd, pages: 1 }] : []),
+    // 계획 이름은 시군구 코드 없이 찾는다(서울시·도 결정 고시 포함) → 담당기관으로 거른다.
+    ...ctx.planNames.slice(0, 2).map((keyword) => ({ keyword, sgg: hints.length ? null : ctx.sggCd, pages: 1 })),
+    ...(ctx.renewal ? [{ keyword: "특별정비", sgg: ctx.sggCd, pages: 1 }] : []),
   ];
-  const settled = await Promise.allSettled(keywords.map((k, i) => searchGosi(k, ctx.sggCd, i === 0 ? 3 : 2)));
-  const errors = settled.flatMap((s) => s.status === "rejected" ? [s.reason instanceof Error ? s.reason.message : "토지이음 고시 검색 실패"] : []);
+  const settled = await inBatches(searches, 2, (q) => searchGosi(q.keyword, q.sgg, q.pages).then((rows) =>
+    q.sgg ? rows : rows.filter((r) => hints.some((h) => r.agency.includes(h)))));
+  const errors = [...new Set(settled.flatMap((s) => s.status === "rejected" ? [s.reason instanceof Error ? s.reason.message : "토지이음 고시 검색 실패"] : []))];
   const rows = new Map<string, GosiListRow>();
   for (const s of settled) if (s.status === "fulfilled") for (const r of s.value) rows.set(r.seq, r);
+  const seenNo = new Set<string>();
   const ranked = [...rows.values()]
     .map((r) => ({ r, score: scoreGosi(r, ctx) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score || Number(b.r.seq) - Number(a.r.seq))
+    // 같은 고시번호가 담당부서별로 중복 등록되는 경우가 있다.
+    .filter((x) => { const key = x.r.gosiNo.replace(/\s+/g, "") || x.r.seq; if (seenNo.has(key)) return false; seenNo.add(key); return true; })
     .slice(0, limit);
   const documents = await Promise.all(ranked.map((x) => analyzeGosi(x.r, ctx)));
   return { documents, errors };
