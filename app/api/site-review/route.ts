@@ -445,12 +445,14 @@ export async function POST(request: NextRequest) {
     // 국가법령정보센터 자치법규 검색이 실패(점검·장애·키 없음)한 항목만 행정안전부 자치법규정보시스템(ELIS)으로 다시 찾는다.
     // 국가법령정보센터가 점검 응답을 빈 결과로 돌려주는 경우도 있어, 법령 조회가 실패한 회차에는 '결과 없음'도 ELIS로 다시 확인한다.
     const lawCenterTrouble = settled.some((r) => r.status === "rejected");
+    // 결과 없음도 ELIS로 한 번 더 확인한다(주차장·도시계획·건축 조례는 관할에 반드시 있어야 하는 조례).
+    const essential = (q: string) => /주차장|도시계획|건축 조례/.test(q);
     const fallbackIdx = ordinanceSettled.flatMap((result, index) =>
-      result.status === "rejected" || (lawCenterTrouble && !result.value) ? [index] : []);
+      result.status === "rejected" || (!result.value && (lawCenterTrouble || essential(ordinanceQueries[index].query))) ? [index] : []);
     const elisSettled = await Promise.allSettled(fallbackIdx.map((index) => searchOrdinanceElis(ordinanceQueries[index].query, ordinanceQueries[index].jurisdiction)));
     const merged: PromiseSettledResult<OrdinanceRecord | null>[] = ordinanceSettled.map((result) => result);
     fallbackIdx.forEach((index, k) => { merged[index] = elisSettled[k]; });
-    if (fallbackIdx.length && elisSettled.some((r) => r.status === "fulfilled" && r.value)) lawSources.push("ELIS 자치법규정보시스템(국가법령정보센터 대체)");
+    if (fallbackIdx.length && elisSettled.some((r) => r.status === "fulfilled" && r.value)) lawSources.push(lawCenterTrouble ? "ELIS 자치법규정보시스템(국가법령정보센터 대체)" : "ELIS 자치법규정보시스템(국가법령정보센터 미검색 조례 보완)");
     ordinances = merged.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
     // Optional metro / borough ordinance subjects may not exist locally.
     // A successful 0-result search is not a service failure.
@@ -458,7 +460,7 @@ export async function POST(request: NextRequest) {
       ? [result.reason instanceof Error?result.reason.message:"알 수 없는 오류"] : []);
     if(ordinanceFailures.length)
       errors.push(`관할 자치법규 요청 ${ordinanceFailures.length}건 오류(ELIS 대체 포함): ${[...new Set(ordinanceFailures)].join(" / ")}`);
-    else if (fallbackIdx.length && ordinances.length)
+    else if (fallbackIdx.length && ordinances.length && lawCenterTrouble)
       errors.push(`국가법령정보센터 자치법규 조회 불가 → 자치법규정보시스템(ELIS)에서 ${ordinances.filter((o) => o.source === "elis").length}건 대체 확보`);
     if(!ordinances.length && !ordinanceFailures.length)
       errors.push("관할 도시계획·건축·주차장 조례를 찾지 못해 용적률·건폐율 확정을 보류했습니다.");

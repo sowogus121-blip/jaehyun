@@ -41,7 +41,7 @@ describe("운영 회귀검토", () => {
       log(`  - 조례: ${data.ordinances.map((o) => `${o.name}[${o.retrievalStatus === "full-text" ? "전문" : "메타"}]${/elis/.test(o.link) ? "(ELIS)" : ""}`).join(" / ")}`);
       const nat = data.nationalArticleCandidates ?? [];
       log(`- 국가법령 조문 후보 ${nat.length}건: ${[...new Set(nat.map((n) => `${n.sourceTitle} ${n.article}`))].slice(0, 25).join(" / ")}`);
-      const c27 = [...nat, ...(data.collected ?? []).map((c) => ({ sourceTitle: c.title, article: c.article, excerpt: c.text }))].find((n) => /주택건설기준/.test(n.sourceTitle) && /27/.test(n.article));
+      const c27 = [...(data.collected ?? []).map((c) => ({ sourceTitle: c.title, article: c.article, excerpt: c.text })), ...nat].find((n) => /주택건설기준/.test(n.sourceTitle) && /27/.test(n.article) && n.excerpt.length > 30);
       log(`- 주택건설기준 제27조: ${c27 ? short(c27.excerpt.slice(Math.max(0, c27.excerpt.search(/소형\s*주택/) - 20)), 400) : "미확보"}`);
       const collected = data.collected ?? [];
       log(`- 자동 수집 조문 ${collected.length}건 · 행별: ${Object.entries(collected.reduce<Record<string, number>>((a, c) => ({ ...a, [c.rowId]: (a[c.rowId] ?? 0) + 1 }), {})).map(([k, v]) => `${k}:${v}`).join(" ")}`);
@@ -53,7 +53,7 @@ describe("운영 회귀검토", () => {
       p = applyReview(p, data);
       const rows = p.rows;
       const pick = (id: string) => rows.find((r) => r.id === id);
-      for (const id of ["plan.use", "plan.far", "plan.relax", "bld.setback", "park.apartment", "park.urban", "park.officetel", "park.mech.ord", "park.mech.lh", "park.lh03"]) {
+      for (const id of ["plan.use", "plan.bcrfar", "plan.relax", "bld.setback", "park.apartment", "park.urban", "park.officetel", "park.mech.ord", "park.mech.lh", "park.lh03"]) {
         const r = pick(id);
         log(`- [${id}] ${r ? `${r.status} · 내용: ${short(r.content, 160)} · 비고: ${short(r.note, 200)} · 근거 ${r.sources.length}건${r.sources.some((s) => s.page) ? " (쪽 표기)" : ""}` : "행 없음"}`);
       }
