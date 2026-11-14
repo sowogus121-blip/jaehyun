@@ -690,7 +690,7 @@ function attachCollected(rows: Map<string, ReviewRow>, review: SiteReviewResult 
     const keys = [...(topic?.terms ?? []), ...(ROW_KEYWORDS[c.rowId] ?? [])];
     const sentences = keySentencesFor(c.text, keys, 3, c.kind === "ordinance" ? zoneName ?? undefined : undefined);
     const highlights = sentences.length ? sentences : [...(topic?.terms ?? []), ...(national?.no === 86 ? SUNLIGHT_HIGHLIGHTS : [])];
-    add(c.rowId, { title: c.title, article: c.article, url: c.url, effectiveDate: c.effectiveDate ?? undefined, excerpt: c.text, verbatim: true, highlights, kind: c.kind });
+    add(c.rowId, { title: c.title, article: c.article, url: c.url, effectiveDate: c.effectiveDate ?? undefined, excerpt: c.text, verbatim: true, highlights, kind: c.kind, ...(c.pdfUrl ? { pdfUrl: c.pdfUrl, page: [1] } : {}) });
   }
   const notice = review?.lhNotice;
   const perRow = new Map<string, number>();

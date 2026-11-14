@@ -42,6 +42,8 @@ export interface SourceRef {
   highlights?: string[];
   /** 원문 PDF 쪽번호 (공고문·고시문 등 조항 번호가 없는 문서) */
   page?: number | number[];
+  /** 원본 PDF 주소 (부록 원본 이미지판) */
+  pdfUrl?: string;
   kind?: "law" | "ordinance" | "plan" | "lh" | "upload" | "api" | "other";
 }
 

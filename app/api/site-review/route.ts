@@ -538,6 +538,23 @@ export async function POST(request: NextRequest) {
           collected.push({ topic: topic.label, rowId: topic.rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "ordinance" });
         }
       }
+      // 국가법령정보센터 본문의 별표 PDF 링크 → 부록 '원본 이미지판'에 사용
+      const annexPdf = new Map<string, string>();
+      const walk = (v: unknown, depth = 0): void => {
+        if (!v || typeof v !== "object" || depth > 8) return;
+        if (Array.isArray(v)) { v.forEach((x) => walk(x, depth + 1)); return; }
+        const o = v as Record<string, unknown>;
+        const no = String(o["별표번호"] ?? "").replace(/^0+/, "");
+        const link = Object.entries(o).find(([k, val]) => /PDF/i.test(k) && /링크|Link|URL/i.test(k) && typeof val === "string" && val)?.[1] as string | undefined;
+        if (no && link) annexPdf.set(no, link.startsWith("http") ? link : `https://www.law.go.kr${link}`);
+        Object.values(o).forEach((x) => walk(x, depth + 1));
+      };
+      walk(result.value);
+      if (annexPdf.size) for (const c of collected) {
+        if (c.title !== ordinance.name || !c.article.startsWith("별표")) continue;
+        const no = c.article.match(/별표\s*(\d+)/)?.[1];
+        if (no && annexPdf.has(no)) c.pdfUrl = annexPdf.get(no);
+      }
       // ELIS에서 읽은 별표(HWP 등)는 키워드 개수 제한 없이 원문 전체를 붙인다.
       const payload = result.value as { 별표?: Array<Record<string, string>>; ELIS별표?: Array<Record<string, string>> };
       for (const annex of [...(payload.별표 ?? []), ...(payload.ELIS별표 ?? [])]) {

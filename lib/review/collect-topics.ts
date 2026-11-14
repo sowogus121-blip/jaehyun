@@ -12,6 +12,8 @@ export interface CollectedArticle {
   article: string;
   text: string;
   kind: "ordinance" | "law";
+  /** 별표 원본 PDF (부록 원본 이미지판) */
+  pdfUrl?: string;
 }
 
 export interface OrdinanceTopic { id: string; rowId: string; label: string; ordinance: "도시계획" | "건축" | "주차장"; terms: string[] }
