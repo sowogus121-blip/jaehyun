@@ -535,6 +535,9 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   // 검증 규칙이 없으면 공고문 PDF 추출 문구에서 기계식 허용요건·비율을 직접 읽는다.
   const mechQuotes = (notice?.extractedCriteria ?? []).map((c) => c.quote).filter((q) => /기계식/.test(q));
   const mech = !rules && mechQuotes.length ? extractLhMechRule(mechQuotes) : null;
+  // LH 기계식 허용요건에 '역세권 500m'가 있으면 입지 판정 결과로 바로 가른다(3가지 요건 모두 충족해야 허용).
+  const mechNeedsTransit = !!mech?.requirement && /역세권|500\s*m/.test(mech.requirement);
+  const mechTransitFail = lh && mechNeedsTransit && !site.transitWithin500m && review?.transit?.verdict === "outside";
   put({
     id: "park.mech.lh",
     content: rules
@@ -542,9 +545,13 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       : mech ? [mech.requirement ? `허용요건: ${mech.requirement}` : "", mech.ratioText ? `비율: ${mech.ratioText}` : ""].filter(Boolean).join("\n")
       : notice ? "공고문에서 기계식주차 인수기준 문구를 찾지 못함 · 공고문 확인" : "관할 LH 지역본부 공고 미확인",
     law: notice ? notice.title : "LH 지역본부 신축매입약정 공고",
-    note: mech ? "공고문 PDF에서 자동 추출 · 지자체 조례 기준과 LH 인수 기준 중 엄격한 값 적용" : "지자체 조례 기준과 LH 인수 기준 중 엄격한 값을 적용",
+    note: mechTransitFail ? `역세권 요건 미충족 → LH 인수 기준상 기계식 불가(전량 자주식) · ${review!.transit!.basis}`
+      : mechNeedsTransit && review?.transit?.verdict === "borderline" ? `역세권 500m 경계 → 출구 기준 확인 전까지 기계식 조건부 · ${review.transit.basis}`
+      : mechNeedsTransit && (review?.transit?.verdict === "within" || site.transitWithin500m) ? `역세권 요건 충족${review?.transit?.verdict === "within" ? ` (${review.transit.basis})` : ""} · 공급유형·주택유형 요건 함께 충족 필요`
+      : mech ? "공고문 PDF에서 자동 추출 · 지자체 조례 기준과 LH 인수 기준 중 엄격한 값 적용" : "지자체 조례 기준과 LH 인수 기준 중 엄격한 값을 적용",
     status: (rules || mech?.maxPercent) && notice?.isCurrent ? "verified" : notice ? "candidate" : "missing",
-    params: rules ? { lhMechApartment: "prohibited", lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: rules.mechanicalMaxPercent }
+    params: mechTransitFail ? { lhMechApartment: "prohibited", lhMechUrban: "prohibited", lhMechOfficetel: "prohibited" }
+      : rules ? { lhMechApartment: "prohibited", lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: rules.mechanicalMaxPercent }
       : mech?.maxPercent ? { ...(mech.apartmentExcluded ? { lhMechApartment: "prohibited" as const } : {}), lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: mech.maxPercent } : undefined,
     sources: noticeSource ? [{ ...noticeSource, ...(mech ? { excerpt: [mech.requirement, mech.ratioText].filter(Boolean).join(" / "), verbatim: true, highlights: mech.maxPercent ? [`${mech.maxPercent}%`, "500m"] : ["500m"] } : {}) }] : [],
     missing: rules || mech?.maxPercent ? undefined : "공고문 기계식 인수기준 조항",
