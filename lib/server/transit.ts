@@ -42,8 +42,6 @@ async function searchPlace(query: string, x: number, y: number, radius: number, 
   return data.response.result?.items ?? [];
 }
 
-const STATION_CATEGORY = /지하철|전철|도시철도|철도역|역사|경전철|GTX/;
-const UNIV_CATEGORY = /대학|학교/;
 
 function nearest(items: VItem[], x: number, y: number, accept: (i: VItem) => NearbyPlace["kind"] | null): NearbyPlace | null {
   let best: NearbyPlace | null = null;
@@ -61,30 +59,32 @@ function nearest(items: VItem[], x: number, y: number, accept: (i: VItem) => Nea
 export async function checkTransit(x: number, y: number, key: string, domain: string): Promise<TransitCheck> {
   const errors: string[] = [];
   const run = (q: string) => searchPlace(q, x, y, 1200, key, domain).catch((e) => { errors.push(`${q}: ${e instanceof Error ? e.message : "검색 실패"}`); return [] as VItem[]; });
-  const [exits, stations, univs] = await Promise.all([run("출구"), run("역"), run("대학교")]);
-  const exit = nearest(exits, x, y, (i) => /역\s*\d+\s*번?\s*출구|출구\s*\d+/.test(String(i.title ?? "")) && (STATION_CATEGORY.test(String(i.category ?? "")) || /역/.test(String(i.title ?? ""))) ? "exit" : null);
-  const station = nearest(stations, x, y, (i) => {
-    const t = String(i.title ?? "");
-    const c = String(i.category ?? "");
-    return STATION_CATEGORY.test(c) && /역$|역\s*\(|역\s*\d+호선/.test(t) && !/버스|정류장|주유소|역전|매표/.test(t) ? "station" : null;
+  // VWorld 분류: 역사 "철도시설 > 철도/지하철 > 지하철역", 출입구 "도로시설 > 지하철역입구"(예: 가산디지털단지역6번출입구),
+  // 대학 "중앙행정기관 > 교육부 > 대학교", 교문 "진출입시설"(예: ○○대학교입구). 상호명에 '역'이 든 가게·버스정류장은 제외.
+  const [exitItems, stationItems, univItems] = await Promise.all([run("출입구"), run("지하철역"), run("대학교")]);
+  const exit = nearest([...exitItems, ...stationItems], x, y, (i) => {
+    const t = String(i.title ?? ""); const c = String(i.category ?? "");
+    return /지하철역입구|역\s*출입구/.test(c) || (/역\s*\d+\s*번\s*출(입)?구$/.test(t) && !/버스|정류장/.test(t + c) && /도로시설|교통|철도/.test(c)) ? "exit" : null;
   });
-  const university = nearest(univs, x, y, (i) => {
-    const t = String(i.title ?? "");
-    return /대학교$|대학교\s|대학$/.test(t) && UNIV_CATEGORY.test(String(i.category ?? "")) && !/병원|부속|어린이|유치원|사이버|평생교육|기숙사|주차장|도서관|연구소/.test(t) ? "university" : null;
-  });
+  const station = nearest(stationItems, x, y, (i) => /철도시설\s*>\s*철도\/지하철\s*>\s*(지하철역|일반철도역|철도정거장|경전철역)/.test(String(i.category ?? "")) ? "station" : null);
+  const gate = nearest(univItems, x, y, (i) => /대학교\s*(입구|정문|후문)$/.test(String(i.title ?? "")) && /진출입/.test(String(i.category ?? "")) ? "university" : null);
+  const campus = nearest(univItems, x, y, (i) => /교육부\s*>\s*대학교$|교육부\s*>\s*대학$|>\s*대학교$/.test(String(i.category ?? "")) && !/병원|부속|어린이|유치원|사이버|평생교육|출판|도서관/.test(String(i.title ?? "")) ? "university" : null);
+  const university = gate && (!campus || gate.distance <= campus.distance + 300) ? { ...gate, name: gate.name } : campus;
   const stationPick = exit ?? station;
   // 출구 기준 500m 이내 → 충족. 역사 중심점만 있으면 400m 이내 충족·650m 이내 경계.
   // 대학은 주소 대표점 기준이라 400m 이내 충족·700m 이내 경계.
   const stationVerdict = !stationPick ? null
     : stationPick.kind === "exit" ? (stationPick.distance <= 500 ? "within" : stationPick.distance <= 600 ? "borderline" : "outside")
     : stationPick.distance <= 400 ? "within" : stationPick.distance <= 650 ? "borderline" : "outside";
-  const univVerdict = !university ? null : university.distance <= 400 ? "within" : university.distance <= 700 ? "borderline" : "outside";
+  const univIsGate = !!university && /입구|정문|후문/.test(university.name);
+  const univVerdict = !university ? null : univIsGate ? (university.distance <= 500 ? "within" : university.distance <= 600 ? "borderline" : "outside")
+    : university.distance <= 400 ? "within" : university.distance <= 700 ? "borderline" : "outside";
   const order = ["within", "borderline", "outside"] as const;
   const verdicts = [stationVerdict, univVerdict].filter(Boolean) as Array<(typeof order)[number]>;
   const verdict = verdicts.length ? order.find((v) => verdicts.includes(v))! : errors.length ? "unknown" : "outside";
   const basis = [
     stationPick ? `${stationPick.name} ${stationPick.kind === "exit" ? "출구" : "역사 중심"}까지 직선 ${stationPick.distance}m` : "반경 1.2km 내 도시철도역 없음",
-    university ? `${university.name} 주소점까지 직선 ${university.distance}m` : "반경 1.2km 내 대학교 없음",
+    university ? `${university.name} ${univIsGate ? "" : "대표점"}까지 직선 ${university.distance}m` : "반경 1.2km 내 대학교 없음",
   ].join(" · ");
   return { station: stationPick, university, verdict, basis, checkedAt: new Date().toISOString(), errors };
 }

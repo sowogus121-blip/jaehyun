@@ -426,9 +426,9 @@ describe("LH 0.3대 특례 입지 자동 판정", () => {
     // 대상지 (127.0, 37.5) 기준: 출구 약 330m, 대학 약 1.1km
     globalThis.fetch = (async (input: string | URL | Request) => {
       const q = new URL(String(input)).searchParams.get("query");
-      const items = q === "출구" ? [{ title: "독산역 2번 출구", category: "교통시설 > 지하철", point: { x: "127.0", y: "37.503" } }]
-        : q === "역" ? [{ title: "독산역", category: "교통시설 > 지하철,전철", point: { x: "127.0", y: "37.506" } }]
-        : [{ title: "한국대학교", category: "교육 > 대학교", point: { x: "127.0", y: "37.51" } }];
+      const items = q === "출입구" ? [{ title: "독산역2번출입구", category: "도로시설 > 지하철역입구", point: { x: "127.0", y: "37.503" } }, { title: "더카페독산역1번출구점", category: "주점업 > 카페", point: { x: "127.0", y: "37.501" } }]
+        : q === "지하철역" ? [{ title: "독산역", category: "철도시설 > 철도/지하철 > 지하철역", point: { x: "127.0", y: "37.506" } }]
+        : [{ title: "한국대학교", category: "중앙행정기관 > 교육부 > 대학교", point: { x: "127.0", y: "37.51" } }];
       return new Response(JSON.stringify({ response: { status: "OK", result: { items } } }));
     }) as typeof fetch;
     try {
