@@ -11,6 +11,7 @@ import { findArticle, zoneRatio, type Article } from "./articles";
 import { assessParcelAssembly } from "../parcel-assembly";
 import { ORDINANCE_TOPICS, NATIONAL_ARTICLES, lhCriterionRow } from "./collect-topics";
 import { classifyDesignations, NEW_TOWN_HINT } from "./special-zones";
+import { extractParkingRules, describeTiers, type ParkingRule } from "./parking-rules";
 import type { ReviewRow, RowStatus, SiteInput, SourceRef, UseKind } from "./types";
 import { USE_SHORT } from "./types";
 
@@ -458,20 +459,56 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const parkingArticle = findArticle(review, "주차장", ["부설주차장의 설치기준", "부설주차장 설치기준", "주차대수"]);
   put({
     id: "park.ordinance",
-    content: "용도별 부설주차장 설치기준 (조례 별표)",
+    content: (review?.collected ?? []).some((c) => c.rowId === "park.ordinance" && c.article.startsWith("별표"))
+      ? "용도별 부설주차장 설치기준 (조례 별표 원문 확보 · 주거용도는 아래 행에 자동 반영)"
+      : "용도별 부설주차장 설치기준 (조례 별표)",
     law: parkingArticle ? `${parkingArticle.sourceTitle} ${parkingArticle.article}` : (cityParking?.title ?? "관할 주차장 조례") + " 별표",
-    note: "아래 용도별 행에 대/세대 수치를 입력하면 규모검토에 반영",
-    status: parkingArticle ? "candidate" : "missing",
+    note: (review?.collected ?? []).some((c) => c.rowId === "park.ordinance" && c.article.startsWith("별표")) ? "비주거 용도 혼합 시 별표 시설면적 기준으로 합산" : "아래 용도별 행에 대/세대 수치를 입력하면 규모검토에 반영",
+    status: parkingArticle ? ((review?.collected ?? []).some((c) => c.rowId === "park.ordinance" && c.article.startsWith("별표")) ? "verified" : "candidate") : "missing",
     sources: parkingArticle ? [articleRef(parkingArticle, ["주차"])] : cityParking ? [cityParking] : [ref("주차장법 시행령", "별표 1")],
   });
-  const parkRow = (id: string, use: UseKind, text: string) => put({
-    id, content: text,
-    law: (cityParking?.title ?? "관할 주차장 조례") + " 별표 · 주택건설기준 등에 관한 규정 제27조",
-    note: "전용면적 구간별 기준 확인 후 대/" + (use === "officetel" ? "호" : "세대") + " 입력",
-    status: "missing",
-    sources: [lawRef(review, LAW.housingStd, "제27조")],
-    missing: "세대(호)당 법정 최소대수",
-  });
+  // 조례 별표(부설주차장 설치기준) 원문에서 용도별 기준 자동 판독
+  const parkingAnnexes = (review?.collected ?? []).filter((c) => c.rowId === "park.ordinance" && c.article.startsWith("별표"));
+  const annexRule = (use: UseKind): { rule: ParkingRule; annex: (typeof parkingAnnexes)[number] } | null => {
+    for (const annex of parkingAnnexes) {
+      const rules = extractParkingRules(annex.text);
+      const rule = rules.find((r) => r.use === use && r.tiers) ?? rules.find((r) => r.use === use)
+        ?? (use === "urban" ? rules.find((r) => r.use === "apartment" && /도시형\s*생활주택/.test(r.quote)) : undefined);
+      if (rule) return { rule, annex };
+    }
+    return null;
+  };
+  const parkRow = (id: string, use: UseKind, text: string) => {
+    const word = use === "officetel" ? "호" : "세대";
+    const found = annexRule(use);
+    const tierKey = use === "apartment" ? "parkingApartmentTiers" : use === "urban" ? "parkingUrbanTiers" : "parkingOfficetelTiers";
+    if (found) {
+      const { rule, annex } = found;
+      const nums = (rule.tiers ?? []).flatMap((t) => [`${t.ratio}대`, ...(t.maxArea !== undefined ? [`${t.maxArea}제곱미터`] : [])]);
+      return put({
+        id,
+        content: (rule.tiers ? `${word}당 최소 ${describeTiers(rule.tiers, word)}` : "조례 별표 기준 (아래 원문)")
+          + (rule.refHousingStd27 ? `\n「주택건설기준 등에 관한 규정」 제27조 산정 대수와 비교해 큰 값 적용` : "")
+          + `\n원문: ${rule.quote.slice(0, 260)}${rule.quote.length > 260 ? "…" : ""}`,
+        law: `${annex.title} ${annex.article.split(" · ")[0]}` + (rule.refHousingStd27 ? " · 주택건설기준 등에 관한 규정 제27조" : ""),
+        note: rule.tiers ? `별표 원문에서 자동 판독 · 규모검토에 ${word}당 최소대수로 반영` : "별표 문구에 구간 수치가 없어 원문 인용만 · 대수는 직접 입력",
+        status: rule.tiers ? "verified" : "candidate",
+        params: rule.tiers ? { [tierKey]: rule.tiers } : undefined,
+        sources: [
+          { title: annex.title, article: annex.article.split(" · ")[0], effectiveDate: annex.effectiveDate ?? undefined, url: annex.url, excerpt: rule.quote, verbatim: true, highlights: nums, kind: "ordinance" },
+          ...(rule.refHousingStd27 ? [lawRef(review, LAW.housingStd, "제27조")] : []),
+        ],
+      });
+    }
+    return put({
+      id, content: text,
+      law: (cityParking?.title ?? "관할 주차장 조례") + " 별표 · 주택건설기준 등에 관한 규정 제27조",
+      note: parkingAnnexes.length ? `별표는 확보했지만 ${USE_SHORT[use]} 항목을 찾지 못함 · 대/${word} 직접 입력` : `조례 별표 미확보 · 대/${word} 직접 입력`,
+      status: "missing",
+      sources: [lawRef(review, LAW.housingStd, "제27조")],
+      missing: `${word}당 법정 최소대수`,
+    });
+  };
   if (uses.includes("apartment") || !site.uses.length) parkRow("park.apartment", "apartment", "조례상 전용면적 기준 및 세대당 최소대수 적용");
   if (uses.includes("urban")) parkRow("park.urban", "urban", "도시형생활주택 전용면적별 기준 (조례 별표)");
   if (uses.includes("officetel") || !site.uses.length) parkRow("park.officetel", "officetel", "오피스텔 호실 전용면적 기준 (조례 별표)");

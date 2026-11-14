@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { LhSupply, ParamKey, Project, ReviewRow, RowStatus, RuleParams, SourceRef, UseVerdict } from "@/lib/review/types";
+import type { LhSupply, ParamKey, ParkingTier, Project, ReviewRow, RowStatus, RuleParams, SourceRef, UseVerdict } from "@/lib/review/types";
 import { STATUS_LABEL, SUPPLY_LABEL } from "@/lib/review/types";
 import { NUMERIC_PARAMS, PARAM_LABEL, VERDICT_PARAMS, resolveParams } from "@/lib/review/params";
 import { lookupHint, officialLinks } from "@/lib/review/lookup-hints";
@@ -241,14 +241,16 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
           ? <select value={String(r.params?.[k] ?? "")} onChange={(e: { target: { value: string } }) => setParam(k, (e.target.value || undefined) as UseVerdict | undefined)}>
               {(Object.keys(VERDICT_LABEL) as UseVerdict[]).map((v) => <option key={v} value={v}>{VERDICT_LABEL[v]}</option>)}
             </select>
-          : <Num value={r.params?.[k] as number | undefined} step={0.01} onChange={(v) => setParam(k, v)} />}
+          : k.endsWith("Tiers")
+            ? <TierInput value={r.params?.[k] as ParkingTier[] | undefined} onChange={(v) => setParam(k, v as never)} />
+            : <Num value={r.params?.[k] as number | undefined} step={0.01} onChange={(v) => setParam(k, v)} />}
         <button className="btn sm" onClick={() => setParam(k, undefined)}>삭제</button>
       </div>)}
       <div className="param add">
         <select value={addKey} onChange={(e: { target: { value: string } }) => setAddKey(e.target.value as ParamKey)}>
-          {[...NUMERIC_PARAMS, ...VERDICT_PARAMS].filter((k) => !paramKeys.includes(k)).map((k) => <option key={k} value={k}>{PARAM_LABEL[k]}</option>)}
+          {([...NUMERIC_PARAMS, "parkingApartmentTiers", "parkingUrbanTiers", "parkingOfficetelTiers", ...VERDICT_PARAMS] as ParamKey[]).filter((k) => !paramKeys.includes(k)).map((k) => <option key={k} value={k}>{PARAM_LABEL[k]}</option>)}
         </select>
-        <button className="btn sm" onClick={() => setParam(addKey, VERDICT_PARAMS.includes(addKey) ? "allowed" : 0)}>+ 수치 추가</button>
+        <button className="btn sm" onClick={() => setParam(addKey, VERDICT_PARAMS.includes(addKey) ? "allowed" : addKey.endsWith("Tiers") ? ([{ ratio: 1 }] as never) : 0)}>+ 수치 추가</button>
       </div>
     </div>
 
@@ -294,6 +296,21 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
       <div className="official-links">{officialLinks(address).map((l) => <a key={l.url} href={l.url} target="_blank" rel="noreferrer">{l.label} ↗</a>)}</div>
     </div>
   </div>;
+}
+
+/** 세대(호)당 최소주차 구간 입력: "30:0.5, 60:0.8, 1" = 전용 30㎡ 이하 0.5대 · 60㎡ 이하 0.8대 · 그 외 1대 */
+function TierInput({ value, onChange }: { value?: ParkingTier[]; onChange: (v: ParkingTier[] | undefined) => void }) {
+  const text = (value ?? []).map((t) => t.maxArea !== undefined ? `${t.maxArea}:${t.ratio}` : String(t.ratio)).join(", ");
+  const [draft, setDraft] = useState(text);
+  return <input title="전용면적㎡ 이하:대수, … , 그 외 대수 (예: 30:0.5, 60:0.8, 1)" value={draft}
+    onChange={(e: { target: { value: string } }) => setDraft(e.target.value)}
+    onBlur={() => {
+      const tiers = draft.split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
+        const [a, b] = x.split(":").map((y) => Number(y.trim()));
+        return b === undefined ? { ratio: a } : { maxArea: a, ratio: b };
+      }).filter((t) => Number.isFinite(t.ratio));
+      onChange(tiers.length ? tiers : undefined);
+    }} />;
 }
 
 function fmtDate(v?: string | null) {

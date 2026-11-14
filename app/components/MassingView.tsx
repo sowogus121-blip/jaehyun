@@ -16,7 +16,9 @@ export function useResults(project: Project) {
 }
 
 const VERDICT: Record<string, string> = { allowed: "허용", conditional: "조건부", prohibited: "불가" };
-const showValue = (v: unknown) => typeof v === "number" ? fmtNum(v) : VERDICT[String(v)] ?? String(v);
+const showValue = (v: unknown) => typeof v === "number" ? fmtNum(v)
+  : Array.isArray(v) ? (v as Array<{ maxArea?: number; ratio: number }>).map((t) => t.maxArea !== undefined ? `${t.maxArea}㎡↓ ${t.ratio}` : `그 외 ${t.ratio}`).join(" · ")
+  : VERDICT[String(v)] ?? String(v);
 
 export function MassingView({ project, onChange, onGoLegal }: { project: Project; onChange: (p: Project) => void; onGoLegal: (rowId?: string) => void }) {
   const { params, results } = useResults(project);

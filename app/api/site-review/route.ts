@@ -478,40 +478,59 @@ export async function POST(request: NextRequest) {
   let ordinanceArticleCandidates: OrdinanceArticleCandidate[] = [];
   if (lawOc && ordinances.length) {
     // 본문: 국가법령정보센터 레코드는 DRF 본문, 실패하면 같은 조례를 ELIS에서 읽는다. ELIS 레코드는 바로 ELIS.
+    const subjectOf = (name: string) => name.includes("주차장") ? "주차장" : name.includes("도시계획") ? "도시계획" : name.replace(/\s+/g, "").endsWith("건축조례") ? "건축" : null;
+    const annexNotes: string[] = [];
     const readBody = async (ordinance: OrdinanceRecord): Promise<unknown> => {
+      const subject = subjectOf(ordinance.name);
       if (ordinance.source === "elis" && ordinance.elis) {
-        const got = await fetchOrdinanceElis(ordinance.elis.alrNo, ordinance.elis.histNo);
+        const got = await fetchOrdinanceElis(ordinance.elis.alrNo, ordinance.elis.histNo, undefined, subject);
         ordinance.elis.histNo = got.histNo;
         ordinance.link = got.link;
         ordinance.enforcementDate = got.enforcementDate ?? ordinance.enforcementDate;
+        annexNotes.push(...got.annexErrors);
         return got.payload;
       }
+      let payload: unknown;
       try {
-        return await fetchLawPayload("ordin", ordinance, lawOc);
+        payload = await fetchLawPayload("ordin", ordinance, lawOc);
       } catch (error) {
         const alt = await searchOrdinanceElis(ordinance.name, ordinance.localGovernment ?? localGovernment).catch(() => null);
         if (!alt?.elis) throw error;
-        const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo);
+        const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo, undefined, subject);
         Object.assign(ordinance, { source: "elis", elis: { alrNo: alt.elis.alrNo, histNo: got.histNo }, link: got.link, enforcementDate: got.enforcementDate ?? ordinance.enforcementDate });
         if (!lawSources.length) lawSources.push("ELIS 자치법규정보시스템(국가법령정보센터 대체)");
+        annexNotes.push(...got.annexErrors);
         return got.payload;
       }
+      // 국가법령정보센터 본문은 별표가 파일 링크뿐인 경우가 많다 → 주차장 조례는 ELIS 별표(HWP)를 읽어 붙인다.
+      if (subject === "주차장") {
+        try {
+          const alt = await searchOrdinanceElis(ordinance.name, ordinance.localGovernment ?? localGovernment);
+          if (alt?.elis) {
+            const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo, undefined, subject);
+            annexNotes.push(...got.annexErrors);
+            if (got.payload.별표.length) return { ...(payload as object), ELIS별표: got.payload.별표 };
+          }
+        } catch { /* 별표 보강 실패는 본문 사용에 지장 없음 */ }
+      }
+      return payload;
     };
     const detailResults = await Promise.allSettled(ordinances.map(readBody));
     const detailErrors = detailResults.flatMap((result) => result.status === "rejected"
       ? [result.reason instanceof Error ? result.reason.message : "자치법규 원문 요청 오류"]
       : []);
     if (detailErrors.length) errors.push(`자치법규 본문 조회 ${detailErrors.length}건 실패: ${[...new Set(detailErrors)].join(" / ")}`);
+    if (annexNotes.length) errors.push(`조례 별표 일부를 읽지 못함: ${[...new Set(annexNotes)].slice(0, 3).join(" / ")}`);
     detailResults.forEach((result, index) => {
       if (result.status !== "fulfilled" || !result.value) return;
       const ordinance = ordinances[index];
       ordinance.retrievalStatus = "full-text";
       ordinanceArticleCandidates.push(...extractOrdinanceArticles(result.value, ordinance.name, ordinance.link));
-      const subject = ordinance.name.includes("주차장") ? "주차장" : ordinance.name.includes("도시계획") ? "도시계획" : ordinance.name.replace(/\s+/g, "").endsWith("건축조례") ? "건축" : null;
+      const subject = subjectOf(ordinance.name);
       for (const topic of ORDINANCE_TOPICS.filter((t) => t.ordinance === subject)) {
         for (const found of findArticlesByKeyword(result.value, topic.terms, 2)) {
           if (collected.some((c) => c.title === ordinance.name && c.article === found.article && c.rowId === topic.rowId)) continue;
-          collected.push({ topic: topic.label, rowId: topic.rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "ordinance" });
+          collected.push({ topic: topic.label, rowId: topic.rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article: found.article, text: found.text.slice(0, found.article.startsWith("별표") ? 8000 : 2500), kind: "ordinance" });
         }
       }
     });

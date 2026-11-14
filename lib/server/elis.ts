@@ -6,6 +6,8 @@
  * 빈 결과를 돌려주고(오류 메시지 포함) 수치를 추정하지 않는다.
  */
 import { ordinanceTitleMatches, type OrdinanceRecord } from "./law-api";
+import { extractHwpText } from "./hwp";
+import { extractDocumentText } from "./document-parser";
 
 const BASE = "https://www.elis.go.kr";
 const UA = "Mozilla/5.0 (compatible; LH-Plan-Lab/0.8; +https://lh-plan-lab.vercel.app)";
@@ -139,7 +141,7 @@ function koreaToday() {
  * 본문을 읽는다. 검색 결과가 시행예정(예) 이력이면 연혁에서 오늘 기준 현행 이력으로 바꿔 다시 읽는다.
  * 돌려주는 histNo/enforcementDate 가 실제 읽은 판본이다.
  */
-export async function fetchOrdinanceElis(alrNo: string, histNo: string, today = koreaToday()) {
+export async function fetchOrdinanceElis(alrNo: string, histNo: string, today = koreaToday(), subject: string | null = null) {
   let { text } = await timed(elisLink(alrNo, histNo), {}, 15_000);
   let parsed = parseElisBody(text);
   const inForce = parsed.history.filter((h) => h.alrNo === alrNo && h.enforcementDate <= today)
@@ -152,5 +154,57 @@ export async function fetchOrdinanceElis(alrNo: string, histNo: string, today = 
   }
   if (!parsed.조문.length) throw new Error("ELIS 본문에서 조문을 읽지 못했습니다(화면 형식 변경 가능)");
   const enforcementDate = parsed.history.find((h) => h.histNo === used)?.enforcementDate ?? inForce?.enforcementDate ?? null;
-  return { payload: { 조문: parsed.조문 }, histNo: used, enforcementDate, link: elisLink(alrNo, used) };
+  // 별표(부설주차장 설치기준 등): 규모검토에 필요한 것만 내려받아 본문 JSON에 '별표내용'으로 붙인다.
+  const annexes: Array<Record<string, string>> = [];
+  const annexErrors: string[] = [];
+  if (subject) {
+    for (const a of pickAnnexes(parseElisAnnexList(text), subject)) {
+      try {
+        const body = await fetchElisAnnexText(alrNo, used, a.sn);
+        if (body.trim()) annexes.push({ 별표번호: String(Number(a.sn)), 별표제목: a.title, 별표내용: body.slice(0, 20_000) });
+      } catch (error) {
+        annexErrors.push(`${a.title}: ${error instanceof Error ? error.message : "별표 읽기 실패"}`);
+      }
+    }
+  }
+  return { payload: { 조문: parsed.조문, 별표: annexes }, histNo: used, enforcementDate, link: elisLink(alrNo, used), annexErrors };
+}
+
+// ───────── 별표·서식 (HWP/HWPX/PDF 첨부) ─────────
+export interface ElisAnnex { sn: string; title: string }
+
+/** 본문 화면의 별표·서식 목록 (fnAttListDown) */
+export function parseElisAnnexList(html: string): ElisAnnex[] {
+  const out = new Map<string, string>();
+  for (const m of html.matchAll(/fnAttListDown\('\d+','\d+','(\d+)'\)"[^>]*>\s*(?:<span[^>]*>[^<]*<\/span>)?\s*([^<]+)</g)) {
+    const title = m[2].replace(/\s+/g, " ").trim();
+    if (title && !out.has(m[1])) out.set(m[1], title);
+  }
+  return [...out].map(([sn, title]) => ({ sn, title }));
+}
+
+/** 별표 파일을 내려받아 텍스트로. HWP(OLE)·HWPX(zip)·PDF 자동 판별. */
+export async function fetchElisAnnexText(alrNo: string, histNo: string, sn: string): Promise<string> {
+  const { response } = await timedRaw(`${BASE}/allalr/attListDown?alrNo=${alrNo}&histNo=${histNo}&attlistSn=${sn}&chkTime=${Date.now()}`);
+  const data = new Uint8Array(await response.arrayBuffer());
+  if (data.length > 8 * 1024 * 1024) throw new Error("별표 파일 용량 초과");
+  if (data[0] === 0xd0 && data[1] === 0xcf) return extractHwpText(data);
+  if (data[0] === 0x50 && data[1] === 0x4b) return (await extractDocumentText(data, "hwpx", 30_000)).text;
+  if (data[0] === 0x25 && data[1] === 0x50) return (await extractDocumentText(data, "pdf", 30_000)).text;
+  throw new Error("별표 파일 형식을 알 수 없음");
+}
+
+async function timedRaw(url: string, ms = 15_000) {
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(ms), headers: { "User-Agent": UA } });
+  if (!response.ok) throw new Error(`ELIS 별표 HTTP ${response.status}`);
+  return { response };
+}
+
+/** 주제별로 필요한 별표만 고른다 (예: 주차장 조례 → 부설주차장 설치기준, 설치제한 기준). */
+export function pickAnnexes(list: ElisAnnex[], subject: string): ElisAnnex[] {
+  const want = subject === "주차장" ? /부설주차장.*(설치기준|설치대상)|설치제한|기계식/
+    : subject === "건축" ? /대지\s*안의\s*공지|대지안의\s*공지|공개\s*공지|조경|일조|높이/
+    : subject === "도시계획" ? /용도지역|건축제한|건축할\s*수|용적률|건폐율/
+    : null;
+  return want ? list.filter((a) => want.test(a.title)).slice(0, 3) : [];
 }

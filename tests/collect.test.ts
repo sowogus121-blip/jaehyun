@@ -327,3 +327,48 @@ describe("수집 출처 상태 표시", () => {
     expect(s["토지이음 고시"]).toBe("fail");
   });
 });
+
+import { extractParkingRules, parseTiers } from "../lib/review/parking-rules";
+import { parseElisAnnexList } from "../lib/server/elis";
+import { defaultScenario, DEFAULT_ASSUMPTIONS } from "../lib/massing/engine";
+describe("조례 별표 주차기준 자동 판독", () => {
+  const annex = `■ 서울특별시 주차장 설치 및 관리 조례 [별표 2]
+부설주차장의 설치대상 시설물 종류 및 설치기준 (제20조제1항 관련)
+2-1.업무시설(외국공관및    오피스텔을 제외한다)
+일반업무시설 : 시설면적 100㎡당 1대
+4. 단독주택(다가구주택을 제외한다)
+시설면적 50㎡초과 150㎡  이하 : 1대
+5. 다가구주택, 공동주택(외국공관안의 주택 등의 시설물 및 기숙사를 제외한다) 및 업무시설 중 오피스텔
+「주택건설기준 등에 관한 규정」 제27조제1항에 따라 산정된 주차대수로 하되, 주차대수가 세대당 1대에 미달되는 경우에는 세대당(오피스텔에서 호실별로 구분되는 경우에는 호실당) 1대(전용면적이 30제곱미터이하인 경우에는 0.5대, 60제곱미터이하인 경우0.8대)이상으로 한다.
+6. 골프장
+<비고>
+1. 시설물의 종류는`;
+  it("공동주택·오피스텔 세대(호)당 최소대수 구간을 읽고 제외 괄호는 무시한다", () => {
+    const rules = extractParkingRules(annex);
+    expect(rules.map((r) => r.use)).toEqual(["apartment", "officetel"]);
+    expect(rules[0].tiers).toEqual([{ maxArea: 30, ratio: 0.5 }, { maxArea: 60, ratio: 0.8 }, { ratio: 1 }]);
+    expect(rules[0].refHousingStd27).toBe(true);
+    expect(parseTiers("호실당 0.7대 이상")).toEqual([{ ratio: 0.7 }]);
+  });
+  it("ELIS 별표 목록을 읽는다", () => {
+    const html = `<li><a id="t12" href="javascript:fnAttListDown('11000071000010','080','002')" class="t1false"> <span class="color-blue">[서식 ]</span> 부설주차장의 설치대상 시설물 종류 및 설치기준 (제20조제1항 관련) </a></li>`;
+    expect(parseElisAnnexList(html)).toEqual([{ sn: "002", title: "부설주차장의 설치대상 시설물 종류 및 설치기준 (제20조제1항 관련)" }]);
+  });
+  it("별표가 수집되면 오피스텔 주차 행이 원문 확인으로 바뀌고 규모검토가 타입별 면적으로 법정대수를 산정한다", () => {
+    const site = { address: "서울특별시 금천구 독산동 151-10", extraParcels: [], business: "lh-purchase", uses: ["officetel"], supplies: ["youth"] } as never;
+    const review = {
+      location: { address: "a", parcelAddress: "서울특별시 금천구 독산동 151-10", x: "1", y: "1" },
+      landUse: [{ category: "용도지역", name: "준공업지역", code: "x", source: "v", status: "verified" }],
+      parcel: { area: 1093.6 }, parcels: [], laws: [], ordinances: [{ name: "서울특별시 주차장 설치 및 관리 조례", enforcementDate: "20251001", link: "u" }],
+      ordinanceArticleCandidates: [], nationalArticleCandidates: [], errors: [], missing: [], webSearch: { status: "completed", results: [] },
+      collected: [{ topic: "부설주차장 설치기준", rowId: "park.ordinance", title: "서울특별시 주차장 설치 및 관리 조례", url: "u", effectiveDate: "20251001", article: "별표 2 · 부설주차장의 설치대상 시설물 종류 및 설치기준", text: annex, kind: "ordinance" }],
+    } as never;
+    const rows = buildRows(site, review);
+    const r = rows.find((x) => x.id === "park.officetel")!;
+    expect(r.status).toBe("verified");
+    expect(r.params?.parkingOfficetelTiers).toEqual([{ maxArea: 30, ratio: 0.5 }, { maxArea: 60, ratio: 0.8 }, { ratio: 1 }]);
+    const params = resolveParams(rows);
+    const res = runScenario({ params, scenario: defaultScenario("officetel", "s"), assumptions: DEFAULT_ASSUMPTIONS, site });
+    if (res.units > 0) expect(res.parking.legal).toBeGreaterThan(0);
+  });
+});
