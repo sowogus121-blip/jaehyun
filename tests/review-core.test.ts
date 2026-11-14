@@ -62,12 +62,18 @@ describe("사례 B — 서울 금천구 독산동 151-10 (준공업지역)", () 
   it("250% 기본안과 300% 완화안을 구분하고, 완화 근거 확정 전에는 완화안을 계산하지 않는다", () => {
     const params = resolveParams(rows);
     const base = runScenario({ params, scenario: defaultScenario("officetel", "b", { farMode: "base" }), assumptions: DEFAULT_ASSUMPTIONS, site: site(addr) });
-    const relaxed = runScenario({ params, scenario: defaultScenario("officetel", "r", { farMode: "relaxed" }), assumptions: DEFAULT_ASSUMPTIONS, site: site(addr) });
+    const relaxed = runScenario({ params, candidates: candidateParams(rows), scenario: defaultScenario("officetel", "r", { farMode: "relaxed" }), assumptions: DEFAULT_ASSUMPTIONS, site: site(addr) });
+    const relaxedNoCandidate = runScenario({ params, scenario: defaultScenario("officetel", "r0", { farMode: "relaxed" }), assumptions: DEFAULT_ASSUMPTIONS, site: site(addr) });
+    expect(relaxedNoCandidate.missing.join(" ")).toContain("완화 용적률");
     expect(base.farApplied).toBe(250);
     expect(base.plannedFar).toBeLessThanOrEqual(250);
     expect(base.units).toBeGreaterThan(0);
-    expect(relaxed.feasibility).toBe("insufficient");
-    expect(relaxed.missing.join(" ")).toContain("완화 용적률");
+    // 완화 근거가 후보 단계면 참고 계산하되 조건으로 표시
+    expect(relaxed.farApplied).toBe(300);
+    expect(relaxed.conditions.join(" ")).toContain("후보");
+    const r400 = runScenario({ params, candidates: candidateParams(rows), scenario: defaultScenario("officetel", "r4", { farMode: "relaxed", relaxedFar: 400 }), assumptions: DEFAULT_ASSUMPTIONS, site: site(addr) });
+    expect(r400.farApplied).toBe(400);
+    expect(r400.farLabel).toContain("추가공급");
     const confirmed = resolveParams(promote(rows, "plan.relax"));
     const relaxed2 = runScenario({ params: confirmed, scenario: defaultScenario("officetel", "r", { farMode: "relaxed" }), assumptions: DEFAULT_ASSUMPTIONS, site: site(addr) });
     expect(relaxed2.farApplied).toBe(300);

@@ -344,6 +344,7 @@ export interface SiteReviewResult {
       pageCount: number | null;
       preview: string;
       candidates: Array<{
+        page?: number;
         topic: string;
         quote: string;
         value: number | null;

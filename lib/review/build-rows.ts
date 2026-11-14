@@ -11,6 +11,7 @@ import { findArticle, zoneRatio, type Article } from "./articles";
 import { assessParcelAssembly } from "../parcel-assembly";
 import { ORDINANCE_TOPICS, NATIONAL_ARTICLES, lhCriterionRow } from "./collect-topics";
 import { classifyDesignations, NEW_TOWN_HINT } from "./special-zones";
+import { keySentencesFor } from "../report/format";
 import { extractParkingRules, extractLhMechRule, describeTiers, type ParkingRule } from "./parking-rules";
 import type { ReviewRow, RowStatus, SiteInput, SourceRef, UseKind } from "./types";
 import { USE_SHORT } from "./types";
@@ -520,17 +521,17 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   put({
     id: "park.lh03",
     content: "조건 충족 시 0.3대/호\n- 전용 30㎡ 미만\n- 청년형은 도시철도역 출구 또는 대학 교문 직선거리 500m 이내 (고령자형 입지 무관)\n- LH 선정심의 → 조건부 매입약정 → 매입약정증명서 발급 → 인허가 제출",
-    law: "공공주택 특별법 시행령 제37조제4항" + (notice ? ` · ${notice.title}` : " · LH 지역본부 공고"),
+    law: "공공주택 특별법 시행령 제37조제4항" + (notice ? ` · ${notice.title}${pageLabel((notice.extractedCriteria ?? []).filter((c) => /0[.]3\s*대/.test(c.quote)).map((c) => c.page))}` : " · LH 지역본부 공고"),
     note: !lh ? "LH 매입약정 사업 아님"
       : site.transitWithin500m ? (review?.transit?.verdict === "within" ? `입지 자동 확인: ${review.transit.basis}` : "검토자: 역세권 500m 입지 확인")
       : review?.transit ? (review.transit.verdict === "within" ? `입지 자동 확인: ${review.transit.basis}`
         : review.transit.verdict === "borderline" ? `경계 거리 · 출구·교문 기준 확인 필요: ${review.transit.basis}`
-        : review.transit.verdict === "outside" ? `500m 밖 · 청년형 특례 불가 (고령자형은 입지 무관): ${review.transit.basis}`
+        : review.transit.verdict === "outside" ? `불가(청년형): 역 출구·대학 교문 500m 밖 · 고령자형은 입지 무관 · ${review.transit.basis}`
         : "입지 자동 판정 실패 · 직접 확인")
       : "역세권 입지 미확인",
     status: lh ? "candidate" : "missing",
     params: lh ? { lhParking03: "conditional", lhParking03MaxArea: rules?.parking03MaxArea ?? 30 } : undefined,
-    sources: [lawRef(review, LAW.publicHousingDecree, "제37조"), ...(noticeSource ? [noticeSource] : [])],
+    sources: [lawRef(review, LAW.publicHousingDecree, "제37조"), ...(noticeSource ? [{ ...noticeSource, page: [...new Set((notice?.extractedCriteria ?? []).filter((c) => /0[.]3\s*대/.test(c.quote) && c.page).map((c) => c.page!))] }] : [])],
   });
   // 검증 규칙이 없으면 공고문 PDF 추출 문구에서 기계식 허용요건·비율을 직접 읽는다.
   const mechQuotes = (notice?.extractedCriteria ?? []).map((c) => c.quote).filter((q) => /기계식/.test(q));
@@ -544,8 +545,8 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       ? `역세권 청년·신혼형 오피스텔 및 도시형생활주택은 총 주차대수의 ${rules.mechanicalMaxPercent}% 이하 계획\n0.3대 완화를 받을 시 기계식주차 설치 지양`
       : mech ? [mech.requirement ? `허용요건: ${mech.requirement}` : "", mech.ratioText ? `비율: ${mech.ratioText}` : ""].filter(Boolean).join("\n")
       : notice ? "공고문에서 기계식주차 인수기준 문구를 찾지 못함 · 공고문 확인" : "관할 LH 지역본부 공고 미확인",
-    law: notice ? notice.title : "LH 지역본부 신축매입약정 공고",
-    note: mechTransitFail ? `역세권 요건 미충족 → LH 인수 기준상 기계식 불가(전량 자주식) · ${review!.transit!.basis}`
+    law: notice ? notice.title + pageLabel((notice.extractedCriteria ?? []).filter((c) => /기계식/.test(c.quote)).map((c) => c.page)) : "LH 지역본부 신축매입약정 공고",
+    note: mechTransitFail ? `불가: 역세권 500m 요건 미충족 → LH 인수 기준상 기계식 불가(전량 자주식) · ${review!.transit!.basis}`
       : mechNeedsTransit && review?.transit?.verdict === "borderline" ? `역세권 500m 경계 → 출구 기준 확인 전까지 기계식 조건부 · ${review.transit.basis}`
       : mechNeedsTransit && (review?.transit?.verdict === "within" || site.transitWithin500m) ? `역세권 요건 충족${review?.transit?.verdict === "within" ? ` (${review.transit.basis})` : ""} · 공급유형·주택유형 요건 함께 충족 필요`
       : mech ? "공고문 PDF에서 자동 추출 · 지자체 조례 기준과 LH 인수 기준 중 엄격한 값 적용" : "지자체 조례 기준과 LH 인수 기준 중 엄격한 값을 적용",
@@ -553,7 +554,11 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     params: mechTransitFail ? { lhMechApartment: "prohibited", lhMechUrban: "prohibited", lhMechOfficetel: "prohibited" }
       : rules ? { lhMechApartment: "prohibited", lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: rules.mechanicalMaxPercent }
       : mech?.maxPercent ? { ...(mech.apartmentExcluded ? { lhMechApartment: "prohibited" as const } : {}), lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: mech.maxPercent } : undefined,
-    sources: noticeSource ? [{ ...noticeSource, ...(mech ? { excerpt: [mech.requirement, mech.ratioText].filter(Boolean).join(" / "), verbatim: true, highlights: mech.maxPercent ? [`${mech.maxPercent}%`, "500m"] : ["500m"] } : {}) }] : [],
+    sources: noticeSource ? [{ ...noticeSource, ...(mech ? {
+      excerpt: [mech.requirement, mech.ratioText].filter(Boolean).join(" / "), verbatim: true,
+      page: [...new Set((notice?.extractedCriteria ?? []).filter((c) => /기계식/.test(c.quote) && c.page).map((c) => c.page!))],
+      highlights: [mech.requirement, mech.ratioText?.match(/총\s*주차대수의\s*\d+\s*%\s*이하로\s*계획/)?.[0]].filter((x): x is string => !!x),
+    } : {}) }] : [],
     missing: rules || mech?.maxPercent ? undefined : "공고문 기계식 인수기준 조항",
   });
   put({
@@ -566,12 +571,20 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     status: notice ? (notice.isCurrent ? "verified" : "candidate") : lh ? "missing" : "candidate",
     sources: noticeSource ? [noticeSource, ...(notice?.guideUrl ? [{ title: "설계·시공 가이드라인 첨부", url: notice.guideUrl, kind: "lh" as const }] : [])] : [],
   });
+  // 검증 규칙이 없으면 공고문 추출 문구에서 해당 행에 맞는 문장을 골라 내용으로 쓴다.
+  const noticeLines = (rowId: string) => {
+    const qs = (notice?.extractedCriteria ?? []).filter((c) => lhCriterionRow(c.quote) === rowId);
+    const lines = [...new Set(qs.flatMap((c) => keySentences(c.quote, rowId)))].map((l) => l.length > 170 ? l.slice(0, 170) + "…" : l).slice(0, 3);
+    return { lines, pages: pageLabel(qs.map((c) => c.page)) };
+  };
+  const scaleQ = noticeLines("lh.scale");
+  const commQ = noticeLines("lh.community");
   put({
     id: "lh.scale",
     content: rules
       ? `일반지역 ${rules.minimumHomes}호 이상 / 규제지역 ${rules.regulatedMinimumHomes}호 이상\n청년 전용 ${rules.youthMinimumArea}~${rules.youthMaximumArea}㎡(${rules.youthRooms}룸 이상) · 신혼 전용 ${rules.newlywedMinimumArea}㎡ 이상(${rules.newlywedRooms}룸 이상)`
-      : "공급유형별 최소 전용면적·호수·평면요건 (공고문 확인)",
-    law: notice ? notice.title : "LH 지역본부 공고",
+      : scaleQ.lines.length ? scaleQ.lines.join("\n") : "공급유형별 최소 전용면적·호수·평면요건 (공고문 확인)",
+    law: notice ? notice.title + scaleQ.pages : "LH 지역본부 공고",
     note: site.supplies.length ? "계획 공급유형: " + site.supplies.join(", ") : "",
     status: rules && notice?.isCurrent ? "verified" : lh ? "candidate" : "missing",
     params: rules ? { lhMinHomes: rules.minimumHomes } : undefined,
@@ -581,8 +594,8 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     id: "lh.community",
     content: rules
       ? `${rules.communityThreshold}세대 이상 커뮤니티 시설 · ${rules.managementOfficeThreshold}세대 이상 관리사무소`
-      : "커뮤니티·관리사무소·경비실 설치 기준 (공고문 확인)",
-    law: notice ? notice.title : "LH 지역본부 공고",
+      : commQ.lines.length ? commQ.lines.join("\n") : "커뮤니티·관리사무소·경비실 설치 기준 (공고문 확인)",
+    law: notice ? notice.title + commQ.pages : "LH 지역본부 공고",
     note: "",
     status: rules && notice?.isCurrent ? "verified" : lh ? "candidate" : "missing",
     params: rules ? { lhCommunityThreshold: rules.communityThreshold, lhCommunitySqmPerHome: 1 } : undefined,
@@ -609,7 +622,51 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   }
 
   attachCollected(rows, review, zoneName);
+  markProhibited(rows);
   return orderRows([...rows.values()]);
+}
+
+/** 불가 판정(용도·기계식·LH 인수 등)을 비고 맨 앞에 '불가:'로 드러낸다. 이미 비고에 불가 문구가 있으면 그대로 둔다. */
+const VERDICT_NAME: Partial<Record<string, string>> = {
+  useApartment: "공동주택", useUrban: "도시형생활주택", useOfficetel: "오피스텔",
+  mechApartment: "기계식(공동주택)", mechUrban: "기계식(도시형생활주택)", mechOfficetel: "기계식(오피스텔)",
+  lhMechApartment: "LH 기계식 인수(공동주택)", lhMechUrban: "LH 기계식 인수(도시형생활주택)", lhMechOfficetel: "LH 기계식 인수(오피스텔)",
+  lhParking03: "LH 0.3대 특례",
+};
+/** 공고문 쪽번호 표기: " p.11, 12" */
+function pageLabel(pages: Array<number | undefined>) {
+  const list = [...new Set(pages.filter((p): p is number => typeof p === "number"))].sort((a, b) => a - b);
+  return list.length ? ` p.${list.join(", ")}` : "";
+}
+
+/** 행별 형광펜 핵심어 */
+const ROW_KEYWORDS: Record<string, string[]> = {
+  "plan.use": ["건축할 수 있는", "건축할 수 없는", "공동주택", "오피스텔", "업무시설"],
+  "plan.bcrfar": ["건폐율", "용적률"],
+  "plan.relax": ["완화", "용적률", "임대주택", "공공임대"],
+  "plan.height": ["높이", "층수", "가로구역"],
+  "bld.sunlight": ["정북", "일조", "높이", "이격", "띄어"],
+  "bld.spacing": ["인동", "띄어", "이격", "높이"],
+  "bld.setback": ["대지 안의 공지", "건축선", "인접대지경계선", "띄어", "공동주택", "아파트"],
+  "bld.landscape": ["조경", "대지면적"],
+  "bld.openspace": ["공개공지", "공개 공지", "연면적", "대지면적"],
+  "bld.amenity": ["주민공동시설", "부대시설", "세대"],
+  "park.ordinance": ["부설주차장", "주차대수", "공동주택", "오피스텔", "시설면적"],
+  "park.apartment": ["주차", "세대", "전용면적"],
+  "park.mech.ord": ["기계식"],
+  "park.mech.lh": ["기계식", "역세권", "비율"],
+  "park.lh03": ["0.3대", "전용", "청년", "고령자", "500m"],
+  "lh.scale": ["전용", "호 이상", "세대 이상", "최소", "침실", "룸"],
+  "lh.community": ["커뮤니티", "관리사무소", "경비실", "주민공동"],
+};
+export function keySentences(text: string, rowId: string) { return keySentencesFor(text, ROW_KEYWORDS[rowId] ?? [], 2); }
+
+function markProhibited(rows: Map<string, ReviewRow>) {
+  for (const [id, row] of rows) {
+    const no = Object.entries(row.params ?? {}).filter(([k, v]) => v === "prohibited" && VERDICT_NAME[k]).map(([k]) => VERDICT_NAME[k]!);
+    if (!no.length || /^불가/.test(row.note)) continue;
+    rows.set(id, { ...row, note: `불가: ${no.join(", ")}${row.note ? " · " + row.note : ""}` });
+  }
 }
 
 /** 자동 수집 조문·LH 공고 문구를 해당 행 근거로 첨부. 근거 누락 행은 '후보'로 올리되 수치는 확정하지 않는다. */
@@ -629,7 +686,10 @@ function attachCollected(rows: Map<string, ReviewRow>, review: SiteReviewResult 
   for (const c of review?.collected ?? []) {
     const topic = ORDINANCE_TOPICS.find((t) => t.label === c.topic);
     const national = NATIONAL_ARTICLES.find((n) => n.label === c.topic);
-    const highlights = [...(topic?.terms ?? []), ...(zoneName && c.kind === "ordinance" ? [zoneName] : []), ...(national?.no === 86 ? SUNLIGHT_HIGHLIGHTS : [])];
+    // 낱말이 아니라 그 행에 필요한 문장(핵심어+수치)을 통째로 형광펜 처리
+    const keys = [...(topic?.terms ?? []), ...(ROW_KEYWORDS[c.rowId] ?? [])];
+    const sentences = keySentencesFor(c.text, keys, 3, c.kind === "ordinance" ? zoneName ?? undefined : undefined);
+    const highlights = sentences.length ? sentences : [...(topic?.terms ?? []), ...(national?.no === 86 ? SUNLIGHT_HIGHLIGHTS : [])];
     add(c.rowId, { title: c.title, article: c.article, url: c.url, effectiveDate: c.effectiveDate ?? undefined, excerpt: c.text, verbatim: true, highlights, kind: c.kind });
   }
   const notice = review?.lhNotice;
@@ -638,7 +698,7 @@ function attachCollected(rows: Map<string, ReviewRow>, review: SiteReviewResult 
     const rowId = lhCriterionRow(q.quote);
     if (!rowId || (perRow.get(rowId) ?? 0) >= 4) continue;
     perRow.set(rowId, (perRow.get(rowId) ?? 0) + 1);
-    add(rowId, { title: `${notice!.title} (공고문 PDF 추출)`, url: notice!.pdfUrl ?? notice!.url, excerpt: q.quote, verbatim: true, highlights: q.value !== null ? [String(q.value)] : [], kind: "lh" });
+    add(rowId, { title: `${notice!.title} (공고문)`, page: q.page, url: notice!.pdfUrl ?? notice!.url, excerpt: q.quote, verbatim: true, highlights: keySentences(q.quote, rowId), kind: "lh" });
   }
 }
 

@@ -40,10 +40,15 @@ export interface SourceRef {
   /** true: 공식 API·원문에서 그대로 가져온 조문. false/없음: 검토자 요지(원문 대조 필요) */
   verbatim?: boolean;
   highlights?: string[];
+  /** 원문 PDF 쪽번호 (공고문·고시문 등 조항 번호가 없는 문서) */
+  page?: number | number[];
   kind?: "law" | "ordinance" | "plan" | "lh" | "upload" | "api" | "other";
 }
 
 /** 주차기준 구간: 전용면적 maxArea(㎡) 이하(strict면 미만)일 때 세대당 ratio대 이상, 또는 전용 sqmPerStall㎡당 1대 */
+/** 완화 용적률 단계 (예: 매입임대 300%, 공공임대 추가공급 400%) */
+export interface FarOption { far: number; label: string; condition?: string }
+
 export interface ParkingTier { maxArea?: number; strict?: boolean; ratio?: number; sqmPerStall?: number }
 
 /** 규모검토로 연동되는 수치. 모든 값은 선택적이며 단위는 키 이름에 맞춘다. */
@@ -52,6 +57,8 @@ export interface RuleParams {
   bcr?: number;                 // %
   far?: number;                 // % 기본(법정·조례) 용적률
   relaxedFar?: number;          // % 완화 적용 시 상한
+  /** 완화 단계별 용적률 후보 */
+  relaxedFarOptions?: FarOption[];
   maxFloors?: number;           // 층
   maxHeight?: number;           // m
   landscapeRatio?: number;      // % of site
@@ -116,7 +123,11 @@ export interface Scenario {
   id: string;
   name: string;
   use: UseKind;
-  farMode: "base" | "relaxed";
+  farMode: "base" | "relaxed" | "custom";
+  /** 완화 용적률 대안에서 고른 값(%). 없으면 법규검토표의 대표 완화값 */
+  relaxedFar?: number;
+  /** farMode custom: 검토자 지정 용적률(%) */
+  customFar?: number;
   parking: "self" | "mixed";
   mechanicalShare: number;   // 희망 기계식 비율 %
   apply03: boolean;          // LH 0.3대 특례 시나리오

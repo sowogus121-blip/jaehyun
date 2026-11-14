@@ -13,7 +13,7 @@ export interface ResolvedParam<K extends ParamKey = ParamKey> {
 export type ResolvedParams = { [K in ParamKey]?: ResolvedParam<K> };
 
 export const PARAM_LABEL: Record<ParamKey, string> = {
-  siteArea: "대지면적(㎡)", bcr: "건폐율(%)", far: "기본 용적률(%)", relaxedFar: "완화 용적률(%)",
+  siteArea: "대지면적(㎡)", bcr: "건폐율(%)", far: "기본 용적률(%)", relaxedFar: "완화 용적률(%)", relaxedFarOptions: "완화 용적률 단계",
   maxFloors: "최고층수(층)", maxHeight: "최고높이(m)", landscapeRatio: "조경비율(%)",
   parkingApartment: "공동주택 주차(대/세대)", parkingUrban: "도시형생활주택 주차(대/세대)", parkingOfficetel: "오피스텔 주차(대/호)",
   parkingApartmentTiers: "공동주택 세대당 최소주차(구간)", parkingUrbanTiers: "도시형생활주택 세대당 최소주차(구간)", parkingOfficetelTiers: "오피스텔 호당 최소주차(구간)",
