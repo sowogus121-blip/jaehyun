@@ -128,7 +128,7 @@ export function buildChecklist(p: Project): CheckGroup[] {
         const t = r?.transit;
         const state: CheckState = p.site.transitWithin500m || t?.verdict === "within" || t?.verdict === "outside" ? "ok" : t?.verdict === "borderline" ? "partial" : "missing";
         return { id: "lh-transit", label: "0.3대 특례 입지 (역 출구·대학 500m)", rowId: "park.lh03", state,
-          detail: t ? `${t.verdict === "within" ? "500m 이내" : t.verdict === "borderline" ? "경계 · 확인 필요" : t.verdict === "outside" ? "500m 밖" : "판정 실패"} · ${t.basis}` : "자동 판정 전 · 다시 수집" };
+          detail: t ? `${t.verdict === "within" ? "500m 이내" : t.verdict === "borderline" ? "경계 · 확인 필요" : t.verdict === "outside" ? "500m 밖" : "판정 실패"} · ${t.basis}${(t.planned ?? []).length ? ` · 개통예정: ${t.planned!.map((p) => `${p.name}(${p.line}) ${p.distance}m · ${p.openingSummary}`).join(", ")}` : ""}` : "자동 판정 전 · 다시 수집" };
       })(),
     ] }] : []),
   ];

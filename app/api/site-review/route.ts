@@ -3,7 +3,7 @@ import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
 import { collectEumPlanDocuments } from "../../../lib/server/eum-gosi";
-import { checkTransit } from "../../../lib/server/transit";
+import { checkPlannedStations, checkTransit } from "../../../lib/server/transit";
 import { NEW_TOWN_HINT } from "../../../lib/review/special-zones";
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
@@ -296,7 +296,13 @@ export async function POST(request: NextRequest) {
   const siteFactsPromise = collectSiteFacts({ pnu: parcel?.pnu ?? null, bbox: parcel?.bbox ?? null, vworldKey, domain: request.nextUrl.origin, dataKey });
   // LH 0.3대 특례 입지: 도시철도역 출구·대학교까지 직선거리
   const transitPromise = vworldKey && location?.x && location?.y
-    ? checkTransit(Number(location.x), Number(location.y), vworldKey, request.nextUrl.origin).catch(() => null)
+    ? Promise.all([
+        checkTransit(Number(location.x), Number(location.y), vworldKey, request.nextUrl.origin).catch(() => null),
+        checkPlannedStations(Number(location.x), Number(location.y), async (a) => {
+          const g = await geocode(a, vworldKey, request.nextUrl.origin);
+          return g ? { x: Number(g.x), y: Number(g.y) } : null;
+        }).catch(() => [] as Awaited<ReturnType<typeof checkPlannedStations>>),
+      ]).then(([t, planned]) => t ? { ...t, planned } : null)
     : Promise.resolve(null);
 
   // "독산동 151-10"처럼 시·도를 생략한 입력도 VWorld가 돌려준 전체 지번주소로 관할 지자체·LH 본부를 판정한다.

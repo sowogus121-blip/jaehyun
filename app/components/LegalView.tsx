@@ -67,7 +67,9 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
           </select>
         </Field>
         <Field label="공급유형"><div className="checks">{(Object.keys(SUPPLY_LABEL) as LhSupply[]).map((s) => <label key={s}><input type="checkbox" checked={project.site.supplies.includes(s)} onChange={() => setSite({ supplies: project.site.supplies.includes(s) ? project.site.supplies.filter((x) => x !== s) : [...project.site.supplies, s] })} />{SUPPLY_LABEL[s]}</label>)}</div></Field>
-        <Field label="0.3대 특례 입지"><label className="inline"><input type="checkbox" checked={Boolean(project.site.transitWithin500m)} onChange={(e: { target: { checked: boolean } }) => setSite({ transitWithin500m: e.target.checked })} />역 출구·대학 교문 500m 이내 확인</label></Field>
+        <Field label="0.3대 특례 입지"><label className="inline"><input type="checkbox" checked={Boolean(project.site.transitWithin500m)} onChange={(e: { target: { checked: boolean } }) => setSite({ transitWithin500m: e.target.checked })} />역 출구·대학 교문 500m 이내 확인</label>
+          {(project.review?.transit?.planned ?? []).length > 0 && <label className="inline"><input type="checkbox" checked={Boolean(project.site.countPlannedStations)} onChange={(e: { target: { checked: boolean } }) => setSite({ countPlannedStations: e.target.checked })} />개통 예정역 포함 ({project.review!.transit!.planned!.map((p) => `${p.name} ${p.distance}m · ${p.openingYear ?? "?"}년 예정`).join(", ")}) · LH 인정 여부 확인 필요</label>}
+        </Field>
       </div>
       {project.review && (project.review.missing.length > 0 || project.review.errors.length > 0) && <div className="alert">
         {project.review.missing.length > 0 && <p><b>서버 환경변수 미설정{project.review.deployEnv ? ` (${project.review.deployEnv} 배포)` : ""}:</b> {project.review.missing.join(", ")} — 해당 공식자료는 자동 조회되지 않았습니다.

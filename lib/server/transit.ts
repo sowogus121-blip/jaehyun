@@ -13,7 +13,32 @@ export interface TransitCheck {
   basis: string;
   checkedAt: string;
   errors: string[];
+  /** 개통 예정역 (레지스트리 + 기준 필지 좌표). 현행 판정(verdict)에는 넣지 않고 별도 표기 */
+  planned?: PlannedNearby[];
 }
+export interface PlannedNearby {
+  id: string; name: string; line: string; status: string; distance: number;
+  verdict: "within" | "borderline" | "outside";
+  anchorAddress: string; anchorBasis: string; openingSummary: string; openingYear?: number;
+  timeline: import("../review/planned-stations").PlannedStationSource[];
+}
+
+/** 개통 예정역: 레지스트리의 기준 필지를 지번 좌표로 바꿔 직선거리를 잰다. */
+export async function checkPlannedStations(x: number, y: number, geocode: (address: string) => Promise<{ x: number; y: number } | null>): Promise<PlannedNearby[]> {
+  const { PLANNED_STATIONS, haversine: hv, plannedVerdict } = await import("../review/planned-stations");
+  // 1차 거르기: 기준 필지 좌표를 모르면 지오코딩 (캐시)
+  const out: PlannedNearby[] = [];
+  for (const s of PLANNED_STATIONS) {
+    let c = plannedCoordCache.get(s.id) ?? null;
+    if (!c) { c = await geocode(s.anchorAddress).catch(() => null); if (c) plannedCoordCache.set(s.id, c); }
+    if (!c) continue;
+    const d = Math.round(hv(y, x, c.y, c.x));
+    if (d > 1500) continue;
+    out.push({ id: s.id, name: s.name, line: s.line, status: s.status, distance: d, verdict: plannedVerdict(d), anchorAddress: s.anchorAddress, anchorBasis: s.anchorBasis, openingSummary: s.openingSummary, openingYear: s.openingYear, timeline: s.timeline });
+  }
+  return out.sort((a, b) => a.distance - b.distance);
+}
+const plannedCoordCache = new Map<string, { x: number; y: number }>();
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371008.8;
