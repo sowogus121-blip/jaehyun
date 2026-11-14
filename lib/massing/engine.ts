@@ -284,7 +284,7 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
     const lhv = params[keys.lh]?.value as UseVerdict | undefined;
     if (ord === "prohibited") blockers.push("조례상 해당 용도 기계식주차 설치 불가");
     else if (!ord) conditions.push("조례상 기계식 허용 근거 미확정: 기계식 0대(자주식)로 산정");
-    if (lh && lhv === "prohibited") blockers.push("LH 기계식주차 인수 대상 아님");
+    if (lh && lhv === "prohibited") blockers.push(`LH 기계식주차 인수 대상 아님${params[keys.lh]?.note ? ` (${String(params[keys.lh]!.note).replace(/^불가:\s*/, "").slice(0, 120)})` : ""}`);
     else if (lh && !lhv) conditions.push("LH 기계식 인수기준 미확정");
     if (ord && ord !== "prohibited" && !(lh && lhv === "prohibited")) {
       const caps = [scenario.mechanicalShare, params.mechMaxPercent?.value as number | undefined, lh ? params.lhMechMaxPercent?.value as number | undefined : undefined]
@@ -353,7 +353,8 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
     `${word}수 = (연면적 한도 − 부대시설) ÷ ${word}당 면적 → 용적률 기준 ${unitsByFar}${word}${unitsByEnvelope !== null ? `, 층수 기준 ${unitsByEnvelope}${word}` : ""} → ${units}${word}`,
     `계획 가능 연면적(지상) = 주거 ${fmt(residentialGross, 2)}㎡ + 부대시설 ${fmt(amenityArea, 2)}㎡ = ${fmt(aboveGroundArea, 2)}㎡`,
     `지상 층수 = ${fmt(aboveGroundArea, 2)}㎡ ÷ ${fmt(plannedBuildingArea, 2)}㎡ = ${floorsAbove}층`,
-    ratio !== undefined ? `법정 주차 = ${units}${word} × ${ratio}대 = ${legal}대${special03 !== null ? ` / 0.3대 특례 ${special03}대` : ""}` : "법정 주차 = 기준 미확정",
+    ratio !== undefined && ratio !== null ? `법정 주차 = ${units}${word} × ${ratio}대 = ${legal}대${special03 !== null ? ` / 0.3대 특례 ${special03}대` : ""}`
+      : legal !== null ? `법정 주차 = 타입별 전용면적 구간 기준 합계 ${legal}대${special03 !== null ? ` / 0.3대 특례 ${special03}대` : ""}` : "법정 주차 = 기준 미확정",
     applied !== null ? `주차면적 = 자주식 ${self}대 × ${a.selfParkingArea}㎡ + 기계식 ${mechanical}대 × ${a.mechanicalParkingArea}㎡${mechanical ? ` + 대기 ${a.mechanicalStaging}㎡` : ""} = ${fmt(parkingArea, 2)}㎡` : "주차면적 = 산정 보류",
     applied !== null
       ? `지하 소요면적 = 주차 ${fmt(parkingArea, 2)}㎡ + 기계·전기실 ${fmt(equipmentArea, 2)}㎡ = ${fmt(basementNeeded, 2)}㎡ ÷ 지하 계획면적 ${fmt(basementPlate, 2)}㎡ = 지하 ${floorsBelow}층`

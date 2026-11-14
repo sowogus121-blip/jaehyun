@@ -8,6 +8,7 @@ export interface ResolvedParam<K extends ParamKey = ParamKey> {
   rowId: string;
   status: ReviewRow["status"];
   label: string;
+  note?: string;
 }
 
 export type ResolvedParams = { [K in ParamKey]?: ResolvedParam<K> };
@@ -46,7 +47,7 @@ export function resolveParams(rows: ReviewRow[]): ResolvedParams {
       if (value === undefined || value === null || (typeof value === "number" && !Number.isFinite(value))) continue;
       const prev = out[key];
       if (prev && rank(prev.status) > rank(row.status)) continue;
-      (out as Record<string, ResolvedParam>)[key] = { key, value, rowId: row.id, status: row.status, label: PARAM_LABEL[key] };
+      (out as Record<string, ResolvedParam>)[key] = { key, value, rowId: row.id, status: row.status, label: PARAM_LABEL[key], note: row.note };
     }
   }
   return out;
@@ -59,7 +60,7 @@ export function candidateParams(rows: ReviewRow[]): ResolvedParams {
     if (row.status !== "candidate" || !row.params) continue;
     for (const [key, value] of Object.entries(row.params) as Array<[ParamKey, RuleParams[ParamKey]]>) {
       if (value === undefined) continue;
-      (out as Record<string, ResolvedParam>)[key] = { key, value, rowId: row.id, status: row.status, label: PARAM_LABEL[key] };
+      (out as Record<string, ResolvedParam>)[key] = { key, value, rowId: row.id, status: row.status, label: PARAM_LABEL[key], note: row.note };
     }
   }
   return out;

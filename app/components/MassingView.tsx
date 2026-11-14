@@ -184,7 +184,7 @@ function ScenarioDetail({ result: r }: { result: ScenarioResult }) {
         <h4>주차 · 지하층</h4>
         <table className="grid-table">
           <tbody>
-            <tr><th>법정 주차</th><td>{r.parking.legal !== null ? `${r.parking.legal}대 (${r.parking.ratio}대/${word})` : "기준 미확정"}</td></tr>
+            <tr><th>법정 주차</th><td>{r.parking.legal !== null ? `${r.parking.legal}대${r.parking.ratio != null ? ` (${r.parking.ratio}대/${word})` : " (전용면적 구간 기준)"}` : "기준 미확정"}</td></tr>
             {r.parking.special03 !== null && <tr><th>0.3대 특례</th><td>{r.parking.special03}대</td></tr>}
             <tr><th>계획 주차</th><td>{r.parking.applied !== null ? `자주식 ${r.parking.self}대 · 기계식 ${r.parking.mechanical}대 (장애인 ${r.parking.accessible}대 포함 가정)` : "-"}</td></tr>
             {r.parking.mechanicalCap !== null && <tr><th>기계식 적용 상한</th><td>{r.parking.mechanicalCap}%</td></tr>}
