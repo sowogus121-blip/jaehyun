@@ -203,6 +203,19 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   }
 
   const overlays = (review?.landUse ?? []).filter((l) => l.category !== "용도지역" && l.code !== "LT_C_UPISUQ161");
+  // 자동 수집 조문(원문)에서 조건에 맞는 문장을 그대로 뽑는다 (수치가 든 문장 우선)
+  const collectedOf = (rowId: string) => (review?.collected ?? []).filter((c) => c.rowId === rowId);
+  const sentencesOf = (rowId: string, test: RegExp, max = 4) => {
+    const out: Array<{ line: string; src: NonNullable<SiteReviewResult["collected"]>[number] }> = [];
+    for (const c of collectedOf(rowId)) {
+      for (const raw of c.text.replace(/\r/g, "").split(/\n+|(?<=[가-힣)][.。])\s+|(?=\s[①-⑳])|(?=\s\d{1,2}\.\s)|(?=\s[가-하]\.\s)/)) {
+        const line = raw.replace(/\s+/g, " ").trim();
+        if (line.length >= 8 && line.length <= 260 && test.test(line) && !out.some((o) => o.line === line)) out.push({ line, src: c });
+        if (out.length >= max) return out;
+      }
+    }
+    return out;
+  };
   if (overlays.length) {
     put({
       id: "site.overlay",
@@ -301,16 +314,28 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
 
   // ── 건축행위 가능 여부 ──
   const useArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건축제한", "용도지역 안에서의 건축제한", "건축제한"]);
+  // 용도지역 별표(조례): '건축할 수 없는 건축물' 목록에 공동주택·오피스텔이 있는지로 판정
+  const useAnnex = (review?.collected ?? []).find((c) => c.rowId === "plan.use" && c.article.startsWith("별표") && zoneName && c.text.replace(/\s+/g, "").includes(zoneName.replace(/\s+/g, "")));
+  const annexBan = useAnnex ? /없는\s*건축물/.test(useAnnex.article + useAnnex.text.slice(0, 200)) : null;
+  const annexHit = (re: RegExp) => useAnnex ? sentencesOf("plan.use", re, 2).filter((x) => x.src === useAnnex).map((x) => x.line) : [];
+  const aptHit = annexHit(/공동주택/), offHit = annexHit(/업무시설|오피스텔/);
+  const verdictOf = (hit: string[]) => annexBan === null ? undefined : annexBan ? (hit.length ? "conditional" as const : "allowed" as const) : hit.length ? "allowed" as const : "prohibited" as const;
+  const annexVerdict = useAnnex ? { useApartment: verdictOf(aptHit), useUrban: verdictOf(aptHit), useOfficetel: verdictOf(offHit) } : null;
   put({
     id: "plan.use",
-    content: zone
+    content: annexVerdict ? [
+      `· 공동주택·도시형생활주택: ${annexVerdict.useApartment === "allowed" ? "허용" : annexVerdict.useApartment === "conditional" ? "조건부(별표 제한 문구 확인)" : "불가"}${aptHit[0] ? ` — ${aptHit[0].slice(0, 120)}` : annexBan ? " (건축할 수 없는 건축물에 없음)" : ""}`,
+      `· 오피스텔(업무시설): ${annexVerdict.useOfficetel === "allowed" ? "허용" : annexVerdict.useOfficetel === "conditional" ? "조건부(별표 제한 문구 확인)" : "불가"}${offHit[0] ? ` — ${offHit[0].slice(0, 120)}` : annexBan ? " (건축할 수 없는 건축물에 없음)" : ""}`,
+    ].join("\n") : zone
       ? uses.map((u) => `· ${USE_SHORT[u]}: ${zone.zone} 건축제한 별표에서 허용 여부 확인`).join("\n")
       : "용도지역 확정 후 계획 용도별 허용 여부 확인",
     law: [cityPlan?.title ? `${cityPlan.title} 용도지역 건축제한 조항·별표` : "", zone ? `국토계획법 시행령 제71조 별표 ${zone.annex}` : ""].filter(Boolean).join(", "),
-    note: "허용·조건부·불허를 행 편집에서 지정해야 규모검토에 반영됨",
-    status: useArticle || zone ? "candidate" : "missing",
+    note: annexVerdict ? `검토요망: ${useAnnex!.title} ${useAnnex!.article.split(" · ")[0]} 원문으로 자동 판정 · 별표 단서(층수·비율 제한) 확인` : "허용·조건부·불허를 행 편집에서 지정해야 규모검토에 반영됨",
+    status: annexVerdict ? "verified" : useArticle || zone ? "candidate" : "missing",
+    params: annexVerdict ? (Object.fromEntries(Object.entries(annexVerdict).filter(([, v]) => v)) as ReviewRow["params"]) : undefined,
     sources: [
       ...(zone ? [useRestrictionRef(zone)] : []),
+      ...(useAnnex ? [{ title: useAnnex.title, article: useAnnex.article.split(" · ")[0], url: useAnnex.url, effectiveDate: useAnnex.effectiveDate ?? undefined, excerpt: useAnnex.text, verbatim: true, highlights: [...aptHit, ...offHit], kind: useAnnex.kind, ...(useAnnex.pdfUrl ? { pdfUrl: useAnnex.pdfUrl, page: [1] } : {}) }] : []),
       ...(useArticle ? [articleRef(useArticle, ["건축할 수 있는"])] : cityPlan ? [cityPlan] : []),
       ref("건축법 시행령", "별표 1", { annex: "별표 1" }),
     ],
@@ -362,12 +387,16 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
 
   // ── 최고높이 ──
   const heightOverlay = overlays.find((o) => o.name.includes("고도"));
+  const streetHeight = (review?.siteFacts?.designations ?? []).find((d) => /가로구역.*최고높이|최고고도/.test(d.name) && d.conflict !== "접함");
   put({
     id: "plan.height",
-    content: heightOverlay ? `${heightOverlay.name} 지정 · 최고높이 결정내용 확인` : "별도 최고높이 미확정",
+    content: heightOverlay ? `${heightOverlay.name} 지정 · 최고높이 결정내용 확인`
+      : streetHeight ? `가로구역별 최고높이 제한지역(${streetHeight.conflict ?? "포함"}): 관할 시·군 고시 가로구역 높이 적용 (건축법 제60조)`
+      : districtPlanOf(review) ? "지구단위계획 결정 최고높이 적용 (획지별 결정조서 확인)"
+      : review ? "토지이용계획상 고도지구·가로구역 최고높이 지정 없음 → 높이는 정북일조·채광/인동거리·건폐율로 결정" : "대상지 조회 후 판단",
     law: "건축법 제60조, 도시관리계획" + (districtPlanOf(review) ? "·지구단위계획" : ""),
-    note: "높이 미확정 시 규모검토는 용적률·건폐율 기준으로 산정하고 층수는 참고값으로 표시",
-    status: heightOverlay || districtPlanOf(review) ? "candidate" : "missing",
+    note: heightOverlay || streetHeight || districtPlanOf(review) ? "검토요망: 결정 높이(m/층) 확인 전까지 규모검토 층수는 용적률·건폐율 기준 참고값" : review ? "최고높이 제한 없음 (토지이용계획 기준)" : "",
+    status: heightOverlay || streetHeight || districtPlanOf(review) ? "candidate" : review ? "verified" : "missing",
     sources: [ref(LAW.buildingAct, "제60조")],
     missing: "최고높이·층수 제한 여부",
   });
@@ -382,13 +411,15 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     status: zone ? "candidate" : "missing",
     sources: [lawRef(review, LAW.buildingDecree, "제86조"), ...(sunArticle ? [articleRef(sunArticle, ["정북"])] : [])].map((s, i) => i === 0 ? { ...s, excerpt: zone?.sunlight ? SUNLIGHT_TEXT : undefined, highlights: SUNLIGHT_HIGHLIGHTS } : s),
   });
+  const spacingLines = sentencesOf("bld.spacing", /(높이의\s*\d(?:\.\d+)?\s*배|\d+(?:\.\d+)?\s*미터)\s*이상/, 4)
+    .concat(sentencesOf("bld.sunlight", /(채광|마주|인동|동일한\s*대지)[^.]*높이의\s*\d(?:\.\d+)?\s*배/, 3)).slice(0, 5);
   put({
     id: "bld.spacing",
-    content: "공동주택 채광창 방향 이격 및 동간 인동거리: 조례로 정하는 거리 적용",
-    law: "건축법 시행령 제86조제3항" + (sunArticle ? `, ${sunArticle.sourceTitle}` : ""),
-    note: "배치계획 시 실제 이격 반영 (개략 규모검토는 기준층 면적 비율로 반영)",
-    status: sunArticle ? "candidate" : "missing",
-    sources: [lawRef(review, LAW.buildingDecree, "제86조")],
+    content: spacingLines.length ? spacingLines.map((x) => "· " + x.line).join("\n") : "공동주택 채광창 방향 이격 및 동간 인동거리: 조례로 정하는 거리 적용",
+    law: "건축법 시행령 제86조제3항" + (spacingLines[0] ? `, ${[...new Set(spacingLines.map((x) => `${x.src.title} ${x.src.article.split(" · ")[0]}`))].join(", ")}` : sunArticle ? `, ${sunArticle.sourceTitle}` : ""),
+    note: spacingLines.length ? "조례·시행령 원문에서 자동 추출 · 배치계획 시 실제 이격 반영 (개략 규모검토는 기준층 면적 비율로 반영)" : "배치계획 시 실제 이격 반영 (개략 규모검토는 기준층 면적 비율로 반영)",
+    status: spacingLines.length ? "verified" : sunArticle ? "candidate" : "missing",
+    sources: [lawRef(review, LAW.buildingDecree, "제86조"), ...[...new Map(spacingLines.map((x) => [x.src.title + x.src.article, x.src])).values()].map((c) => ({ title: c.title, article: c.article.split(" · ")[0], url: c.url, effectiveDate: c.effectiveDate ?? undefined, excerpt: c.text, verbatim: true, highlights: spacingLines.filter((x) => x.src === c).map((x) => x.line), kind: c.kind }))],
     missing: "조례상 인동거리 배수",
   });
   const setbackArticle = findArticle(review, "건축 조례", ["대지 안의 공지", "대지안의 공지"]);
@@ -402,12 +433,16 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     missing: "조례 별표 이격거리",
   });
   const landscapeArticle = findArticle(review, "건축 조례", ["대지의 조경", "조경"]);
+  const landTiers = sentencesOf("bld.landscape", /(연면적|대지면적)[^.]{0,60}\d[\d,]*\s*(제곱미터|㎡)[^.]{0,80}\d+(?:\.\d+)?\s*(퍼센트|%)\s*이상/, 5);
+  const landPcts = landTiers.map((x) => Number(x.line.match(/(\d+(?:\.\d+)?)\s*(?:퍼센트|%)\s*이상/)?.[1])).filter((v) => v > 0 && v <= 30);
+  const landMax = landPcts.length ? Math.max(...landPcts) : undefined;
   put({
     id: "bld.landscape",
-    content: "대지면적 200㎡ 이상: 조례로 정하는 기준에 따른 조경",
-    law: "건축법 제42조" + (landscapeArticle ? `, ${landscapeArticle.sourceTitle} ${landscapeArticle.article}` : ", 관할 건축조례"),
-    note: "조경 비율(%)을 입력하면 건축개요 조경면적에 반영",
-    status: landscapeArticle ? "candidate" : "missing",
+    content: landTiers.length ? landTiers.map((x) => "· " + x.line).join("\n") : "대지면적 200㎡ 이상: 조례로 정하는 기준에 따른 조경",
+    law: "건축법 제42조" + (landTiers[0] ? `, ${landTiers[0].src.title} ${landTiers[0].src.article.split(" · ")[0]}` : landscapeArticle ? `, ${landscapeArticle.sourceTitle} ${landscapeArticle.article}` : ", 관할 건축조례"),
+    note: landTiers.length ? (landMax !== undefined ? `조례 원문 자동 추출 · 규모검토 조경면적은 최상위 구간 ${landMax}% 적용 (연면적에 따라 낮은 구간 가능)` : "조례 원문 자동 추출") : "조경 비율(%)을 입력하면 건축개요 조경면적에 반영",
+    status: landTiers.length ? "verified" : landscapeArticle ? "candidate" : "missing",
+    params: landMax !== undefined ? { landscapeRatio: landMax } : undefined,
     sources: [lawRef(review, LAW.buildingAct, "제42조"), ...(landscapeArticle ? [articleRef(landscapeArticle, ["조경"])] : [])],
     missing: "연면적 구간별 조경 비율",
   });
@@ -449,12 +484,16 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
 
   // ── 주차 ──
   const mechArticle = findArticle(review, "주차장", ["기계식"]);
+  const mechLines = sentencesOf("park.mech.ord", /기계식[^.]{0,80}(설치할\s*수\s*없|설치하여서는|제한|이하로|미만인\s*경우|이상인\s*경우에만)/, 4)
+    .filter((x) => !/철거|융자|보조|안전도|검사|관리인/.test(x.line));
+  const parkingOrds = (review?.ordinances ?? []).filter((o) => /주차장/.test(o.name) && o.retrievalStatus === "full-text").map((o) => o.name);
   put({
     id: "park.mech.ord",
-    content: "기계식 설치 가능 용도·지역, 총 주차대수 대비 허용비율, 최소 설치대수 확인",
-    law: (mechArticle ? `${mechArticle.sourceTitle} ${mechArticle.article}` : cityParking?.title ?? "관할 주차장 조례") + ", 주차장법 시행규칙",
-    note: "조례 허용 여부와 LH 인수 여부는 별도 판정",
-    status: mechArticle ? "candidate" : "missing",
+    content: mechLines.length ? mechLines.map((x) => "· " + x.line).join("\n")
+      : parkingOrds.length ? `조례에 부설 기계식주차장 설치 제한 조항 없음 (확인: ${parkingOrds.join(", ")}) → 주차장법 시행규칙 제16조의2 기계식주차장 설치기준 적용` : "기계식 설치 가능 용도·지역, 총 주차대수 대비 허용비율, 최소 설치대수 확인",
+    law: (mechArticle ? `${mechArticle.sourceTitle} ${mechArticle.article}` : cityParking?.title ?? "관할 주차장 조례") + ", 주차장법 시행규칙 제16조의2",
+    note: mechLines.length ? "검토요망: 조례 원문의 기계식 제한 문장 · 용도·비율을 규모검토에 반영하려면 행에서 허용/조건부/불가 지정" : parkingOrds.length ? "검토요망: 제한 조항이 없어 규모검토는 기계식 허용으로 우선 반영 · 조례 개정 여부 확인" : "조례 허용 여부와 LH 인수 여부는 별도 판정",
+    status: mechLines.length || parkingOrds.length ? "verified" : mechArticle ? "candidate" : "missing",
     sources: [...(mechArticle ? [articleRef(mechArticle, ["기계식"])] : cityParking ? [cityParking] : []), lawRef(review, LAW.parkingRule)],
     missing: "조례상 기계식 허용 여부·비율·최소대수",
   });
@@ -616,7 +655,10 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     const lines = [...new Set(qs.flatMap((c) => keySentences(c.quote, rowId)))].map((l) => l.length > 170 ? l.slice(0, 170) + "…" : l).slice(0, 3);
     return { lines, pages: pageLabel(qs.map((c) => c.page)) };
   };
-  const scaleQ = noticeLines("lh.scale");
+  const scaleQ0 = noticeLines("lh.scale");
+  const scaleExtra = scaleQ0.lines.length ? [] : [...new Set((notice?.extractedCriteria ?? []).map((c) => c.quote).filter((q) => /(청년|신혼|신생아|고령자|다자녀)[^.]{0,40}전용\s*\d+\s*㎡|\d+\s*호\s*이상|\d\s*룸|방\s*\d\s*개/.test(q)))]
+    .map((l) => l.replace(/\s+/g, " ").slice(0, 170)).slice(0, 3);
+  const scaleQ = scaleQ0.lines.length ? scaleQ0 : { lines: scaleExtra, pages: pageLabel((notice?.extractedCriteria ?? []).filter((c) => scaleExtra.some((l) => c.quote.replace(/\s+/g, " ").startsWith(l.slice(0, 40)))).map((c) => c.page)) };
   const commQ = noticeLines("lh.community");
   put({
     id: "lh.scale",
