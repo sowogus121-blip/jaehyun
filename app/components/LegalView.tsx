@@ -248,7 +248,7 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
       </div>)}
       <div className="param add">
         <select value={addKey} onChange={(e: { target: { value: string } }) => setAddKey(e.target.value as ParamKey)}>
-          {[...NUMERIC_PARAMS, "parkingApartmentTiers", "parkingUrbanTiers", "parkingOfficetelTiers", ...VERDICT_PARAMS].filter((k) => !paramKeys.includes(k as ParamKey)).map((k) => <option key={k} value={k}>{PARAM_LABEL[k]}</option>)}
+          {([...NUMERIC_PARAMS, "parkingApartmentTiers", "parkingUrbanTiers", "parkingOfficetelTiers", ...VERDICT_PARAMS] as ParamKey[]).filter((k) => !paramKeys.includes(k)).map((k) => <option key={k} value={k}>{PARAM_LABEL[k]}</option>)}
         </select>
         <button className="btn sm" onClick={() => setParam(addKey, VERDICT_PARAMS.includes(addKey) ? "allowed" : addKey.endsWith("Tiers") ? ([{ ratio: 1 }] as never) : 0)}>+ 수치 추가</button>
       </div>
