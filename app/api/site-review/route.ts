@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
     const ctx = { sggCd: pnu ? pnu.slice(0, 5) : null, dong: lotMatch?.[1] ?? null, lot: lotMatch?.[2] ?? null, planNames: [...new Set(planNames)], renewal, agencyHints };
     let found = await collectEumPlanDocuments(ctx);
     // 구 단위 코드에서 못 찾으면 시 단위(예: 41135 → 41130)로 다시 찾는다.
-    if (!found.documents.length && ctx.sggCd && !ctx.sggCd.endsWith("0")) found = await collectEumPlanDocuments({ ...ctx, sggCd: ctx.sggCd.slice(0, 4) + "0" });
+    if (!found.documents.length && !found.errors.length && ctx.sggCd && !ctx.sggCd.endsWith("0")) found = await collectEumPlanDocuments({ ...ctx, sggCd: ctx.sggCd.slice(0, 4) + "0" });
     return found;
   }).catch((error) => ({ documents: [], errors: [error instanceof Error ? error.message : "토지이음 고시 조회 실패"] }));
   const webSearchPromise = siteFactsPromise.then((facts) => {

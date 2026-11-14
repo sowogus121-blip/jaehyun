@@ -278,3 +278,18 @@ mark { background: var(--mark); padding: 0 1px; }
   mark { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .law-table thead th, .law-table th.g, .summary-table thead th, .summary-table tbody th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* 수집 출처 상태 */
+.source-strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.src { display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 8px; border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; background: #fff; }
+.src i { font-style: normal; font-size: 10.5px; font-weight: 700; padding: 0 4px; border-radius: 3px; }
+.src small { color: var(--muted); font-size: 11px; }
+.src-ok i { background: var(--ok-soft); color: var(--ok); }
+.src-alt i { background: var(--cand-soft); color: var(--cand); }
+.src-fail i { background: var(--miss-soft); color: var(--miss); }
+.src-na { opacity: .6; }
+.src-na i { background: #eef0f3; color: var(--muted); }
+.ref-table .tag { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 3px; background: #eef2f7; color: #3a4a5e; white-space: nowrap; }
+.ref-table .tag-alt { background: var(--cand-soft); color: var(--cand); }
+.ref-table .tag-hit { margin-left: 6px; background: var(--ok-soft); color: var(--ok); }
+.ref-table small.att { display: block; color: var(--muted); font-size: 11px; }

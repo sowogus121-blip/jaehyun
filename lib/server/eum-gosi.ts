@@ -53,8 +53,21 @@ function decodeText(html: string) {
     .trim();
 }
 
+// 연결 차단·장애 시 같은 인스턴스에서 10분간 재시도하지 않는다(대기시간 단축 + 토지이음 부하 방지).
+let downUntil = 0;
+let downReason = "";
+export function eumUnavailable() { return Date.now() < downUntil ? downReason : null; }
+
 async function timed(url: string, init: RequestInit = {}, ms = 10_000) {
-  const response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(ms), headers: { "User-Agent": UA, ...(init.headers ?? {}) } });
+  if (Date.now() < downUntil) throw new Error(downReason);
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(ms), headers: { "User-Agent": UA, ...(init.headers ?? {}) } });
+  } catch (error) {
+    downUntil = Date.now() + 10 * 60_000;
+    downReason = "토지이음 서버 연결 불가(일시 차단 또는 장애) · 10분 뒤 자동 재시도";
+    throw new Error(downReason + (error instanceof Error && error.message ? ` [${error.message}]` : ""));
+  }
   if (!response.ok) throw new Error(`토지이음 HTTP ${response.status}`);
   return response;
 }
@@ -280,7 +293,20 @@ async function inBatches<T, R>(items: T[], size: number, fn: (item: T, index: nu
   return out;
 }
 
+const resultCache = new Map<string, { at: number; value: { documents: EumPlanDocument[]; errors: string[] } }>();
+
 export async function collectEumPlanDocuments(ctx: EumSearchContext, limit = 3): Promise<{ documents: EumPlanDocument[]; errors: string[] }> {
+  const key = JSON.stringify([ctx.sggCd, ctx.dong, ctx.lot, ctx.planNames, ctx.renewal, ctx.agencyHints, limit]);
+  const hit = resultCache.get(key);
+  if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.value;
+  const down = eumUnavailable();
+  if (down) return { documents: [], errors: [down] };
+  const value = await collectEumPlanDocumentsUncached(ctx, limit);
+  if (value.documents.length) resultCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+async function collectEumPlanDocumentsUncached(ctx: EumSearchContext, limit: number): Promise<{ documents: EumPlanDocument[]; errors: string[] }> {
   const hints = (ctx.agencyHints ?? []).filter(Boolean);
   const searches: Array<{ keyword: string; sgg: string | null; pages: number }> = [
     { keyword: "지구단위", sgg: ctx.sggCd, pages: 2 },
@@ -291,7 +317,7 @@ export async function collectEumPlanDocuments(ctx: EumSearchContext, limit = 3):
   ];
   const settled = await inBatches(searches, 2, (q) => searchGosi(q.keyword, q.sgg, q.pages).then((rows) =>
     q.sgg ? rows : rows.filter((r) => hints.some((h) => r.agency.includes(h)))));
-  const errors = [...new Set(settled.flatMap((s) => s.status === "rejected" ? [s.reason instanceof Error ? s.reason.message : "토지이음 고시 검색 실패"] : []))];
+  const errors = [...new Set(settled.flatMap((s) => s.status === "rejected" ? [(s.reason instanceof Error ? s.reason.message : "토지이음 고시 검색 실패").replace(/\s*\[.*\]$/, "")] : []))];
   const rows = new Map<string, GosiListRow>();
   for (const s of settled) if (s.status === "fulfilled") for (const r of s.value) rows.set(r.seq, r);
   const seenNo = new Set<string>();

@@ -75,7 +75,7 @@ export function applyReview(project: Project, incoming: SiteReviewResult | null)
  */
 export function keepPreviousLawData(previous: SiteReviewResult | null, next: SiteReviewResult | null, nationalCache?: NationalLawCache | null): SiteReviewResult | null {
   if (!next) return next;
-  const lawTrouble = next.errors.some((e) => /국가법령|자치법규/.test(e));
+  const lawTrouble = next.errors.some((e) => /국가법령|자치법규/.test(e)) || (next.officialDocuments?.errors ?? []).some((e) => /토지이음/.test(e));
   if (!lawTrouble) return next;
   const sameSite = !!previous && (previous.location?.parcelAddress ?? previous.location?.address) === (next.location?.parcelAddress ?? next.location?.address);
   const when = (iso: string) => new Date(iso).toLocaleString("ko-KR");
@@ -103,6 +103,13 @@ export function keepPreviousLawData(previous: SiteReviewResult | null, next: Sit
       collected: [...out.collected!, ...(previous!.collected ?? []).filter((c) => c.kind === "ordinance")],
     };
     out.errors.push(`관할 조례는 직전 조회(${when(previous!.checkedAt)}) 자료를 유지했습니다.`);
+  }
+  // 토지이음 고시를 이번에 못 받았으면(연결 차단 등) 같은 대상지 직전 고시 문서를 유지한다.
+  const gosiNow = (out.officialDocuments?.documents ?? []).some((d) => d.gosiNo);
+  const gosiPrev = sameSite ? (previous!.officialDocuments?.documents ?? []).filter((d) => d.gosiNo) : [];
+  if (!gosiNow && gosiPrev.length && out.officialDocuments) {
+    out.officialDocuments = { ...out.officialDocuments, documents: [...gosiPrev, ...out.officialDocuments.documents.filter((d) => d.kind !== "district-plan" || d.status === "analyzed")] };
+    out.errors.push(`지구단위계획 고시는 직전 조회(${when(previous!.checkedAt)}) 자료를 유지했습니다.`);
   }
   if (!out.nationalArticleCandidates?.length && sameSite && previous!.nationalArticleCandidates?.length) out.nationalArticleCandidates = previous!.nationalArticleCandidates;
   return out;
