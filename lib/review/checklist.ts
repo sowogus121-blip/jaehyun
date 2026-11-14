@@ -133,3 +133,33 @@ export function checklistSummary(groups: CheckGroup[]) {
   const all = groups.flatMap((g) => g.items);
   return { total: all.length, ok: all.filter((i) => i.state === "ok").length, partial: all.filter((i) => i.state === "partial").length, missing: all.filter((i) => i.state === "missing").length, manual: all.filter((i) => i.state === "manual").length };
 }
+
+/** 자동 수집 출처별 상태 — 무엇이 어디서 왔고 무엇이 막혔는지 한 줄로 보여준다. */
+export type SourceState = "ok" | "alt" | "fail" | "na";
+export interface SourceStatus { name: string; state: SourceState; detail: string }
+
+export function sourceStatuses(p: Project): SourceStatus[] {
+  const r = p.review;
+  if (!r) return [];
+  const errs = r.errors ?? [];
+  const f = r.siteFacts;
+  const lawDown = errs.some((e) => e.includes("시스템 점검"));
+  const lawCache = errs.some((e) => /국가법령 조문은 (직전 조회|다른 대상지)/.test(e));
+  const lawGot = (r.collected ?? []).some((c) => c.kind === "law");
+  const elis = r.ordinances.filter((o) => (o as { source?: string }).source === "elis").length;
+  const docs = r.officialDocuments?.documents ?? [];
+  const gosi = docs.filter((d) => d.gosiNo);
+  const eumErr = (r.officialDocuments?.errors ?? []).find((e) => e.includes("토지이음"));
+  const inPlan = districtPlanOf(r) || (f?.designations ?? []).some((d) => /지구단위계획|정비구역|노후계획도시/.test(d.name) && d.conflict !== "접함");
+  const gosiKept = errs.some((e) => e.startsWith("지구단위계획 고시는 직전"));
+  return [
+    { name: "VWorld 지적·용도지역", state: r.location && r.landUse.length ? "ok" : "fail", detail: r.location ? `${r.landUse.length}건` : "주소 조회 실패" },
+    { name: "토지특성·토지이용계획", state: f?.land || f?.designations ? "ok" : "fail", detail: f?.designations ? `지역·지구 ${f.designations.length}건` : "조회 실패" },
+    { name: "건축HUB 대장·인허가", state: f && (f.buildings !== null || f.permits !== null) ? "ok" : "fail", detail: f && (f.buildings !== null || f.permits !== null) ? `대장 ${f.buildings?.length ?? 0} · 인허가 ${f.permits?.length ?? 0}` : "조회 실패" },
+    { name: "국가법령정보센터", state: lawGot && !lawDown ? "ok" : lawGot ? "alt" : "fail", detail: lawDown ? (lawGot ? (lawCache ? "점검 중 · 저장된 원문 사용" : "점검 중") : "점검 중 · 점검 후 다시 수집") : lawGot ? `법령 ${r.laws.length}건` : "조회 실패" },
+    { name: "관할 조례", state: r.ordinances.length ? (elis ? "alt" : "ok") : "fail", detail: r.ordinances.length ? (elis ? `ELIS 대체 ${elis}건` : `${r.ordinances.length}건`) : "미확보" },
+    { name: "토지이음 고시", state: !inPlan && !gosi.length ? "na" : gosi.length ? (gosiKept ? "alt" : "ok") : "fail", detail: !inPlan && !gosi.length ? "지구단위·정비구역 아님" : gosi.length ? `${gosi.length}건${gosiKept ? " · 직전 조회 유지" : ""}` : eumErr ? "연결 불가 · 잠시 후 다시 수집" : "해당 고시 없음" },
+    { name: "공식기관 웹검색", state: r.webSearch.status === "completed" ? "ok" : r.webSearch.status === "not-configured" ? "na" : "fail", detail: r.webSearch.status === "completed" ? `${r.webSearch.results.length}건` : r.webSearch.status === "not-configured" ? "키 없음" : "실패" },
+    ...(p.site.business === "lh-purchase" ? [{ name: "LH 매입공고", state: (r.lhNotice ? (r.lhNotice.isCurrent ? "ok" : "alt") : "fail") as SourceState, detail: r.lhNotice ? (r.lhNotice.isCurrent ? "접수 중" : "접수 종료 공고") : "미확인" }] : []),
+  ];
+}

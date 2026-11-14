@@ -309,3 +309,21 @@ describe("토지이음 고시정보 자동 수집", () => {
     expect(d.body).toContain("용적률 400% 이하");
   });
 });
+
+import { sourceStatuses } from "../lib/review/checklist";
+describe("수집 출처 상태 표시", () => {
+  it("점검 중 국가법령·ELIS 대체 조례·토지이음 연결 실패를 구분한다", () => {
+    const p = newProject({ address: "경기도 성남시 분당구 정자동 178-1" });
+    p.review = {
+      location: { address: "a", parcelAddress: "경기도 성남시 분당구 정자동 178-1", x: "1", y: "1" }, landUse: [{ category: "용도지역", name: "중심상업지역", code: "x", source: "v", status: "verified" }],
+      laws: [], ordinances: [{ name: "성남시 건축 조례", source: "elis" }], collected: [], districtPlan: true,
+      siteFacts: { land: null, designations: [{ name: "지구단위계획구역", conflict: "포함" }], buildings: [], permits: [], roads: [], notes: [] },
+      officialDocuments: { documents: [], errors: ["토지이음 고시: 토지이음 서버 연결 불가"] },
+      webSearch: { status: "completed", results: [] }, errors: ["국가법령정보센터 20개 조회 실패: 국가법령정보센터 시스템 점검 중"],
+    } as never;
+    const s = Object.fromEntries(sourceStatuses(p).map((x) => [x.name, x.state]));
+    expect(s["국가법령정보센터"]).toBe("fail");
+    expect(s["관할 조례"]).toBe("alt");
+    expect(s["토지이음 고시"]).toBe("fail");
+  });
+});

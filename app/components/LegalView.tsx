@@ -5,7 +5,7 @@ import type { LhSupply, ParamKey, Project, ReviewRow, RowStatus, RuleParams, Sou
 import { STATUS_LABEL, SUPPLY_LABEL } from "@/lib/review/types";
 import { NUMERIC_PARAMS, PARAM_LABEL, VERDICT_PARAMS, resolveParams } from "@/lib/review/params";
 import { lookupHint, officialLinks } from "@/lib/review/lookup-hints";
-import { buildChecklist, checklistSummary, CHECK_LABEL } from "@/lib/review/checklist";
+import { buildChecklist, checklistSummary, CHECK_LABEL, sourceStatuses, type SourceState } from "@/lib/review/checklist";
 import { citeLine } from "@/lib/report/format";
 import { findMetroOrdinanceRules, findMetroOrdinanceSource } from "@/lib/metro-ordinance-catalog";
 import { findLhGuidelines, findMetroAnnexRecords } from "@/lib/metro-annex-lh-catalog";
@@ -102,12 +102,24 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
   </div>;
 }
 
+const SOURCE_LABEL: Record<SourceState, string> = { ok: "정상", alt: "대체", fail: "실패", na: "해당없음" };
+function SourceStrip({ project }: { project: Project }) {
+  const list = useMemo(() => sourceStatuses(project), [project]);
+  if (!list.length) return null;
+  return <div className="source-strip">
+    {list.map((s) => <span key={s.name} className={`src src-${s.state}`} title={s.detail}>
+      <i>{SOURCE_LABEL[s.state]}</i><b>{s.name}</b><small>{s.detail}</small>
+    </span>)}
+  </div>;
+}
+
 function ChecklistPanel({ project, refreshing, onRefresh, onJump }: { project: Project; refreshing: boolean; onRefresh: () => void; onJump: (rowId: string) => void }) {
   const groups = useMemo(() => buildChecklist(project), [project]);
   const sum = checklistSummary(groups);
   const [open, setOpen] = useState(true);
   return <Panel title="규모검토 필요자료" sub={`대상지 조회 시 자동 수집 · 확보 ${sum.ok} / 일부 ${sum.partial} / 미확보 ${sum.missing} / 직접 확인 ${sum.manual}`}
     actions={<><button className="btn" onClick={onRefresh} disabled={refreshing}>{refreshing ? "수집 중…" : "자료 다시 수집"}</button><button className="btn" onClick={() => setOpen((v) => !v)}>{open ? "접기" : "펼치기"}</button></>}>
+    {open && <SourceStrip project={project} />}
     {open && <div className="checklist">
       {groups.map((g) => <div className="check-group" key={g.title}>
         <h4>{g.title}</h4>
@@ -284,6 +296,10 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
   </div>;
 }
 
+function fmtDate(v?: string | null) {
+  return v && /^\d{8}$/.test(v) ? `${v.slice(0, 4)}.${v.slice(4, 6)}.${v.slice(6)}` : v ?? "-";
+}
+
 function ReferencePanel({ project, onUpload, onUseCandidate }: {
   project: Project;
   onUpload: (files: File[]) => void;
@@ -306,17 +322,27 @@ function ReferencePanel({ project, onUpload, onUseCandidate }: {
       <button className={tab === "national" ? "on" : ""} onClick={() => setTab("national")}>국가법규 점검</button>
     </div>}>
     {tab === "sources" && <div className="ref-grid">
-      <table className="grid-table">
-        <thead><tr><th>구분</th><th>법령·조례</th><th>시행일</th><th>원문</th></tr></thead>
+      <table className="grid-table ref-table">
+        <thead><tr><th>구분</th><th>자료</th><th>시행·고시</th><th>출처</th><th>원문</th></tr></thead>
         <tbody>
-          {(review?.laws ?? []).map((l) => <tr key={l.link}><td>법령</td><td>{l.name}</td><td>{l.enforcementDate ?? "-"}</td><td><a href={l.link} target="_blank" rel="noreferrer">열기</a></td></tr>)}
-          {(review?.ordinances ?? []).map((o) => <tr key={o.link}><td>조례</td><td>{o.name}</td><td>{o.enforcementDate ?? "-"}</td><td><a href={o.link} target="_blank" rel="noreferrer">열기</a></td></tr>)}
-          {review?.lhNotice && <tr><td>LH 공고</td><td>{review.lhNotice.title}</td><td>{review.lhNotice.publishedAt}</td><td><a href={review.lhNotice.url} target="_blank" rel="noreferrer">공고</a>{review.lhNotice.pdfUrl && <> · <a href={review.lhNotice.pdfUrl} target="_blank" rel="noreferrer">PDF</a></>}{review.lhNotice.guideUrl && <> · <a href={review.lhNotice.guideUrl} target="_blank" rel="noreferrer">가이드라인</a></>}</td></tr>}
-          {(review?.officialDocuments?.documents ?? []).map((d) => <tr key={d.sourceUrl}><td>{d.kind === "district-plan" ? "지구단위" : "LH 첨부"}</td><td>{d.title}</td><td>{d.status === "analyzed" ? `${d.pageCount ?? "?"}쪽 분석` : "링크"}</td><td><a href={d.sourceUrl} target="_blank" rel="noreferrer">열기</a></td></tr>)}
-          {(review?.webSearch.results ?? []).slice(0, 8).map((w) => <tr key={w.url}><td>공식기관 검색</td><td>{w.title}</td><td>{w.sourceDomain}</td><td><a href={w.url} target="_blank" rel="noreferrer">열기</a></td></tr>)}
-          {!review && <tr><td colSpan={4} className="empty">공식자료 조회 전</td></tr>}
+          {(review?.laws ?? []).map((l) => <tr key={l.link}><td>법령</td><td>{l.name}</td><td>{fmtDate(l.enforcementDate)}</td><td><span className="tag">국가법령정보센터</span></td><td><a href={l.link} target="_blank" rel="noreferrer">열기</a></td></tr>)}
+          {(review?.ordinances ?? []).map((o) => <tr key={o.link}><td>조례</td><td>{o.name}</td><td>{fmtDate(o.enforcementDate)}</td><td><span className={`tag ${(o as { source?: string }).source === "elis" ? "tag-alt" : ""}`}>{(o as { source?: string }).source === "elis" ? "자치법규정보시스템(대체)" : "국가법령정보센터"}</span></td><td><a href={o.link} target="_blank" rel="noreferrer">열기</a></td></tr>)}
+          {(review?.officialDocuments?.documents ?? []).filter((d) => d.kind === "district-plan").map((d) => <tr key={d.sourceUrl}>
+            <td>지구단위</td>
+            <td>{d.title}{d.siteMention && <span className="tag tag-hit">지번 기재</span>}
+              {d.attachments && d.attachments.length > 0 && <small className="att">첨부 {d.attachments.filter((x) => x.analyzed).length}/{d.attachments.length} 분석 · {d.attachments.map((x) => x.name).join(", ")}</small>}</td>
+            <td>{d.gosiNo ? <>{d.gosiNo}<br /><small>{d.gosiDate}</small></> : d.status === "analyzed" ? `${d.pageCount ?? "?"}쪽 분석` : d.status === "failed" ? "읽기 실패" : "링크"}</td>
+            <td><span className="tag">{d.gosiNo ? "토지이음 고시" : "웹검색"}</span></td>
+            <td><a href={d.sourceUrl} target="_blank" rel="noreferrer">열기</a></td></tr>)}
+          {review?.lhNotice && <tr><td>LH 공고</td><td>{review.lhNotice.title}</td><td>{review.lhNotice.publishedAt}</td><td><span className="tag">LH 청약플러스</span></td><td><a href={review.lhNotice.url} target="_blank" rel="noreferrer">공고</a>{review.lhNotice.pdfUrl && <> · <a href={review.lhNotice.pdfUrl} target="_blank" rel="noreferrer">PDF</a></>}{review.lhNotice.guideUrl && <> · <a href={review.lhNotice.guideUrl} target="_blank" rel="noreferrer">가이드라인</a></>}</td></tr>}
+          {(review?.officialDocuments?.documents ?? []).filter((d) => d.kind === "lh-notice" && d.status === "analyzed").map((d) => <tr key={d.sourceUrl}><td>LH 첨부</td><td>{d.title}</td><td>{d.pageCount ?? "?"}쪽 분석</td><td><span className="tag">웹검색</span></td><td><a href={d.sourceUrl} target="_blank" rel="noreferrer">열기</a></td></tr>)}
+          {!review && <tr><td colSpan={5} className="empty">공식자료 조회 전</td></tr>}
         </tbody>
       </table>
+      {(review?.webSearch.results ?? []).length > 0 && <details className="extracted">
+        <summary>공식기관 웹검색 결과 {review!.webSearch.results.length}건 (참고 링크)</summary>
+        <ul>{review!.webSearch.results.slice(0, 20).map((w) => <li key={w.url}><a href={w.url} target="_blank" rel="noreferrer">{w.title}</a> <small>{w.sourceDomain}</small></li>)}</ul>
+      </details>}
       {review?.lhNotice?.extractedCriteria && review.lhNotice.extractedCriteria.length > 0 && <details className="extracted">
         <summary>LH 공고문 자동 추출 문구 {review.lhNotice.extractedCriteria.length}건 (검증 전 후보)</summary>
         <ul>{review.lhNotice.extractedCriteria.map((c, i) => <li key={i}><b>{c.topic}</b> {c.quote}</li>)}</ul>
