@@ -345,3 +345,22 @@ async function collectEumPlanDocumentsUncached(ctx: EumSearchContext, limit: num
   for (const x of ranked) documents.push(await analyzeGosi(x.r, ctx));
   return { documents, errors };
 }
+
+/** 고시 한 건의 본문·첨부(PDF/HWPX/HWP)에서 검색어가 든 줄을 찾는다 (원문 대조·예정역 확인용). */
+export async function grepGosi(seq: string, pattern: RegExp, maxFiles = 3): Promise<{ title: string; gosiNo: string; date: string | null; attachments: string[]; hits: Array<{ file: string; line: string }>; errors: string[] }> {
+  const page = await getHtmlWithCookie(gosiUrl(seq), 15_000);
+  const detail = parseGosiDetail(page.html, seq);
+  const hits: Array<{ file: string; line: string }> = [];
+  const errors: string[] = [];
+  const scan = (file: string, text: string) => { for (const line of text.split(/\n/)) if (pattern.test(line)) hits.push({ file, line: line.trim().slice(0, 300) }); };
+  scan("본문", detail.body);
+  const { extractHwpText } = await import("./hwp");
+  for (const a of detail.attachments.filter((x) => ["pdf", "hwpx", "hwp"].includes(x.ext)).slice(0, maxFiles)) {
+    try {
+      const data = await downloadAttachment(seq, a.path, page.cookie);
+      const text = a.ext === "hwp" ? await extractHwpText(data) : (await extractDocumentText(data, a.ext as "pdf" | "hwpx", 400_000)).text;
+      scan(a.name, text);
+    } catch (e) { errors.push(`${a.name}: ${e instanceof Error ? e.message : "실패"}`); }
+  }
+  return { title: detail.title, gosiNo: detail.gosiNo, date: detail.date, attachments: detail.attachments.map((a) => a.name), hits: hits.slice(0, 120), errors };
+}
