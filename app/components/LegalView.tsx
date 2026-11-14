@@ -89,7 +89,7 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
         {(["verified", "user", "candidate", "missing"] as RowStatus[]).map((s) => <span key={s}><StatusChip status={s} /> {counts[s]}</span>)}
         <span className="muted">계산 연동 수치: {Object.values(resolved).length}개</span>
       </div>
-      <LegalTable rows={visible} selected={selected} onSelect={open} />
+      <div className="table-scroll"><LegalTable rows={visible} selected={selected} onSelect={open} /></div>
       {draft && <RowEditor key={draft.id} row={draft} address={address} zone={zone} isNew={!rows.some((r) => r.id === draft.id)}
         onSave={save} onCancel={() => { setDraft(null); setSelected(null); }}
         onDelete={draft.origin === "user" ? () => remove(draft.id) : undefined}
