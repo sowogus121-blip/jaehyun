@@ -11,8 +11,8 @@ export function Emph({ text }: { text: string }) {
   ))}</>;
 }
 
-export function Marked({ text, highlights, zones, sentences }: { text: string; highlights?: string[]; zones?: string[]; sentences?: boolean }) {
-  const hs = sentences ? resolveHighlights(text, highlights, zones) : highlights;
+export function Marked({ text, highlights, zones, designations, sentences }: { text: string; highlights?: string[]; zones?: string[]; designations?: string[]; sentences?: boolean }) {
+  const hs = sentences ? resolveHighlights(text, highlights, zones, designations) : highlights;
   return <>{highlightRuns(text, hs).map((r, i) => r.emphasis ? <mark key={i}>{r.text}</mark> : <span key={i}>{r.text}</span>)}</>;
 }
 

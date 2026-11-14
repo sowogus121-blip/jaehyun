@@ -25,7 +25,7 @@ const squash = (t: string) => t.replace(/\s+/g, "");
 /** 문장·항목 단위로 자르기 (줄, 마침표, ①, 1., 가. 등) — 원문 위치 보존 */
 function segments(text: string): Array<{ start: number; end: number; text: string }> {
   const out: Array<{ start: number; end: number; text: string }> = [];
-  const re = /\n+|(?<=[.。])\s+|(?=[①-⑳])|(?<=\s)(?=\d{1,2}\.\s)|(?<=\s)(?=[가-하]\.\s)/g;
+  const re = /\n+|(?<=[가-힣)」][.。])\s+|(?=[①-⑳])|(?<=\s)(?=\d{1,2}\.\s)|(?<=\s)(?=[가-하]\.\s)/g;
   let last = 0;
   const push = (a: number, b: number) => {
     const raw = text.slice(a, b);
@@ -44,11 +44,22 @@ const zonesIn = (t: string) => { const c = squash(t); return ZONE_NAMES.filter((
  * 그 낱말이 든 문장 하나로 넓혀 칠한다. 다른 용도지역만 언급한 문장은 제외하고,
  * 대상지 용도지역이 든 문장을 우선한다. 결과는 원문 문장 그대로(최대 4개).
  */
-export function resolveHighlights(text: string, highlights: string[] = [], zones: string[] = []): string[] {
+// 대상지와 무관한 지구·시설·용도만 다루는 문장 (대상지에 해당 지정이 있으면 유지)
+const DISTRICT_OFF = ["경관지구", "취락지구", "고도지구", "방재지구", "보호지구", "개발진흥지구", "특정용도제한지구", "자연공원", "공원시설", "학교", "재정비촉진", "도시재정비", "개발제한구역"];
+const USE_OFF = /(숙박|객실|판매시설|문화\s*및\s*집회|위락|관람장|골프|의료시설|공장|창고시설|운동시설)/;
+const HOUSING = /(주택|아파트|오피스텔|기숙사|세대)/;
+const TITLE_ONLY = /^제\d+조(?:의\d+)?\s*\([^)]{1,40}\)$/;
+
+export function resolveHighlights(text: string, highlights: string[] = [], zones: string[] = [], designations: string[] = []): string[] {
   if (!text) return [];
   const segs = segments(text);
   const site = zones.map(squash).filter(Boolean);
+  const des = squash(designations.join(" "));
   const relevant = (t: string) => {
+    const c = squash(t);
+    if (TITLE_ONLY.test(t.trim())) return false;
+    if (DISTRICT_OFF.some((d) => c.includes(d) && !des.includes(d))) return false;
+    if (USE_OFF.test(t) && !HOUSING.test(t)) return false;
     if (!site.length) return true;
     const named = zonesIn(t);
     return named.length === 0 || named.some((z) => site.includes(z));
