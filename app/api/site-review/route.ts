@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
+import { collectEumPlanDocuments } from "../../../lib/server/eum-gosi";
+import { NEW_TOWN_HINT } from "../../../lib/review/special-zones";
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
 import type { OrdinanceArticleCandidate } from "../../../lib/server/ordinance-articles";
@@ -361,6 +363,27 @@ export async function POST(request: NextRequest) {
   const lhNoticePromise = findLatestLhPurchaseNotice(districtForLh, localGovernment)
     .then((notice) => ({ notice, error: null as string | null }))
     .catch((error: unknown) => ({ notice: null, error: error instanceof Error ? error.message : "LH 공고 조회 실패" }));
+  // 토지이음 고시정보에서 지구단위계획(·노후계획도시 정비) 결정고시를 직접 찾아 고시문·첨부를 읽는다.
+  const eumPromise = siteFactsPromise.then(async (facts) => {
+    const designations = facts.designations ?? [];
+    const inPlan = districtPlan || designations.some((d) => /지구단위계획/.test(d.name) && d.conflict !== "접함");
+    const renewal = NEW_TOWN_HINT.test(fullAddress) || designations.some((d) => /정비구역|정비예정|노후계획도시/.test(d.name));
+    if (!inPlan && !renewal) return null;
+    const pnu = parcel?.pnu ?? null;
+    const lotMatch = fullAddress.match(/([가-힣0-9]+(?:동|가|읍|면|리))\s+(?:산\s*)?(\d+(?:-\d+)?)/);
+    const tokens = fullAddress.split(/\s+/);
+    const gu = tokens.find((t, i) => i > 0 && /구$/.test(t));
+    const planNames = [
+      ...landUse.filter((l) => /지구단위/.test(l.name)).map((l) => l.name.replace(/지구단위계획(?:구역)?|\(.*?\)|구역/g, "").trim()),
+      gu ? gu.replace(/구$/, "") : "",
+      lotMatch ? lotMatch[1].replace(/\d*(?:동|가|읍|면|리)$/, "") : "",
+    ].filter((n) => n.length >= 2);
+    const ctx = { sggCd: pnu ? pnu.slice(0, 5) : null, dong: lotMatch?.[1] ?? null, lot: lotMatch?.[2] ?? null, planNames: [...new Set(planNames)], renewal };
+    let found = await collectEumPlanDocuments(ctx);
+    // 구 단위 코드에서 못 찾으면 시 단위(예: 41135 → 41130)로 다시 찾는다.
+    if (!found.documents.length && ctx.sggCd && !ctx.sggCd.endsWith("0")) found = await collectEumPlanDocuments({ ...ctx, sggCd: ctx.sggCd.slice(0, 4) + "0" });
+    return found;
+  }).catch((error) => ({ documents: [], errors: [error instanceof Error ? error.message : "토지이음 고시 조회 실패"] }));
   const webSearchPromise = siteFactsPromise.then((facts) => {
     const matches = classifyDesignations(facts.designations ?? []);
     const extraQueries = matches.filter((m) => m.rule?.search).flatMap((m) => m.designations.slice(0, 1).map((d) => `${localGovernment} ${d.name} ${m.rule!.search}`));
@@ -485,8 +508,25 @@ export async function POST(request: NextRequest) {
     });
   }
   const webSearch = await webSearchPromise;
-  const discoveredDocuments = await collectOfficialDocuments(webSearch.results, localGovernment, fullAddress);
-  const officialDocuments = discoveredDocuments;
+  const [discoveredDocuments, eumDocuments] = await Promise.all([
+    collectOfficialDocuments(webSearch.results, localGovernment, fullAddress),
+    eumPromise,
+  ]);
+  // 토지이음 고시를 우선 근거로 두고, 웹검색 문서는 분석 성공한 것만 덧붙인다(토지이음 고시를 찾았을 때).
+  const eumDocs = eumDocuments?.documents ?? [];
+  const eumSeqs = new Set(eumDocs.map((d) => d.sourceUrl.match(/seq=(\d+)/)?.[1]).filter(Boolean));
+  const webDocs = discoveredDocuments.documents.filter((d) => {
+    if (d.kind !== "district-plan") return true;
+    const seq = d.sourceUrl.match(/gvGosiDet\.jsp\?[^#]*seq=(\d+)/)?.[1];
+    if (seq && eumSeqs.has(seq)) return false;
+    return !eumDocs.length || d.status === "analyzed";
+  });
+  const officialDocuments = {
+    ...discoveredDocuments,
+    documents: [...eumDocs, ...webDocs],
+    errors: [...(eumDocuments?.errors ?? []).map((e) => "토지이음 고시: " + e), ...discoveredDocuments.errors.filter((e) => webDocs.some((d) => e.startsWith(d.title)))],
+    totalCandidates: eumDocs.reduce((n, d) => n + d.candidates.length, 0) + webDocs.reduce((n, d) => n + d.candidates.length, 0),
+  };
   const lhNoticeResult = await lhNoticePromise;
   // The live LH board search can miss closed South notices or an abbreviated
   // municipality list. Fall back only to a municipality-matched, exact official

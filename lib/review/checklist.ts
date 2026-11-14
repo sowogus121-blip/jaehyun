@@ -86,7 +86,15 @@ export function buildChecklist(p: Project): CheckGroup[] {
       fromCollected("plan.bcrfar", "ordinance", "건폐율·용적률 조문"),
       fromCollected("plan.relax", "ordinance", "임대주택 용적률 완화"),
       ...(districtPlanOf(r ?? null) || p.site.blockNo ? [
-        { id: "dp-doc", label: "지구단위계획 결정조서·결정도·시행지침", state: planDocs.some((d) => d.status === "analyzed") ? "partial" as const : "missing" as const, detail: planDocs.length ? planDocs.map((d) => d.title).join(", ") : "고시문·결정도서 자동 수집 실패 → 토지이음 고시에서 확보 후 업로드", link: { label: "토지이음 고시", url: EUM_GOSI } },
+        (() => {
+          const got = planDocs.filter((d) => d.status === "analyzed");
+          const gosi = got.filter((d) => d.gosiNo);
+          const state: CheckState = gosi.length ? "ok" : got.length ? "partial" : "missing";
+          const detail = gosi.length
+            ? gosi.map((d) => `${d.gosiNo}${d.gosiDate ? "(" + d.gosiDate + ")" : ""}${d.siteMention ? " ★지번 기재" : ""}`).join(", ") + " · 토지이음 고시문" + (gosi.some((d) => d.attachments?.some((a) => a.analyzed)) ? "·첨부" : "") + " 자동 확보 · 획지는 결정도로 확인"
+            : got.length ? got.map((d) => d.title).join(", ") : planDocs.length ? "고시 후보는 찾았지만 본문을 읽지 못함 · 토지이음 고시에서 열람" : "토지이음 고시에서 결정고시를 찾지 못함";
+          return { id: "dp-doc", label: "지구단위계획 결정조서·결정도·시행지침", state, detail, link: { label: "토지이음 고시", url: gosi[0]?.sourceUrl ?? EUM_GOSI } };
+        })(),
         { id: "dp-block", label: "획지번호", state: p.site.blockNo ? "ok" as const : "missing" as const, detail: p.site.blockNo ? `획지 ${p.site.blockNo}` : "결정도에서 확인 후 대상지 조건에 입력", rowId: "plan.district" },
       ] : []),
       { id: "height", label: "최고높이·층수 제한", rowId: "plan.height",

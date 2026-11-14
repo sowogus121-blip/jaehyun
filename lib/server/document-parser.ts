@@ -143,6 +143,15 @@ async function parseXlsx(data: Uint8Array) {
   return lines.join("\n");
 }
 
+/** 공식문서 자동수집용: PDF/HWPX 본문 텍스트만 추출 (최대 limit자) */
+export async function extractDocumentText(data: Uint8Array, extension: "pdf" | "hwpx", limit = 20_000): Promise<{ text: string; pageCount: number | null }> {
+  if (extension === "pdf") {
+    const parsed = await parsePdf(data);
+    return { text: parsed.text.replace(/\r/g, "").replace(/[ \t]+/g, " ").trim().slice(0, limit), pageCount: parsed.pageCount };
+  }
+  return { text: (await parseZipXml(data, "hwpx")).replace(/\r/g, "").replace(/[ \t]+/g, " ").trim().slice(0, limit), pageCount: null };
+}
+
 export async function parseUploadedDocument(file: File): Promise<DocumentAnalysis> {
   if (file.size > 20 * 1024 * 1024) throw new Error("문서 크기는 20MB를 초과할 수 없습니다.");
   const extension = file.name.split(".").pop()?.toLowerCase();
