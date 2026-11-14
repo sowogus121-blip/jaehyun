@@ -372,3 +372,34 @@ describe("조례 별표 주차기준 자동 판독", () => {
     if (res.units > 0) expect(res.parking.legal).toBeGreaterThan(0);
   });
 });
+
+describe("지자체별 주차 별표 표현 차이", () => {
+  it("의정부: 전용면적 합계 ㎡당 기준 + 세대당 1대 미달 보정", () => {
+    const t = `6. 공동주택(기숙사를 제외한다), 업무시설 중 오피스텔
+○ 전용면적을 기준으로 85㎡이하인 경우 전용면적의 합계를 기준으로 70㎡당 1대, 전용 면적이 85㎡를 초과하는 경우 전용면적의 합계를 기준으로 65㎡당 1대로 한다. 다만, 전체 주차대수가 세대 당 또는 호실당 1대에 미달 되는 경우에는 세대 또는 호실 당 1대 이상이 되도록 하여야 한다.
+○ 「주택건설기준 등에 관한 규정」 제27조제1항제2호에 따른 도시형 생활주택은 세대당 주차대수를 1대(세대당 전용면적이 30㎡ 이상 60㎡ 이하인 경우에는 0.9대, 세대당 전용면적이 30㎡미만인 경우에는 0.7대)이상이 되도록 주차장을 설치한다.
+7. 골프장
+비 고
+1. 용도가`;
+    const r = extractParkingRules(t);
+    expect(r.find((x) => x.use === "apartment")!.tiers).toEqual([{ maxArea: 85, sqmPerStall: 70, ratio: 1 }, { sqmPerStall: 65, ratio: 1 }]);
+    expect(r.find((x) => x.use === "urban")!.tiers).toEqual([{ maxArea: 30, strict: true, ratio: 0.7 }, { maxArea: 60, ratio: 0.9 }, { ratio: 1 }]);
+  });
+  it("청주: 전용면적 구간별 세대당 대수", () => {
+    const t = `5. 공동주택(기숙사를 제외한다), 업무시설 중 오피스텔,생활숙박시설,다가구주택, 도시형 생활주택
+ㆍ(전용면적  60㎡ 이하)
+세대(호실) 당 1.05대 이상
+ㆍ(전용면적 60㎡ 초과  ~ 85㎡ 이하)
+세대(호실) 당 1.5대 이상
+ㆍ(전용면적 85㎡초과 )
+전용면적 60㎡ 당 1대 (다만, 세대(호실)당 1.7대 이상)
+ㆍ다가구주택의 경우 「주택건설기준 등에 관한 규정」 제27조제1항에 따라 산정된 주차면수
+ㆍ「주택법 시행령」 제10조제1항에 따른 도시형 생활주택의 전용면적이 30㎡ 이상  60㎡ 이하인 경우 세대(호실)당 주차대수 0.9대(전용면적이 30㎡ 미만인 경우 0.7대)이상
+6. 골프장
+비고
+1. 시설물의`;
+    const r = extractParkingRules(t);
+    expect(r.find((x) => x.use === "officetel")!.tiers).toEqual([{ maxArea: 60, ratio: 1.05 }, { maxArea: 85, ratio: 1.5 }, { sqmPerStall: 60, ratio: 1.7 }]);
+    expect(r.find((x) => x.use === "urban")!.tiers).toEqual([{ maxArea: 30, strict: true, ratio: 0.7 }, { ratio: 0.9 }]);
+  });
+});

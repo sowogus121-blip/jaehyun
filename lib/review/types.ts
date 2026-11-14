@@ -43,7 +43,8 @@ export interface SourceRef {
   kind?: "law" | "ordinance" | "plan" | "lh" | "upload" | "api" | "other";
 }
 
-export interface ParkingTier { maxArea?: number; ratio: number }
+/** 주차기준 구간: 전용면적 maxArea(㎡) 이하(strict면 미만)일 때 세대당 ratio대 이상, 또는 전용 sqmPerStall㎡당 1대 */
+export interface ParkingTier { maxArea?: number; strict?: boolean; ratio?: number; sqmPerStall?: number }
 
 /** 규모검토로 연동되는 수치. 모든 값은 선택적이며 단위는 키 이름에 맞춘다. */
 export interface RuleParams {
