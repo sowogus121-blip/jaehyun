@@ -11,7 +11,7 @@ import { findArticle, zoneRatio, type Article } from "./articles";
 import { assessParcelAssembly } from "../parcel-assembly";
 import { ORDINANCE_TOPICS, NATIONAL_ARTICLES, lhCriterionRow } from "./collect-topics";
 import { classifyDesignations, NEW_TOWN_HINT } from "./special-zones";
-import { extractParkingRules, describeTiers, type ParkingRule } from "./parking-rules";
+import { extractParkingRules, extractLhMechRule, describeTiers, type ParkingRule } from "./parking-rules";
 import type { ReviewRow, RowStatus, SiteInput, SourceRef, UseKind } from "./types";
 import { USE_SHORT } from "./types";
 
@@ -487,9 +487,8 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       const nums = (rule.tiers ?? []).flatMap((t) => [...(t.ratio ? [`${t.ratio}대`] : []), ...(t.sqmPerStall ? [`${t.sqmPerStall}㎡당`] : []), ...(t.maxArea !== undefined ? [`${t.maxArea}제곱미터`, `${t.maxArea}㎡`] : [])]);
       return put({
         id,
-        content: (rule.tiers ? describeTiers(rule.tiers, word) : "조례 별표 기준 (아래 원문)")
-          + (rule.refHousingStd27 ? `\n「주택건설기준 등에 관한 규정」 제27조 산정 대수와 비교해 큰 값 적용` : "")
-          + `\n원문: ${rule.quote.slice(0, 260)}${rule.quote.length > 260 ? "…" : ""}`,
+        content: (rule.tiers ? describeTiers(rule.tiers, word) : `조례 별표 원문: ${rule.quote.slice(0, 200)}${rule.quote.length > 200 ? "…" : ""}`)
+          + (rule.refHousingStd27 ? `\n「주택건설기준 등에 관한 규정」 제27조 산정 대수와 비교해 큰 값 적용` : ""),
         law: `${annex.title} ${annex.article.split(" · ")[0]}` + (rule.refHousingStd27 ? " · 주택건설기준 등에 관한 규정 제27조" : ""),
         note: rule.tiers ? `별표 원문에서 자동 판독 · 규모검토에서 타입별 전용면적으로 법정대수 산정` : "별표 문구에서 수치를 판독하지 못해 원문 인용만 · 대수는 직접 입력",
         status: rule.tiers ? "verified" : "candidate",
@@ -527,17 +526,22 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     params: lh ? { lhParking03: "conditional", lhParking03MaxArea: rules?.parking03MaxArea ?? 30 } : undefined,
     sources: [lawRef(review, LAW.publicHousingDecree, "제37조"), ...(noticeSource ? [noticeSource] : [])],
   });
+  // 검증 규칙이 없으면 공고문 PDF 추출 문구에서 기계식 허용요건·비율을 직접 읽는다.
+  const mechQuotes = (notice?.extractedCriteria ?? []).map((c) => c.quote).filter((q) => /기계식/.test(q));
+  const mech = !rules && mechQuotes.length ? extractLhMechRule(mechQuotes) : null;
   put({
     id: "park.mech.lh",
     content: rules
       ? `역세권 청년·신혼형 오피스텔 및 도시형생활주택은 총 주차대수의 ${rules.mechanicalMaxPercent}% 이하 계획\n0.3대 완화를 받을 시 기계식주차 설치 지양`
-      : notice ? "해당 지역본부 공고의 기계식주차 인수기준 원문 확인 필요" : "관할 LH 지역본부 공고 미확인",
+      : mech ? [mech.requirement ? `허용요건: ${mech.requirement}` : "", mech.ratioText ? `비율: ${mech.ratioText}` : ""].filter(Boolean).join("\n")
+      : notice ? "공고문에서 기계식주차 인수기준 문구를 찾지 못함 · 공고문 확인" : "관할 LH 지역본부 공고 미확인",
     law: notice ? notice.title : "LH 지역본부 신축매입약정 공고",
-    note: "지자체 조례 기준과 LH 인수 기준 중 엄격한 값을 적용",
-    status: rules && notice?.isCurrent ? "verified" : notice ? "candidate" : "missing",
-    params: rules ? { lhMechApartment: "prohibited", lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: rules.mechanicalMaxPercent } : undefined,
-    sources: noticeSource ? [noticeSource] : [],
-    missing: rules ? undefined : "공고문 기계식 인수기준 조항",
+    note: mech ? "공고문 PDF에서 자동 추출 · 지자체 조례 기준과 LH 인수 기준 중 엄격한 값 적용" : "지자체 조례 기준과 LH 인수 기준 중 엄격한 값을 적용",
+    status: (rules || mech?.maxPercent) && notice?.isCurrent ? "verified" : notice ? "candidate" : "missing",
+    params: rules ? { lhMechApartment: "prohibited", lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: rules.mechanicalMaxPercent }
+      : mech?.maxPercent ? { ...(mech.apartmentExcluded ? { lhMechApartment: "prohibited" as const } : {}), lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: mech.maxPercent } : undefined,
+    sources: noticeSource ? [{ ...noticeSource, ...(mech ? { excerpt: [mech.requirement, mech.ratioText].filter(Boolean).join(" / "), verbatim: true, highlights: mech.maxPercent ? [`${mech.maxPercent}%`, "500m"] : ["500m"] } : {}) }] : [],
+    missing: rules || mech?.maxPercent ? undefined : "공고문 기계식 인수기준 조항",
   });
   put({
     id: "lh.notice",

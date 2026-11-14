@@ -104,9 +104,11 @@ export function extractParkingRules(annexText: string): ParkingRule[] {
     const urbanBullet = bullets.length > 1 ? bullets.slice(1).find((b) => /도시형\s*생활주택/.test(b) && /(\d+(?:\.\d+)?)\s*대/.test(b)) : undefined;
     const mainText = bullets.filter((b) => b !== urbanBullet && !/^\s*ㆍ?\s*다가구주택의\s*경우/.test(b)).join(" ");
     const mainTiers = parseTiers(mainText);
-    if (/공동주택/.test(headNoExcl)) out.push({ use: "apartment", quote, tiers: mainTiers, refHousingStd27: ref27 });
-    if (/오피스텔/.test(headNoExcl)) out.push({ use: "officetel", quote, tiers: mainTiers, refHousingStd27: ref27 });
-    if (urbanBullet) out.push({ use: "urban", quote: urbanBullet.replace(/\s+/g, " ").trim().slice(0, 600), tiers: parseTiers(urbanBullet), refHousingStd27: ref27 });
+    const has27 = (x: string) => /주택건설기준\s*등에\s*관한\s*규정[^가-힣]{0,6}제27조[^.]{0,40}(산정|따라|따른다)/.test(x) && !/도시형\s*생활주택\s*(아파트형|은)/.test(x.slice(x.search(/주택건설기준/) - 40, x.search(/주택건설기준/)));
+    const mainQuote = mainText.replace(/\s+/g, " ").trim().slice(0, 900);
+    if (/공동주택/.test(headNoExcl)) out.push({ use: "apartment", quote: mainQuote, tiers: mainTiers, refHousingStd27: has27(mainText) });
+    if (/오피스텔/.test(headNoExcl)) out.push({ use: "officetel", quote: mainQuote, tiers: mainTiers, refHousingStd27: has27(mainText) });
+    if (urbanBullet) out.push({ use: "urban", quote: urbanBullet.replace(/\s+/g, " ").trim().slice(0, 600), tiers: parseTiers(urbanBullet), refHousingStd27: /주택건설기준/.test(urbanBullet) });
     else if (/도시형\s*생활주택/.test(headNoExcl)) out.push({ use: "urban", quote, tiers: mainTiers, refHousingStd27: ref27 });
   }
   return out;
@@ -128,4 +130,37 @@ export function describeTiers(tiers: ParkingTier[], word: string) {
     const rule = [t.sqmPerStall ? `전용 ${t.sqmPerStall}㎡당 1대` : "", t.ratio ? `${word}당 ${t.ratio}대 이상` : ""].filter(Boolean).join(", ");
     return `${cond} ${rule}`;
   }).join(" · ");
+}
+
+/**
+ * LH 공고문 PDF 추출 문구에서 기계식주차 허용요건·비율을 읽는다.
+ * 예) "⑤ 기계식 주차 설치 허용기준 ㅇ (대상요건) (1) 서울·인천·경기도 역세권(…500m 내), (2) 청년용, 신혼·신생아Ⅰ,Ⅱ용 (3) 주거용오피스텔 또는 도시형생활주택(3가지 요건 모두 충족 시)"
+ *     "ㅇ 기계식 주차 비율 * 150세대 이상 : 총 주차대수의 50% 이하로 계획 …"
+ */
+export interface LhMechRule { requirement: string | null; ratioText: string | null; maxPercent: number | null; apartmentExcluded: boolean }
+export function extractLhMechRule(quotes: string[]): LhMechRule | null {
+  const all = quotes.map((q) => q.replace(/\s+/g, " ")).join(" ");
+  const reqStart = all.search(/\(대상요건\)|기계식\s*주차\s*설치\s*허용기준/);
+  let requirement: string | null = null;
+  if (reqStart >= 0) {
+    const tail = all.slice(reqStart);
+    const m = tail.match(/충족\s*시\s*\)/) ?? tail.match(/모두\s*충족/);
+    requirement = tail.slice(0, m && m.index !== undefined ? m.index + m[0].length : 260).replace(/^.*?\(대상요건\)\s*/, "").trim();
+  }
+  // 추출 문구가 서로 겹치므로 비율 문장은 그 문장을 가장 길게 담은 한 조각에서만 읽는다.
+  const ratioQuote = quotes.map((q) => q.replace(/\s+/g, " ")).filter((q) => /기계식\s*주차\s*비율/.test(q))
+    .sort((a, b) => b.slice(b.search(/기계식\s*주차\s*비율/)).length - a.slice(a.search(/기계식\s*주차\s*비율/)).length)[0] ?? "";
+  const ratioStart = ratioQuote.search(/기계식\s*주차\s*비율/);
+  let ratioText: string | null = null;
+  if (ratioStart >= 0) {
+    const tail = ratioQuote.slice(ratioStart);
+    const end = tail.search(/우대|※/);
+    ratioText = tail.slice(0, end > 0 ? end + (tail[end] === "우" ? 2 : 0) : 200).trim();
+  }
+  const pct = (ratioText ?? "").match(/총\s*주차대수의\s*(\d+)\s*%\s*이하/);
+  if (!requirement && !ratioText) return null;
+  return {
+    requirement, ratioText, maxPercent: pct ? Number(pct[1]) : null,
+    apartmentExcluded: !!requirement && /주거용\s*오피스텔\s*또는\s*도시형\s*생활주택/.test(requirement) && !/공동주택|아파트/.test(requirement),
+  };
 }
