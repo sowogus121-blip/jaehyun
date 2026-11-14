@@ -77,7 +77,9 @@ export function elisLink(alrNo: string, histNo: string) {
 
 /** law-api.searchOrdinance와 같은 판정 규칙으로 ELIS에서 관할 조례를 찾는다. */
 export async function searchOrdinanceElis(query: string, jurisdiction: string): Promise<OrdinanceRecord | null> {
-  const hits = await elisSearch(query);
+  // ELIS 검색어는 제목 단어를 모두 포함해야 걸리므로 '주차장 설치 및 관리 조례' → '주차장'으로 줄여 찾고 판정은 제목 규칙으로 한다.
+  const keyword = query.replace(/\s*설치\s*및\s*관리\s*조례$/, "").replace(/\s*조례$/, "").trim();
+  const hits = await elisSearch(keyword);
   const current = hits.filter((h) => (h.tag === "현" || h.tag === "예") && h.kind === "조례" && ordinanceTitleMatches(h.title, query, jurisdiction));
   const norm = (v: string) => v.replace(/\s+/g, "");
   // 같은 조례가 현·예 두 줄로 나오면 현행을 우선한다. 예(시행예정)만 있으면 본문 연혁에서 현행 판본을 다시 고른다.
