@@ -449,7 +449,9 @@ export async function POST(request: NextRequest) {
     const essential = (q: string) => /주차장|도시계획|건축 조례/.test(q);
     const fallbackIdx = ordinanceSettled.flatMap((result, index) =>
       result.status === "rejected" || (!result.value && (lawCenterTrouble || essential(ordinanceQueries[index].query))) ? [index] : []);
-    const elisSettled = await Promise.allSettled(fallbackIdx.map((index) => searchOrdinanceElis(ordinanceQueries[index].query, ordinanceQueries[index].jurisdiction)));
+    // ELIS는 간헐적으로 응답이 없어 한 번 더 시도한다.
+    const elisOnce = (q: string, j: string) => searchOrdinanceElis(q, j).catch(async () => { await new Promise((r) => setTimeout(r, 800)); return searchOrdinanceElis(q, j); });
+    const elisSettled = await Promise.allSettled(fallbackIdx.map((index) => elisOnce(ordinanceQueries[index].query, ordinanceQueries[index].jurisdiction).then(async (r) => r ?? (essential(ordinanceQueries[index].query) ? await elisOnce(ordinanceQueries[index].query, ordinanceQueries[index].jurisdiction) : null))));
     const merged: PromiseSettledResult<OrdinanceRecord | null>[] = ordinanceSettled.map((result) => result);
     fallbackIdx.forEach((index, k) => { merged[index] = elisSettled[k]; });
     if (fallbackIdx.length && elisSettled.some((r) => r.status === "fulfilled" && r.value)) lawSources.push(lawCenterTrouble ? "ELIS 자치법규정보시스템(국가법령정보센터 대체)" : "ELIS 자치법규정보시스템(국가법령정보센터 미검색 조례 보완)");
