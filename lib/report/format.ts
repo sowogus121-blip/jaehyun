@@ -88,6 +88,10 @@ export function resolveHighlights(text: string, highlights: string[] = [], zones
     if (hc.length < 20) (bySite.length ? bySite.slice(0, 2) : good.slice(0, 1)).forEach(add);
     else good.slice(0, 1).forEach(add);
   }
+  // 용도지역별로 나열된 조문(3개 이상 지역)인데 칠한 문장이 없으면 대상지 용도지역 항목을 칠한다
+  if (!picked.length && site.length && zonesIn(text).length >= 3) {
+    segs.filter((sg) => { const n = zonesIn(sg.text); return n.length === 1 && site.includes(n[0]); }).slice(0, 2).forEach(add);
+  }
   return picked.sort((a, b) => a.start - b.start).slice(0, 4).map((p) => p.text);
 }
 
