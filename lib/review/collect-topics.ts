@@ -53,9 +53,10 @@ export const NATIONAL_LAWS = [...new Set(NATIONAL_ARTICLES.map((a) => a.law))];
 
 /** LH 공고문 추출 문구 → 법규검토표 행 */
 export function lhCriterionRow(quote: string): string | null {
-  if (/기계식/.test(quote)) return "park.mech.lh";
+  if (/기계식|주차대수의\s*\d+\s*%/.test(quote)) return "park.mech.lh";
   if (/0[.]3\s*대|0[.]3대|주차.*완화/.test(quote)) return "park.lh03";
   if (/커뮤니티|관리사무소|경비실|주민공동/.test(quote)) return "lh.community";
+  if (/주차/.test(quote)) return null;
   if (/전용|호\s*이상|세대\s*이상|최소|방\s*\d|침실/.test(quote)) return "lh.scale";
   return null;
 }

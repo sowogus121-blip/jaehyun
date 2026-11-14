@@ -66,9 +66,10 @@ export function keySentencesFor(text: string, keywords: string[], max = 3, zone?
   const scored = parts.map((p, i) => {
     const c = p.replace(/\s+/g, "");
     const hits = kw.filter((k) => c.includes(k)).length;
-    const nums = (p.match(NUMBER_PATTERN) ?? []).length;
+    const nums = (p.match(NUMBER_PATTERN) ?? []).length + (p.match(/\d+(?:\.\d+)?\s*(?:미터|퍼센트|제곱미터)/g) ?? []).length;
     const zoneHit = zone && c.includes(zone.replace(/\s+/g, "")) ? 2 : 0;
-    return { p, i, score: hits * 3 + Math.min(nums, 3) * 2 + zoneHit - (p.length > 260 ? 2 : 0) };
+    // 수치가 든 문장(기준)을 제목·정의 문장보다 우선
+    return { p, i, score: hits * 3 + (nums ? 4 + Math.min(nums, 3) : -2) + zoneHit - (p.length > 260 ? 2 : 0) };
   }).filter((x) => x.score >= 3);
   scored.sort((a, b) => b.score - a.score || a.i - b.i);
   return scored.slice(0, max).sort((a, b) => a.i - b.i).map((x) => x.p.length > 320 ? x.p.slice(0, 320) : x.p);
