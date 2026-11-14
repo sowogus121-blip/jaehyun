@@ -63,8 +63,11 @@ function writeNationalCache(review: SiteReviewResult | null) {
 export function applyReview(project: Project, incoming: SiteReviewResult | null): Project {
   const review = keepPreviousLawData(project.review, incoming, readNationalCache());
   writeNationalCache(incoming);
-  const rows = mergeRows(project.rows, buildRows(project.site, review));
-  return { ...project, review: slimReview(review, rows), reviewedAt: now(), rows, updatedAt: now() };
+  // 0.3대 특례 입지: 검토자가 직접 정하지 않았으면 자동 판정(500m 이내 확인)만 반영
+  const site = project.site.transitWithin500m === undefined && review?.transit?.verdict === "within"
+    ? { ...project.site, transitWithin500m: true } : project.site;
+  const rows = mergeRows(project.rows, buildRows(site, review));
+  return { ...project, site, review: slimReview(review, rows), reviewedAt: now(), rows, updatedAt: now() };
 }
 
 /**

@@ -3,6 +3,7 @@ import { findZoningStandard } from "../../../lib/zoning-standards";
 import { searchOfficialSources } from "../../../lib/server/official-search";
 import { collectOfficialDocuments } from "../../../lib/server/official-document-ingest";
 import { collectEumPlanDocuments } from "../../../lib/server/eum-gosi";
+import { checkTransit } from "../../../lib/server/transit";
 import { NEW_TOWN_HINT } from "../../../lib/review/special-zones";
 import { findLatestLhPurchaseNotice } from "../../../lib/server/lh-notice";
 import { normalizeAssemblyAddresses, MAX_EXTRA_PARCELS } from "../../../lib/parcel-assembly";
@@ -293,6 +294,10 @@ export async function POST(request: NextRequest) {
   // 대지 현황 자동 수집: 토지특성(공부 면적·도로접면), 인접 도로, 건축물대장·인허가
   const dataKey = process.env.DATA_GO_KR_API_KEY?.trim() ?? "";
   const siteFactsPromise = collectSiteFacts({ pnu: parcel?.pnu ?? null, bbox: parcel?.bbox ?? null, vworldKey, domain: request.nextUrl.origin, dataKey });
+  // LH 0.3대 특례 입지: 도시철도역 출구·대학교까지 직선거리
+  const transitPromise = vworldKey && location?.x && location?.y
+    ? checkTransit(Number(location.x), Number(location.y), vworldKey, request.nextUrl.origin).catch(() => null)
+    : Promise.resolve(null);
 
   // "독산동 151-10"처럼 시·도를 생략한 입력도 VWorld가 돌려준 전체 지번주소로 관할 지자체·LH 본부를 판정한다.
   const fullAddress = location?.parcelAddress && location.parcelAddress.trim().split(/\s+/).length >= 3 ? location.parcelAddress.trim() : address;
@@ -596,6 +601,7 @@ export async function POST(request: NextRequest) {
   // 조례 조문 추출·검증 근거 라이브러리·검토자 확인을 거쳐서만 확정된다.
   const resolvedPlanningStandards = planningStandards;
   const siteFacts = await siteFactsPromise;
+  const transit = await transitPromise;
   if (!dataKey) missing.push("DATA_GO_KR_API_KEY");
   if (lhNoticeResult.error) errors.push("LH 지역별 공식 공고 조사: " + lhNoticeResult.error);
   if (webSearch.status === "not-configured") missing.push("BRAVE_SEARCH_API_KEY");
@@ -621,6 +627,7 @@ export async function POST(request: NextRequest) {
     nationalArticleCandidates,
     collected,
     siteFacts,
+    transit,
     // C1 use restriction is sourced to the 2026 LH guideline and user-
     // confirmed C1 map placement. It does NOT assert an official C1-2 sublot.
     ruleFindings: [],
