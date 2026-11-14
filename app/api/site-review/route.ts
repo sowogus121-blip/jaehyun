@@ -28,6 +28,7 @@ const LAW_QUERIES = [
   "건축법",
   "국토의 계획 및 이용에 관한 법률",
   "주택법",
+  "주택법 시행령",
   "공공주택 특별법",
   "공공주택 특별법 시행령",
   "주차장법",
@@ -39,6 +40,7 @@ const LAW_QUERIES = [
   "소방시설 설치 및 관리에 관한 법률",
   "건축물의 피난ㆍ방화구조 등의 기준에 관한 규칙",
   "장애인ㆍ노인ㆍ임산부 등의 편의증진 보장에 관한 법률",
+  "녹색건축물 조성 지원법 시행령",
 ];
 
 const LAND_USE_LAYERS = [
@@ -481,7 +483,7 @@ export async function POST(request: NextRequest) {
         nationalArticleCandidates.push(...extractOrdinanceArticles(result.value, law.name, law.link));
       for (const target of NATIONAL_ARTICLES.filter((a) => a.law === law.name)) {
         const found = findArticleByNumber(result.value, target.no, target.branch);
-        if (found) collected.push({ topic: target.label, rowId: target.rowId, title: law.name, url: law.link, effectiveDate: law.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "law" });
+        if (found && (!target.title || target.title.test(found.article))) collected.push({ topic: target.label, rowId: target.rowId, title: law.name, url: law.link, effectiveDate: law.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "law" });
       }
     });
     const failed = results.filter((result) => result.status === "rejected");
