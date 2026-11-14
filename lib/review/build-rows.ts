@@ -519,12 +519,17 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const rules = notice?.rules ?? null;
   const noticeSource: SourceRef | null = notice ? { title: notice.title, url: notice.pdfUrl ?? notice.url, noticeNo: notice.id, effectiveDate: notice.publishedAt, kind: "lh" } : null;
   // 개통 예정역: 현행 판정과 구분. '개통 예정역 포함'을 켜면 예정역 거리로도 판정한다(LH 인정 여부는 지역본부 확인).
-  const transitNow = review?.transit?.verdict;
-  const plannedNear = (review?.transit?.planned ?? [])[0] ?? null;
+  // 판정은 저장된 거리로 다시 계산 (500m 충족 · 550m까지 경계=검토요망)
+  const v5 = (d?: number | null) => d == null ? null : d <= 500 ? "within" as const : d <= 550 ? "borderline" as const : "outside" as const;
+  const tr = review?.transit ?? null;
+  const nowList = tr ? [v5(tr.station?.distance), v5(tr.university?.distance)].filter((x): x is NonNullable<typeof x> => !!x) : [];
+  const transitNow = !tr ? undefined : nowList.includes("within") ? "within" : nowList.includes("borderline") ? "borderline" : nowList.length ? "outside" : tr.verdict;
+  const plannedRaw = (tr?.planned ?? [])[0] ?? null;
+  const plannedNear = plannedRaw ? { ...plannedRaw, verdict: v5(plannedRaw.distance)! } : null;
   const plannedLabel = plannedNear ? `개통예정 ${plannedNear.name}(${plannedNear.line} · ${plannedNear.openingSummary}) 기준점까지 직선 ${plannedNear.distance}m` : "";
-  const usePlanned = !!site.countPlannedStations && !!plannedNear && plannedNear.verdict !== "outside" && transitNow !== "within";
-  const transitEff = usePlanned ? plannedNear!.verdict : transitNow;
-  const transitBasis = usePlanned ? `${plannedLabel} (개통 예정역 기준 · 공고문에 예정역 인정 여부 명시 없음 → LH 지역본부 확인)` : review?.transit?.basis ?? "";
+  const usePlanned = site.countPlannedStations !== false && !!plannedNear && plannedNear.verdict !== "outside" && transitNow !== "within";
+  const transitEff = usePlanned && (transitNow !== "borderline" || plannedNear!.verdict === "within") ? plannedNear!.verdict : transitNow;
+  const transitBasis = usePlanned && transitEff === plannedNear!.verdict && transitNow !== transitEff ? `${plannedLabel} (개통 예정역 기준 · 공고문에 예정역 인정 여부 명시 없음 → LH 지역본부 확인)` : review?.transit?.basis ?? "";
   const plannedHint = !usePlanned && plannedNear && plannedNear.verdict !== "outside" && transitNow !== "within"
     ? ` · 참고: ${plannedLabel} → 개통 후(또는 LH가 예정역 인정 시) 역세권 해당 가능, '개통 예정역 포함' 선택 시 재판정` : "";
   const plannedSources: SourceRef[] = plannedNear ? plannedNear.timeline.filter((t) => t.official).map((t) => ({ title: t.source, url: t.url, page: t.page, excerpt: t.value, verbatim: false, kind: "plan" as const })) : [];
@@ -535,12 +540,13 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     note: !lh ? "LH 매입약정 사업 아님"
       : site.transitWithin500m && !usePlanned ? (transitNow === "within" ? `입지 자동 확인: ${transitBasis}` : "검토자: 역세권 500m 입지 확인")
       : review?.transit ? (transitEff === "within" ? `${usePlanned ? "조건부 충족" : "입지 자동 확인"}: ${transitBasis}`
-        : transitEff === "borderline" ? `경계 거리 · 출구·교문 기준 확인 필요: ${transitBasis}${plannedHint}`
+        : transitEff === "borderline" ? `검토요망: 역세권 경계 거리(500m 초과 50m 이내) → 0.3대 특례 우선 반영 · 출구·교문 위치 확인 필요 · ${transitBasis}${plannedHint}`
         : transitEff === "outside" ? `불가(청년형): 역 출구·대학 교문 500m 밖 · 고령자형은 입지 무관 · ${transitBasis}${plannedHint}`
         : "입지 자동 판정 실패 · 직접 확인")
       : "역세권 입지 미확인",
-    status: lh ? "candidate" : "missing",
-    params: lh ? { lhParking03: "conditional", lhParking03MaxArea: rules?.parking03MaxArea ?? 30 } : undefined,
+    // 현행 공고문에서 0.3대 문구(쪽)를 확인했으면 원문 확인으로 올려 규모검토 0.3대 시나리오에 반영
+    status: lh ? (notice?.isCurrent && (notice.extractedCriteria ?? []).some((c) => /0[.]3\s*대/.test(c.quote)) ? "verified" : "candidate") : "missing",
+    params: lh ? { lhParking03: "conditional", lhParking03MaxArea: rules?.parking03MaxArea ?? 30, ...(transitEff ? { transitReview: transitEff === "within" ? "within" as const : transitEff === "borderline" ? "review" as const : "outside" as const } : {}) } : undefined,
     sources: [lawRef(review, LAW.publicHousingDecree, "제37조"), ...(noticeSource ? [{ ...noticeSource, page: [...new Set((notice?.extractedCriteria ?? []).filter((c) => /0[.]3\s*대/.test(c.quote) && c.page).map((c) => c.page!))] }] : []), ...plannedSources],
   });
   // 검증 규칙이 없으면 공고문 PDF 추출 문구에서 기계식 허용요건·비율을 직접 읽는다.
@@ -557,7 +563,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       : notice ? "공고문에서 기계식주차 인수기준 문구를 찾지 못함 · 공고문 확인" : "관할 LH 지역본부 공고 미확인",
     law: notice ? notice.title + pageLabel((notice.extractedCriteria ?? []).filter((c) => /기계식/.test(c.quote)).map((c) => c.page)) : "LH 지역본부 신축매입약정 공고",
     note: mechTransitFail ? `불가: 역세권 500m 요건 미충족 → LH 인수 기준상 기계식 불가(전량 자주식) · ${transitBasis}${plannedHint}`
-      : mechNeedsTransit && transitEff === "borderline" ? `역세권 500m 경계 → 출구 기준 확인 전까지 기계식 조건부 · ${transitBasis}${plannedHint}`
+      : mechNeedsTransit && transitEff === "borderline" ? `검토요망: 역세권 경계 거리(500m 초과 50m 이내) → 기계식 우선 반영 · 출구 위치 확인 필요 · ${transitBasis}${plannedHint}`
       : mechNeedsTransit && (transitEff === "within" || site.transitWithin500m) ? `역세권 요건 ${usePlanned ? "조건부 충족(개통 예정역)" : "충족"}${transitEff === "within" ? ` (${transitBasis})` : ""} · 공급유형·주택유형 요건 함께 충족 필요`
       : mech ? "공고문 PDF에서 자동 추출 · 지자체 조례 기준과 LH 인수 기준 중 엄격한 값 적용" : "지자체 조례 기준과 LH 인수 기준 중 엄격한 값을 적용",
     status: (rules || mech?.maxPercent) && notice?.isCurrent ? "verified" : notice ? "candidate" : "missing",

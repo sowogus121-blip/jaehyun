@@ -122,7 +122,7 @@ export function Report({ project, results, withAppendix, withFormulas, appendixM
         {r.units > 0 && <table className="grid-table compact"><thead><tr><th>타입</th><th>전용(㎡)</th><th>{UNIT_WORD[r.scenario.use]}수</th><th>계약면적(㎡)</th></tr></thead>
           <tbody>{r.types.map((t) => <tr key={t.type.id}><td>{t.type.name}</td><td>{fmtNum(t.exclusive)}</td><td>{t.count}</td><td>{fmtNum(t.contractArea)}</td></tr>)}</tbody></table>}
         {(r.blockers.length + r.missing.length + r.conditions.length) > 0 && <ul className="report-list">
-          {r.blockers.map((x) => <li key={x}>불가: {x}</li>)}{r.missing.map((x) => <li key={x}>근거 필요: {x}</li>)}{r.conditions.map((x) => <li key={x}>조건: {x}</li>)}
+          {r.blockers.map((x) => <li key={x}>불가: {x}</li>)}{r.missing.map((x) => <li key={x}>근거 필요: {x}</li>)}{r.conditions.map((x) => x.startsWith("검토요망") ? <li key={x} className="review">{x}</li> : <li key={x}>조건: {x}</li>)}
         </ul>}
         {withFormulas && r.formulas.length > 0 && <ol className="formulas">{r.formulas.map((f) => <li key={f}>{f}</li>)}</ol>}
       </div>)}

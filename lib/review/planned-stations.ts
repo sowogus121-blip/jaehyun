@@ -63,7 +63,7 @@ export function haversine(lat1: number, lon1: number, lat2: number, lon2: number
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/** 기준 필지 좌표까지 거리 → 판정 (필지 대표점이라 역사 중심과 같은 보수 기준: 400m 충족·650m 경계) */
+/** 기준 필지 좌표까지 거리 → 판정 (500m 충족 · 550m까지 경계=검토요망) */
 export function plannedVerdict(distance: number): "within" | "borderline" | "outside" {
-  return distance <= 400 ? "within" : distance <= 650 ? "borderline" : "outside";
+  return distance <= 500 ? "within" : distance <= 550 ? "borderline" : "outside";
 }

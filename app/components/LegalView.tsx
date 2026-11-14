@@ -68,7 +68,7 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
         </Field>
         <Field label="공급유형"><div className="checks">{(Object.keys(SUPPLY_LABEL) as LhSupply[]).map((s) => <label key={s}><input type="checkbox" checked={project.site.supplies.includes(s)} onChange={() => setSite({ supplies: project.site.supplies.includes(s) ? project.site.supplies.filter((x) => x !== s) : [...project.site.supplies, s] })} />{SUPPLY_LABEL[s]}</label>)}</div></Field>
         <Field label="0.3대 특례 입지"><label className="inline"><input type="checkbox" checked={Boolean(project.site.transitWithin500m)} onChange={(e: { target: { checked: boolean } }) => setSite({ transitWithin500m: e.target.checked })} />역 출구·대학 교문 500m 이내 확인</label>
-          {(project.review?.transit?.planned ?? []).length > 0 && <label className="inline"><input type="checkbox" checked={Boolean(project.site.countPlannedStations)} onChange={(e: { target: { checked: boolean } }) => setSite({ countPlannedStations: e.target.checked })} />개통 예정역 포함 ({project.review!.transit!.planned!.map((p) => `${p.name} ${p.distance}m · ${p.openingYear ?? "?"}년 예정`).join(", ")}) · LH 인정 여부 확인 필요</label>}
+          {(project.review?.transit?.planned ?? []).length > 0 && <label className="inline"><input type="checkbox" checked={project.site.countPlannedStations !== false} onChange={(e: { target: { checked: boolean } }) => setSite({ countPlannedStations: e.target.checked })} />개통 예정역 포함 ({project.review!.transit!.planned!.map((p) => `${p.name} ${p.distance}m · ${p.openingYear ?? "?"}년 예정`).join(", ")}) · LH 인정 여부 확인 필요</label>}
         </Field>
       </div>
       {project.review && (project.review.missing.length > 0 || project.review.errors.length > 0) && <div className="alert">
@@ -155,13 +155,13 @@ export function LegalTable({ rows, selected, onSelect, print = false }: { rows: 
         const continued = row.sub && i > 0 && rows[i - 1].group === row.group && rows[i - 1].sub;
         const span = spans.get(row.id);
         const content = row.content || (row.missing ? `근거 누락: ${row.missing}` : "");
-        return <tr key={row.id} className={`${selected === row.id ? "selected" : ""} st-${row.status} ${onSelect ? "clickable" : ""}`} onClick={() => onSelect?.(row)}>
+        return <tr key={row.id} className={`${selected === row.id ? "selected" : ""} st-${row.status} ${onSelect ? "clickable" : ""} ${/검토요망/.test(row.note) ? "row-review" : ""}`} onClick={() => onSelect?.(row)}>
           {!row.sub && <th colSpan={2} className="g">{row.group}</th>}
           {row.sub && !continued && <th rowSpan={span} className="g">{row.group}</th>}
           {row.sub && <th className="g sub">{row.sub}</th>}
           <td className="content"><Emph text={content} /></td>
           <td className="law">{row.law.split("\n").map((l, k) => <span className="line" key={k}>{l}</span>)}</td>
-          <td className="note"><Emph text={row.note} />{print && row.status === "candidate" && <span className="line flag">※ 원문 대조 필요</span>}</td>
+          <td className="note">{/^(불가:[^·]*·\s*)?검토요망/.test(row.note) && <span className="review-flag">검토요망</span>} <Emph text={row.note} />{print && row.status === "candidate" && <span className="line flag">※ 원문 대조 필요</span>}</td>
           {!print && <td className="status"><StatusChip status={row.status} compact />{row.sources.length > 0 && <small>{row.sources.length}건</small>}{row.edited && <small className="edited">수정</small>}</td>}
         </tr>;
       })}

@@ -9,7 +9,7 @@ import type { ResolvedParams } from "../review/params";
 import type { Assumptions, BusinessType, FarOption, ParkingTier, Scenario, SiteInput, UnitType, UseKind, UseVerdict } from "../review/types";
 import { USE_SHORT, UNIT_WORD } from "../review/types";
 
-export type Feasibility = "ok" | "conditional" | "blocked" | "insufficient";
+export type Feasibility = "ok" | "conditional" | "review" | "blocked" | "insufficient";
 
 export interface TypeResult {
   type: UnitType;
@@ -268,7 +268,11 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
     if (!lh) reasons.push("LH 매입약정 사업 아님");
     if (!v03 || v03 === "prohibited") reasons.push("0.3대 특례 적용 근거가 법규검토표에서 확인되지 않음");
     if (types.some((t) => t.exclusive >= maxArea)) reasons.push(`전용 ${maxArea}㎡ 이상 타입 포함`);
-    if (site.supplies.includes("youth") && !site.transitWithin500m) reasons.push("청년형: 역 출구·대학 500m 입지 미확인");
+    const trv = params.transitReview?.value as "within" | "review" | "outside" | undefined;
+    if (site.supplies.includes("youth") && !site.transitWithin500m && trv !== "within") {
+      if (trv === "review") conditions.push(`검토요망: 청년형 0.3대 — 역세권 경계 거리(500m 초과 50m 이내)로 우선 반영 · 출구 위치·LH 인정 확인${params.transitReview?.note ? ` (${String(params.transitReview.note).replace(/^검토요망:\s*/, "").slice(0, 110)})` : ""}`);
+      else reasons.push("청년형: 역 출구·대학 500m 입지 미확인");
+    }
     if (reasons.length) conditions.push("0.3대 특례 미적용: " + reasons.join(", "));
     else {
       special03 = ceil(units * 0.3);
@@ -286,6 +290,7 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
     else if (!ord) conditions.push("조례상 기계식 허용 근거 미확정: 기계식 0대(자주식)로 산정");
     if (lh && lhv === "prohibited") blockers.push(`LH 기계식주차 인수 대상 아님${params[keys.lh]?.note ? ` (${String(params[keys.lh]!.note).replace(/^불가:\s*/, "").slice(0, 120)})` : ""}`);
     else if (lh && !lhv) conditions.push("LH 기계식 인수기준 미확정");
+    if (lh && lhv !== "prohibited" && params.transitReview?.value === "review") conditions.push("검토요망: LH 기계식 — 역세권 경계 거리(500m 초과 50m 이내)로 우선 반영 · 출구 위치·LH 인정 확인");
     if (ord && ord !== "prohibited" && !(lh && lhv === "prohibited")) {
       const caps = [scenario.mechanicalShare, params.mechMaxPercent?.value as number | undefined, lh ? params.lhMechMaxPercent?.value as number | undefined : undefined]
         .filter((v): v is number => typeof v === "number");
@@ -361,7 +366,7 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
       : "지하층 = 법정 주차기준 미확정으로 산정 보류",
   );
 
-  const feasibility: Feasibility = blockers.length ? "blocked" : conditions.length ? "conditional" : "ok";
+  const feasibility: Feasibility = blockers.length ? "blocked" : conditions.some((c) => c.startsWith("검토요망")) ? "review" : conditions.length ? "conditional" : "ok";
   return {
     scenario, feasibility, blockers, conditions, missing, warnings, formulas, checks,
     siteArea: A, bcrLimit: bcrV, farApplied: farV, farMode: scenario.farMode, farLabel,
@@ -405,5 +410,5 @@ export function summaryRows(res: ScenarioResult): Array<[string, string]> {
 }
 
 export const FEASIBILITY_LABEL: Record<Feasibility, string> = {
-  ok: "법규 충족", conditional: "조건부", blocked: "불가", insufficient: "근거 부족",
+  ok: "법규 충족", conditional: "조건부", review: "검토요망", blocked: "불가", insufficient: "근거 부족",
 };

@@ -22,7 +22,7 @@ export const PARAM_LABEL: Record<ParamKey, string> = {
   mechApartment: "조례 기계식(공동주택)", mechUrban: "조례 기계식(도생)", mechOfficetel: "조례 기계식(오피스텔)",
   mechMaxPercent: "조례 기계식 최대비율(%)", mechMinStalls: "조례 기계식 최소대수(대)",
   lhMechApartment: "LH 기계식 인수(공동주택)", lhMechUrban: "LH 기계식 인수(도생)", lhMechOfficetel: "LH 기계식 인수(오피스텔)",
-  lhMechMaxPercent: "LH 기계식 최대비율(%)", lhParking03: "LH 0.3대 특례", lhParking03MaxArea: "0.3대 특례 전용면적 상한(㎡)",
+  lhMechMaxPercent: "LH 기계식 최대비율(%)", lhParking03: "LH 0.3대 특례", lhParking03MaxArea: "0.3대 특례 전용면적 상한(㎡)", transitReview: "역세권 500m 판정",
   lhMinHomes: "LH 최소 매입 호수", lhCommunityThreshold: "LH 커뮤니티 기준 세대수", lhCommunitySqmPerHome: "LH 커뮤니티 ㎡/세대",
   publicOpenSpaceRatio: "공개공지 비율(%)",
 };

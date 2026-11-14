@@ -84,6 +84,8 @@ export interface RuleParams {
   lhMechOfficetel?: UseVerdict;
   lhMechMaxPercent?: number;    // LH 인수 기계식 최대비율(%)
   lhParking03?: UseVerdict;     // LH 0.3대 특례 적용 가능 여부
+  /** 역세권 500m 판정 (within 충족 · review 경계 50m 이내=검토요망 · outside 미충족) */
+  transitReview?: "within" | "review" | "outside";
   lhParking03MaxArea?: number;  // 특례 전용면적 상한(㎡, 미만)
   lhMinHomes?: number;          // LH 최소 매입 호수
   lhCommunityThreshold?: number;// 커뮤니티 설치 기준 세대수
