@@ -147,7 +147,7 @@ function ScenarioEditor({ scenario: s, farOptions, onChange }: { scenario: Scena
         <option value="custom">직접 지정</option>
       </select></Field>
       {s.farMode === "custom" && <Field label="지정 용적률" hint="근거는 법규검토표 비고에 기록"><Num value={s.customFar} suffix="%" onChange={(v) => onChange({ customFar: v })} /></Field>}
-      <Field label="주차방식"><select value={s.parking} onChange={(e: { target: { value: string } }) => onChange({ parking: e.target.value as Scenario["parking"] })}><option value="self">자주식</option><option value="mixed">자주식 + 기계식</option></select></Field>
+      <Field label="주차방식"><select value={s.parking} onChange={(e: { target: { value: string } }) => onChange({ parking: e.target.value as Scenario["parking"], ...(e.target.value === "mixed" && !s.mechanicalShare ? { mechanicalShare: 50 } : {}) })}><option value="self">자주식</option><option value="mixed">자주식 + 기계식</option></select></Field>
       {s.parking === "mixed" && <Field label="희망 기계식 비율" hint="조례·LH 상한과 비교해 작은 값 적용"><Num value={s.mechanicalShare} suffix="%" onChange={(v) => onChange({ mechanicalShare: v ?? 0 })} /></Field>}
       <Field label="LH 0.3대 특례"><label className="inline"><input type="checkbox" checked={s.apply03} onChange={(e: { target: { checked: boolean } }) => onChange({ apply03: e.target.checked })} />특례 적용 시나리오</label></Field>
       <Field label="기준층 호수" hint="0 = 건폐율·배치효율로 자동"><Num value={s.unitsPerFloor} suffix={UNIT_WORD[s.use]} onChange={(v) => onChange({ unitsPerFloor: v ?? 0 })} /></Field>
