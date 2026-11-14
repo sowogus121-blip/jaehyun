@@ -307,3 +307,27 @@ tr.row-review td.note { background: #f7f2fd; }
 .appendix-keys { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
 .appendix-keys mark { background: #fff59d; }
 @media print { .appendix-original figure { break-inside: avoid; } }
+
+/* ── 정리: 역세권 요약 · 접히는 알림 · 긴 칸 줄임 · 대안 추가 메뉴 · 비교표 첫 열 고정 ── */
+.transit-sum { display: flex; flex-direction: column; gap: 3px; }
+.transit-sum small { color: var(--muted); line-height: 1.35; }
+.transit-sum .tv { align-self: flex-start; font-weight: 700; font-size: 12px; padding: 1px 8px; border-radius: 10px; }
+.tv-ok { color: var(--ok); background: var(--ok-soft); }
+.tv-review { color: #6a3fb5; background: #f1ebfb; }
+.tv-bad { color: var(--miss); background: var(--miss-soft); }
+.tv-muted { color: var(--muted); background: var(--line-soft); }
+.tv-opts { display: flex; gap: 10px; font-size: 12px; }
+.tv-opts label { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+details.alert.compact { padding: 6px 12px; }
+details.alert.compact summary { cursor: pointer; font-weight: 600; }
+details.alert.compact summary small { font-weight: 400; color: var(--muted); }
+details.alert.compact[open] summary { margin-bottom: 4px; }
+.law-table td .clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.law-table tr.clickable:hover td .clamp { -webkit-line-clamp: 12; }
+select.add-menu { font-weight: 600; color: #fff; background: var(--navy-dark); border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+select.add-menu option { color: var(--ink); background: #fff; }
+.summary-table th:first-child, .summary-table td:first-child { position: sticky; left: 0; z-index: 1; }
+.summary-table tbody th:first-child, .summary-table tbody td:first-child { background: var(--group); }
+.summary-table thead th { vertical-align: top; }
+.summary-table .scn-name { display: block; font-size: 12px; line-height: 1.3; min-width: 120px; }
+.site-bar { grid-template-columns: 1.3fr .9fr .7fr 1fr 1.8fr 1.6fr; }
