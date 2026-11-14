@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Project, ReviewRow, SourceRef } from "@/lib/review/types";
 import { UNIT_WORD } from "@/lib/review/types";
 import { FEASIBILITY_LABEL, summaryRows, type ScenarioResult } from "@/lib/massing/engine";
-import { citeLine, fmtNum, resolveHighlights } from "@/lib/report/format";
+import { citeLine, fmtNum, offTopicArticle, resolveHighlights } from "@/lib/report/format";
 import type { ExportBody } from "@/lib/report/export-types";
 import { buildDetailedOverview, parkingRuleText } from "@/lib/report/detailed-overview";
 import { LegalTable } from "./LegalView";
@@ -139,9 +139,9 @@ export function Report({ project, results, withAppendix, withFormulas, appendixM
               {originalPages(s).map((p) => <figure key={p}><img src={`/api/source-image?url=${encodeURIComponent(s.pdfUrl ?? s.url!)}&page=${p}`} alt={`${s.title} ${p}쪽 원본`} loading="lazy"
                 onError={(e: { currentTarget: { closest: (sel: string) => HTMLElement | null } }) => { const f = e.currentTarget.closest("figure"); if (f) f.classList.add("img-failed"); }} />
                 <figcaption>원본 {p}쪽 · 이미지가 보이지 않으면 아래 텍스트판 참조</figcaption></figure>)}
-              {resolveHighlights(s.excerpt ?? "", s.highlights, siteZones, siteDesignations).length > 0 && <ul className="appendix-keys">{resolveHighlights(s.excerpt ?? "", s.highlights, siteZones, siteDesignations).map((h) => <li key={h}><mark>{h}</mark></li>)}</ul>}
+              {resolveHighlights(s.excerpt ?? "", offTopicArticle(citeLine(s) + " " + (s.excerpt ?? "").slice(0, 40), siteDesignations) ? [] : s.highlights, siteZones, siteDesignations).length > 0 && <ul className="appendix-keys">{resolveHighlights(s.excerpt ?? "", offTopicArticle(citeLine(s) + " " + (s.excerpt ?? "").slice(0, 40), siteDesignations) ? [] : s.highlights, siteZones, siteDesignations).map((h) => <li key={h}><mark>{h}</mark></li>)}</ul>}
             </div>
-          : <blockquote><Marked text={s.excerpt ?? ""} highlights={s.highlights} zones={siteZones} designations={siteDesignations} sentences /></blockquote>}
+          : <blockquote><Marked text={s.excerpt ?? ""} highlights={offTopicArticle(citeLine(s) + " " + (s.excerpt ?? "").slice(0, 40), siteDesignations) ? [] : s.highlights} zones={siteZones} designations={siteDesignations} sentences /></blockquote>}
       </div>)}
     </section>}
   </article>;

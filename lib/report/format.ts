@@ -50,6 +50,12 @@ const USE_OFF = /(숙박|객실|판매시설|문화\s*및\s*집회|위락|관람
 const HOUSING = /(주택|아파트|오피스텔|기숙사|세대)/;
 const TITLE_ONLY = /^제\d+조(?:의\d+)?\s*\([^)]{1,40}\)$/;
 
+/** 조 제목 자체가 대상지에 없는 지구·시설에 관한 조문이면 형광펜 없음 */
+export function offTopicArticle(heading: string, designations: string[] = []): boolean {
+  const c = squash(heading); const des = squash(designations.join(" "));
+  return DISTRICT_OFF.some((d) => c.includes(d) && !des.includes(d));
+}
+
 export function resolveHighlights(text: string, highlights: string[] = [], zones: string[] = [], designations: string[] = []): string[] {
   if (!text) return [];
   const segs = segments(text);
