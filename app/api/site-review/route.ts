@@ -308,7 +308,8 @@ export async function POST(request: NextRequest) {
     : Promise.resolve(null);
 
   // "독산동 151-10"처럼 시·도를 생략한 입력도 VWorld가 돌려준 전체 지번주소로 관할 지자체·LH 본부를 판정한다.
-  const fullAddress = location?.parcelAddress && location.parcelAddress.trim().split(/\s+/).length >= 3 ? location.parcelAddress.trim() : address;
+  // VWorld 지번주소가 '남양읍 남양리 2000'처럼 시·도 없이 오면 입력 주소를 쓴다(관할 지자체 오판 방지).
+  const fullAddress = location?.parcelAddress && location.parcelAddress.trim().split(/\s+/).length >= 3 && /^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청|충북|충남|전라|전북|전남|경상|경북|경남|제주)/.test(location.parcelAddress.trim()) ? location.parcelAddress.trim() : address;
   const parcels: ParcelReview[] = [{ inputAddress: address, location, parcel, landUse, errors: [] }];
   const rawAdditional = Array.isArray(body?.parcelAddresses) ? body.parcelAddresses : [];
   if (rawAdditional.some(item => typeof item !== "string")) return NextResponse.json({error:"합필 대상 주소는 문자열 목록이어야 합니다."},{status:400});
