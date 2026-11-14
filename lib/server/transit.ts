@@ -70,7 +70,8 @@ export async function checkTransit(x: number, y: number, key: string, domain: st
   const gate = nearest(univItems, x, y, (i) => /대학교\s*(입구|정문|후문)$/.test(String(i.title ?? "")) && /진출입/.test(String(i.category ?? "")) ? "university" : null);
   const campus = nearest(univItems, x, y, (i) => /교육부\s*>\s*대학교$|교육부\s*>\s*대학$|>\s*대학교$/.test(String(i.category ?? "")) && !/병원|부속|어린이|유치원|사이버|평생교육|출판|도서관/.test(String(i.title ?? "")) ? "university" : null);
   const university = gate && (!campus || gate.distance <= campus.distance + 300) ? { ...gate, name: gate.name } : campus;
-  const stationPick = exit ?? station;
+  // 출입구가 검색돼도 다른 역의 출입구일 수 있다 → 역사 중심보다 크게 멀면 역사 기준을 쓴다.
+  const stationPick = exit && (!station || exit.distance <= station.distance + 150) ? exit : station ?? exit;
   // 출구 기준 500m 이내 → 충족. 역사 중심점만 있으면 400m 이내 충족·650m 이내 경계.
   // 대학은 주소 대표점 기준이라 400m 이내 충족·700m 이내 경계.
   const stationVerdict = !stationPick ? null
