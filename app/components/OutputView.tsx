@@ -6,6 +6,7 @@ import { UNIT_WORD } from "@/lib/review/types";
 import { FEASIBILITY_LABEL, summaryRows, type ScenarioResult } from "@/lib/massing/engine";
 import { citeLine, fmtNum } from "@/lib/report/format";
 import type { ExportBody } from "@/lib/report/export-types";
+import { buildDetailedOverview, parkingRuleText } from "@/lib/report/detailed-overview";
 import { LegalTable } from "./LegalView";
 import { ComparisonTable, useResults } from "./MassingView";
 import { Marked, Panel, downloadBlob } from "./ui";
@@ -27,6 +28,7 @@ export function OutputView({ project, notify }: { project: Project; notify: (msg
   const [busy, setBusy] = useState<string | null>(null);
   const [withAppendix, setWithAppendix] = useState(true);
   const [withFormulas, setWithFormulas] = useState(true);
+  const [appendixMode, setAppendixMode] = useState<"text" | "image">("text");
   const [scope, setScope] = useState<"all" | "selected">("all");
   const shown = scope === "all" ? results : results.filter((r) => r.scenario.id === project.selectedScenarioId);
 
@@ -39,6 +41,18 @@ export function OutputView({ project, notify }: { project: Project; notify: (msg
     } catch (e) { notify(e instanceof Error ? e.message : "엑셀 생성 실패"); }
     setBusy(null);
   };
+  // 상세 개요표: 실무 양식(설계개요·층별 면적·타입별 면적·전체사업 면적개요), 대안마다 한 시트
+  const detailed = async () => {
+    setBusy("detailed");
+    try {
+      const sheets = shown.filter((r) => r.units > 0).map((r) => buildDetailedOverview(project, r, { parkingRule: parkingRuleText(project, r.scenario.use) }));
+      if (!sheets.length) throw new Error("계산된 대안이 없습니다 (규모검토에서 수치 확정 필요)");
+      const res = await fetch("/api/export/overview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sheets }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "개요표 생성 실패");
+      downloadBlob(await res.blob(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `상세개요표_${project.name}.xlsx`);
+    } catch (e) { notify(e instanceof Error ? e.message : "개요표 생성 실패"); }
+    setBusy(null);
+  };
   const backup = () => downloadBlob(JSON.stringify({ app: "LH Plan Lab", exportedAt: new Date().toISOString(), project }, null, 2), "application/json", `${project.name}.lhplan.json`);
 
   return <div className="view output-view">
@@ -46,16 +60,27 @@ export function OutputView({ project, notify }: { project: Project; notify: (msg
       <div className="output-actions">
         <button className="btn primary" disabled={busy !== null} onClick={() => excel("legal")}>{busy === "legal" ? "생성 중…" : "엑셀 법규검토표"}</button>
         <button className="btn primary" disabled={busy !== null} onClick={() => excel("summary")}>{busy === "summary" ? "생성 중…" : "엑셀 건축개요표"}</button>
+        <button className="btn primary" disabled={busy !== null} onClick={detailed} title="실무 개요표 양식 (설계개요·층별/용도별 면적·타입별 면적·전체사업 면적개요) · 대안별 시트">{busy === "detailed" ? "생성 중…" : "엑셀 상세 개요표"}</button>
         <button className="btn primary" onClick={() => window.print()}>PDF 검토보고서 (인쇄)</button>
         <button className="btn" onClick={backup}>프로젝트 JSON 백업</button>
         <span className="sep" />
         <label className="inline"><input type="checkbox" checked={withAppendix} onChange={(e: { target: { checked: boolean } }) => setWithAppendix(e.target.checked)} />근거 원문 부록 (형광펜)</label>
+        {withAppendix && <select value={appendixMode} onChange={(e: { target: { value: string } }) => setAppendixMode(e.target.value as "text" | "image")} title="원본 이미지판: 공고문·별표 PDF가 있는 근거는 해당 쪽을 원본 그대로 싣고, 없으면 텍스트판으로 대체">
+          <option value="text">부록: 텍스트판</option><option value="image">부록: 원본 이미지판</option></select>}
         <label className="inline"><input type="checkbox" checked={withFormulas} onChange={(e: { target: { checked: boolean } }) => setWithFormulas(e.target.checked)} />계산식</label>
         <select value={scope} onChange={(e: { target: { value: string } }) => setScope(e.target.value as "all" | "selected")}><option value="all">전체 대안</option><option value="selected">선택 대안만</option></select>
       </div>
     </Panel>
-    <div className="report-preview"><Report project={project} results={shown} withAppendix={withAppendix} withFormulas={withFormulas} /></div>
+    <div className="report-preview"><Report project={project} results={shown} withAppendix={withAppendix} withFormulas={withFormulas} appendixMode={appendixMode} /></div>
   </div>;
+}
+
+/** 원본 이미지판에 쓸 쪽 번호 (PDF 근거만) */
+function originalPages(s: SourceRef): number[] {
+  const pdf = s.pdfUrl ?? (s.url && /lhFile\.do|\.pdf($|\?)|flDownload|fileDown/i.test(s.url) ? s.url : undefined);
+  if (!pdf) return [];
+  const pages = s.page === undefined ? [] : Array.isArray(s.page) ? s.page : [s.page];
+  return [...new Set(pages)].sort((a, b) => a - b).slice(0, 3);
 }
 
 function collectSources(rows: ReviewRow[]) {
@@ -71,7 +96,7 @@ function collectSources(rows: ReviewRow[]) {
   return [...seen.values()];
 }
 
-export function Report({ project, results, withAppendix, withFormulas }: { project: Project; results: ScenarioResult[]; withAppendix: boolean; withFormulas: boolean }) {
+export function Report({ project, results, withAppendix, withFormulas, appendixMode = "text" }: { project: Project; results: ScenarioResult[]; withAppendix: boolean; withFormulas: boolean; appendixMode?: "text" | "image" }) {
   const address = project.review?.location?.parcelAddress || project.site.address;
   const sources = collectSources(project.rows);
   const rows = project.rows.filter((r) => r.content.trim() || r.status !== "missing");
@@ -107,7 +132,14 @@ export function Report({ project, results, withAppendix, withFormulas }: { proje
         <h3>[{i + 1}] {citeLine(s)}</h3>
         <p className="appendix-meta">관련 항목: {used.join(", ")}{s.url ? <> · <a href={s.url}>{s.url}</a></> : null}</p>
         {!s.verbatim && <p className="appendix-flag">요지 (원문 대조 필요)</p>}
-        <blockquote><Marked text={s.excerpt ?? ""} highlights={s.highlights} /></blockquote>
+        {appendixMode === "image" && originalPages(s).length > 0
+          ? <div className="appendix-original">
+              {originalPages(s).map((p) => <figure key={p}><img src={`/api/source-image?url=${encodeURIComponent(s.pdfUrl ?? s.url!)}&page=${p}`} alt={`${s.title} ${p}쪽 원본`} loading="lazy"
+                onError={(e: { currentTarget: { closest: (sel: string) => HTMLElement | null } }) => { const f = e.currentTarget.closest("figure"); if (f) f.classList.add("img-failed"); }} />
+                <figcaption>원본 {p}쪽 · 이미지가 보이지 않으면 아래 텍스트판 참조</figcaption></figure>)}
+              {(s.highlights ?? []).length > 0 && <ul className="appendix-keys">{(s.highlights ?? []).map((h) => <li key={h}><mark>{h}</mark></li>)}</ul>}
+            </div>
+          : <blockquote><Marked text={s.excerpt ?? ""} highlights={s.highlights} /></blockquote>}
       </div>)}
     </section>}
   </article>;

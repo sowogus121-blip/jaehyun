@@ -13,7 +13,7 @@ export interface LhNotice {
   isCurrent: boolean;
   rules: LhVerifiedNoticeRules | null;
   warnings: string[];
-  extractedCriteria?: Array<{topic:string;quote:string;value:number|null;unit:string|null;verified:false}>;
+  extractedCriteria?: Array<{topic:string;quote:string;value:number|null;unit:string|null;page?:number;verified:false}>;
   textAnalysisStatus?: "verified-original"|"text-extracted"|"not-extracted";
 }
 export interface LhVerifiedNoticeRules {
@@ -156,7 +156,7 @@ async function extractUnverifiedLhPdfClauses(pdfUrl:string):Promise<NonNullable<
   // truncate to the first 14 generic clauses (mostly type/size conditions).
   const ranked=analysis.candidates.filter(c=>/매입약정|전용|주차|기계식|청년|신혼|의무|완화|커뮤니티|용적률|건폐율|주택/.test(c.quote));
   ranked.sort((a,b)=>Number(/주차|기계식|0[.]3|승강기|카리프트|역세권/.test(b.quote))-Number(/주차|기계식|0[.]3|승강기|카리프트|역세권/.test(a.quote)));
-  return ranked.slice(0,55).map(c=>({topic:c.topic,quote:c.quote,value:c.value,unit:c.unit,verified:false as const}));
+  return ranked.slice(0,55).map(c=>({topic:c.topic,quote:c.quote,value:c.value,unit:c.unit,page:c.page,verified:false as const}));
 }
 
 export async function findLatestLhPurchaseNotice(district:string,regionContext=""):Promise<LhNotice|null> {

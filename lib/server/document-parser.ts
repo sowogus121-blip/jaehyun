@@ -2,6 +2,8 @@ import ExcelJS from "exceljs";
 import JSZip from "jszip";
 
 export type DocumentCandidate = {
+  /** 원문 PDF 쪽번호 (찾은 경우) */
+  page?: number;
   topic: string;
   quote: string;
   value: number | null;
@@ -100,6 +102,26 @@ export function extractRuleCandidates(text: string): DocumentCandidate[] {
   return candidates;
 }
 
+/** pdf-parse 기본 출력의 "-- 3 of 12 --" 쪽 구분자로 쪽별 텍스트를 나눈다. */
+function splitPageMarkers(text: string): string[] {
+  const parts = text.split(/\n?-- \d+ of \d+ --\n?/);
+  return parts.length > 1 ? parts.slice(0, -1).concat(parts.at(-1)!.trim() ? [parts.at(-1)!] : []) : [text];
+}
+
+/** 인용문이 들어 있는 쪽 번호(1부터). 공백 차이는 무시. */
+export function pageOfQuote(pages: string[], quote: string): number | undefined {
+  const norm = (v: string) => v.replace(/\s+/g, "");
+  const q = norm(quote);
+  if (!q || pages.length < 2) return pages.length === 1 ? 1 : undefined;
+  for (const len of [40, 24, 14]) {
+    const key = q.slice(0, len);
+    if (key.length < 8) break;
+    const idx = pages.findIndex((p) => norm(p).includes(key));
+    if (idx >= 0) return idx + 1;
+  }
+  return undefined;
+}
+
 async function parsePdf(data: Uint8Array) {
   // pdf-parse evaluates pdfjs-dist on import, which accesses DOMMatrix.
   // Import only during PDF extraction so the entire site-review route never
@@ -110,7 +132,10 @@ async function parsePdf(data: Uint8Array) {
   const parser = new PDFParse({ data, CanvasFactory });
   try {
     const result = await parser.getText();
-    return { text: result.text, pageCount: result.total || null };
+    const pages = Array.isArray((result as { pages?: Array<{ text?: string; num?: number }> }).pages)
+      ? (result as { pages: Array<{ text?: string; num?: number }> }).pages.map((p) => String(p.text ?? ""))
+      : splitPageMarkers(result.text);
+    return { text: result.text, pageCount: result.total || pages.length || null, pages };
   } finally {
     await parser.destroy();
   }
@@ -158,6 +183,7 @@ export async function parseUploadedDocument(file: File): Promise<DocumentAnalysi
   const data = new Uint8Array(await file.arrayBuffer());
   let text = "";
   let pageCount: number | null = null;
+  let pages: string[] = [];
   let format: DocumentAnalysis["format"];
   const warnings: string[] = [];
 
@@ -166,6 +192,7 @@ export async function parseUploadedDocument(file: File): Promise<DocumentAnalysi
     const parsed = await parsePdf(data);
     text = parsed.text;
     pageCount = parsed.pageCount;
+    pages = parsed.pages;
   } else if (extension === "hwpx") {
     format = "hwpx";
     text = await parseZipXml(data, "hwpx");
@@ -193,7 +220,8 @@ export async function parseUploadedDocument(file: File): Promise<DocumentAnalysi
     textLength: normalized.length,
     preview: normalized.slice(0, 1200),
     // Reserve room for late parking sections before the 80 generic article candidates.
-    candidates: [...extractParkingPassages(normalized), ...extractRuleCandidates(normalized)].slice(0, 125),
+    candidates: [...extractParkingPassages(normalized), ...extractRuleCandidates(normalized)].slice(0, 125)
+      .map((c) => ({ ...c, page: pages.length ? pageOfQuote(pages, c.quote) : undefined })),
     warnings,
   };
 }

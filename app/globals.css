@@ -293,3 +293,13 @@ mark { background: var(--mark); padding: 0 1px; }
 .ref-table .tag-alt { background: var(--cand-soft); color: var(--cand); }
 .ref-table .tag-hit { margin-left: 6px; background: var(--ok-soft); color: var(--ok); }
 .ref-table small.att { display: block; color: var(--muted); font-size: 11px; }
+
+/* 부록 원본 이미지판 */
+.appendix-original figure { margin: 6px 0 10px; border: 1px solid var(--line-soft); }
+.appendix-original img { display: block; width: 100%; height: auto; }
+.appendix-original figcaption { font-size: 11px; color: var(--muted); padding: 3px 6px; }
+.appendix-original figure.img-failed img { display: none; }
+.appendix-original figure.img-failed figcaption::before { content: "원본 렌더링 실패 · "; color: var(--miss); }
+.appendix-keys { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
+.appendix-keys mark { background: #fff59d; }
+@media print { .appendix-original figure { break-inside: avoid; } }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Assumptions, LhSupply, Project, Scenario, UnitType, UseKind } from "@/lib/review/types";
+import type { Assumptions, FarOption, LhSupply, Project, Scenario, UnitType, UseKind } from "@/lib/review/types";
 import { SUPPLY_LABEL, UNIT_WORD, USE_SHORT } from "@/lib/review/types";
 import { candidateParams, resolveParams, type ResolvedParams } from "@/lib/review/params";
 import { FEASIBILITY_LABEL, defaultScenario, runScenario, summaryRows, type ScenarioResult } from "@/lib/massing/engine";
@@ -13,12 +13,14 @@ import type { ParkingTier } from "@/lib/review/types";
 
 export function useResults(project: Project) {
   const params = useMemo(() => resolveParams(project.rows), [project.rows]);
-  const results = useMemo(() => project.scenarios.map((scenario) => runScenario({ params, scenario, assumptions: project.assumptions, site: project.site })), [params, project.scenarios, project.assumptions, project.site]);
+  const candidates = useMemo(() => candidateParams(project.rows), [project.rows]);
+  const results = useMemo(() => project.scenarios.map((scenario) => runScenario({ params, candidates, scenario, assumptions: project.assumptions, site: project.site })), [params, candidates, project.scenarios, project.assumptions, project.site]);
   return { params, results };
 }
 
 const VERDICT: Record<string, string> = { allowed: "허용", conditional: "조건부", prohibited: "불가" };
 const showValue = (v: unknown) => typeof v === "number" ? fmtNum(v)
+  : Array.isArray(v) && v.length && typeof (v[0] as { far?: number }).far === "number" ? (v as FarOption[]).map((o) => `${o.far}%`).join(" · ")
   : Array.isArray(v) ? describeTiers(v as ParkingTier[], "세대")
   : VERDICT[String(v)] ?? String(v);
 
@@ -43,9 +45,18 @@ export function MassingView({ project, onChange, onGoLegal }: { project: Project
     if (!rest.length) return;
     onChange({ ...project, scenarios: rest, selectedScenarioId: rest[0].id });
   };
+  // 완화 용적률 단계(예: 300%·400%)마다 현재 대안을 복제해 비교 대안을 만든다.
+  const farOptions = ((params.relaxedFarOptions ?? candidates.relaxedFarOptions)?.value as FarOption[] | undefined) ?? [];
+  const addFarScenarios = () => {
+    const base = selected?.scenario ?? project.scenarios[0];
+    if (!base || !farOptions.length) return;
+    const made = farOptions.filter((o) => !project.scenarios.some((s) => s.use === base.use && s.farMode === "relaxed" && s.relaxedFar === o.far))
+      .map((o) => ({ ...JSON.parse(JSON.stringify(base)), id: uid("s"), name: `${USE_SHORT[base.use]} · 완화 ${o.far}% (${o.label})`, farMode: "relaxed", relaxedFar: o.far } as Scenario));
+    if (made.length) onChange({ ...project, scenarios: [...project.scenarios, ...made], selectedScenarioId: made[0].id, massingDone: false });
+  };
   const setAssumption = (k: keyof Assumptions, v: number | undefined) => onChange({ ...project, assumptions: { ...project.assumptions, [k]: v ?? 0 } });
 
-  const keyParams: Array<keyof ResolvedParams> = ["siteArea", "bcr", "far", "relaxedFar", "maxFloors", "maxHeight", "landscapeRatio", "parkingApartment", "parkingUrban", "parkingOfficetel", "useApartment", "useUrban", "useOfficetel", "mechApartment", "mechOfficetel", "mechMaxPercent", "mechMinStalls", "lhMechMaxPercent", "lhParking03", "lhMinHomes"];
+  const keyParams: Array<keyof ResolvedParams> = ["siteArea", "bcr", "far", "relaxedFar", "relaxedFarOptions", "maxFloors", "maxHeight", "landscapeRatio", "parkingApartment", "parkingUrban", "parkingOfficetel", "useApartment", "useUrban", "useOfficetel", "mechApartment", "mechOfficetel", "mechMaxPercent", "mechMinStalls", "lhMechMaxPercent", "lhParking03", "lhMinHomes"];
 
   return <div className="view massing-view">
     <Panel title="법규 연동값" sub="법규검토표에서 '원문 확인' 또는 '검토자 입력' 상태인 행의 수치만 사용합니다. 값을 바꾸려면 법규검토표에서 수정하세요."
@@ -70,6 +81,7 @@ export function MassingView({ project, onChange, onGoLegal }: { project: Project
     <Panel title="대안별 건축개요 비교" sub="설계도서 이전 개략 검토값 · 법규상 최대 연면적과 계획 가능 연면적을 구분합니다."
       actions={<>
         <button className="btn" onClick={() => setShowAssumptions((v) => !v)}>설계 가정값 {showAssumptions ? "닫기" : "보기"}</button>
+        {farOptions.length > 0 && <button className="btn primary" onClick={addFarScenarios} title={farOptions.map((o) => `${o.far}% ${o.label}`).join(" / ")}>+ 완화 용적률 단계별 대안 ({farOptions.map((o) => o.far + "%").join("·")})</button>}
         {(["apartment", "urban", "officetel"] as UseKind[]).map((u) => <button key={u} className="btn" onClick={() => addScenario(u)}>+ {USE_SHORT[u]}</button>)}
       </>}>
       {showAssumptions && <div className="assumptions">
@@ -88,7 +100,7 @@ export function MassingView({ project, onChange, onGoLegal }: { project: Project
         <button className="btn" onClick={() => duplicate(selected.scenario)}>복제</button>
         <button className="btn danger" disabled={project.scenarios.length < 2} onClick={() => remove(selected.scenario.id)}>삭제</button>
       </>}>
-      <ScenarioEditor scenario={selected.scenario} onChange={(patch) => updateScenario(selected.scenario.id, patch)} />
+      <ScenarioEditor scenario={selected.scenario} farOptions={farOptions} onChange={(patch) => updateScenario(selected.scenario.id, patch)} />
       <ScenarioDetail result={selected} />
     </Panel>}
   </div>;
@@ -114,7 +126,8 @@ export function ComparisonTable({ results, selectedId, onSelect, print = false }
   </table></div>;
 }
 
-function ScenarioEditor({ scenario: s, onChange }: { scenario: Scenario; onChange: (patch: Partial<Scenario>) => void }) {
+function ScenarioEditor({ scenario: s, farOptions, onChange }: { scenario: Scenario; farOptions: FarOption[]; onChange: (patch: Partial<Scenario>) => void }) {
+  const farValue = s.farMode === "base" ? "base" : s.farMode === "custom" ? "custom" : `r${s.relaxedFar ?? ""}`;
   const setType = (id: string, patch: Partial<UnitType>) => onChange({ types: s.types.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
   const shareSum = s.types.reduce((a, t) => a + (t.share || 0), 0);
   return <div className="scenario-editor">
@@ -122,7 +135,17 @@ function ScenarioEditor({ scenario: s, onChange }: { scenario: Scenario; onChang
       <Field label="대안명"><input value={s.name} onChange={(e: { target: { value: string } }) => onChange({ name: e.target.value })} /></Field>
       <Field label="용도"><select value={s.use} onChange={(e: { target: { value: string } }) => { const use = e.target.value as UseKind; const d = defaultScenario(use, s.id); onChange({ use, efficiency: d.efficiency, farEfficiency: d.farEfficiency, floorHeight: d.floorHeight }); }}>
         {(["apartment", "urban", "officetel"] as UseKind[]).map((u) => <option key={u} value={u}>{USE_SHORT[u]}</option>)}</select></Field>
-      <Field label="용적률"><select value={s.farMode} onChange={(e: { target: { value: string } }) => onChange({ farMode: e.target.value as Scenario["farMode"] })}><option value="base">법정 기본 용적률</option><option value="relaxed">완화 용적률</option></select></Field>
+      <Field label="용적률"><select value={farValue} onChange={(e: { target: { value: string } }) => {
+        const v = e.target.value;
+        if (v === "base") onChange({ farMode: "base" });
+        else if (v === "custom") onChange({ farMode: "custom", customFar: s.customFar ?? undefined });
+        else onChange({ farMode: "relaxed", relaxedFar: v === "r" ? undefined : Number(v.slice(1)) });
+      }}>
+        <option value="base">법정 기본 용적률</option>
+        {farOptions.length ? farOptions.map((o) => <option key={o.far} value={`r${o.far}`}>완화 {o.far}% · {o.label}</option>) : <option value="r">완화 용적률 (법규검토표)</option>}
+        <option value="custom">직접 지정</option>
+      </select></Field>
+      {s.farMode === "custom" && <Field label="지정 용적률" hint="근거는 법규검토표 비고에 기록"><Num value={s.customFar} suffix="%" onChange={(v) => onChange({ customFar: v })} /></Field>}
       <Field label="주차방식"><select value={s.parking} onChange={(e: { target: { value: string } }) => onChange({ parking: e.target.value as Scenario["parking"] })}><option value="self">자주식</option><option value="mixed">자주식 + 기계식</option></select></Field>
       {s.parking === "mixed" && <Field label="희망 기계식 비율" hint="조례·LH 상한과 비교해 작은 값 적용"><Num value={s.mechanicalShare} suffix="%" onChange={(v) => onChange({ mechanicalShare: v ?? 0 })} /></Field>}
       <Field label="LH 0.3대 특례"><label className="inline"><input type="checkbox" checked={s.apply03} onChange={(e: { target: { checked: boolean } }) => onChange({ apply03: e.target.checked })} />특례 적용 시나리오</label></Field>

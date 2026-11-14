@@ -6,7 +6,7 @@
  */
 import { tierRatio, describeTiers } from "../review/parking-rules";
 import type { ResolvedParams } from "../review/params";
-import type { Assumptions, BusinessType, ParkingTier, Scenario, SiteInput, UnitType, UseKind, UseVerdict } from "../review/types";
+import type { Assumptions, BusinessType, FarOption, ParkingTier, Scenario, SiteInput, UnitType, UseKind, UseVerdict } from "../review/types";
 import { USE_SHORT, UNIT_WORD } from "../review/types";
 
 export type Feasibility = "ok" | "conditional" | "blocked" | "insufficient";
@@ -45,7 +45,9 @@ export interface ScenarioResult {
   siteArea: number;
   bcrLimit: number | null;
   farApplied: number | null;
-  farMode: "base" | "relaxed";
+  farMode: "base" | "relaxed" | "custom";
+  /** 적용 용적률 설명 (예: 완화 400% · 공공임대 추가공급) */
+  farLabel: string;
   maxBuildingArea: number;
   legalMaxFloorArea: number;      // 법규상 최대 용적률 산정 연면적
   plannedBuildingArea: number;    // 계획 건축면적 (기준층)
@@ -123,12 +125,14 @@ function distribute(total: number, types: UnitType[]): number[] {
 
 export interface MassingInput {
   params: ResolvedParams;
+  /** 법규검토표에서 아직 후보인 수치 (완화 용적률 참고 계산용) */
+  candidates?: ResolvedParams;
   scenario: Scenario;
   assumptions: Assumptions;
   site: Pick<SiteInput, "business" | "supplies" | "transitWithin500m">;
 }
 
-export function runScenario({ params, scenario, assumptions: a, site }: MassingInput): ScenarioResult {
+export function runScenario({ params, candidates, scenario, assumptions: a, site }: MassingInput): ScenarioResult {
   const blockers: string[] = [], conditions: string[] = [], missing: string[] = [], warnings: string[] = [], formulas: string[] = [];
   const keys = VERDICT_KEY[scenario.use];
   const word = UNIT_WORD[scenario.use];
@@ -141,9 +145,31 @@ export function runScenario({ params, scenario, assumptions: a, site }: MassingI
   if (bcr === undefined) missing.push("건폐율 (원문 확인 또는 검토자 입력)");
   if (baseFar === undefined) missing.push("기본 용적률 (원문 확인 또는 검토자 입력)");
   let farApplied: number | undefined = baseFar;
+  let farLabel = baseFar !== undefined ? `기본 ${baseFar}%` : "기본";
   if (scenario.farMode === "relaxed") {
-    if (relaxed === undefined) missing.push("완화 용적률 (완화 요건 확인 후 법규검토표에서 확정)");
-    farApplied = relaxed;
+    // 확정(원문 확인·검토자 입력) 값이 없으면 후보값으로 '참고 계산'하고 조건으로 표시한다.
+    const confirmedOptions = (params.relaxedFarOptions?.value as FarOption[] | undefined) ?? [];
+    const candidateOptions = (candidates?.relaxedFarOptions?.value as FarOption[] | undefined) ?? [];
+    const options = confirmedOptions.length ? confirmedOptions : candidateOptions;
+    const confirmedFar = relaxed ?? confirmedOptions.find((o) => o.far === scenario.relaxedFar)?.far;
+    const pickedOption = options.find((o) => o.far === scenario.relaxedFar) ?? options.find((o) => o.far === (relaxed ?? candidates?.relaxedFar?.value)) ?? options[0];
+    const value = scenario.relaxedFar ?? relaxed ?? (candidates?.relaxedFar?.value as number | undefined) ?? pickedOption?.far;
+    if (value === undefined) missing.push("완화 용적률 (완화 요건 확인 후 법규검토표에서 확정)");
+    else {
+      farApplied = value;
+      const opt = options.find((o) => o.far === value);
+      farLabel = `완화 ${value}%${opt ? ` · ${opt.label}` : ""}`;
+      if (opt?.condition) conditions.push(`완화 ${value}% 요건: ${opt.condition}`);
+      const isConfirmed = confirmedFar === value || confirmedOptions.some((o) => o.far === value);
+      if (!isConfirmed) conditions.push(`완화 ${value}%는 법규검토표에서 아직 후보 (요건 확인 전 참고 계산)`);
+    }
+  } else if (scenario.farMode === "custom") {
+    if (!scenario.customFar) missing.push("검토자 지정 용적률");
+    else {
+      farApplied = scenario.customFar;
+      farLabel = `지정 ${scenario.customFar}%`;
+      conditions.push(`검토자 지정 용적률 ${scenario.customFar}% (근거는 법규검토표 비고에 기록 필요)`);
+    }
   }
 
   const useVerdict = params[keys.use]?.value as UseVerdict | undefined;
@@ -170,7 +196,7 @@ export function runScenario({ params, scenario, assumptions: a, site }: MassingI
 
   const empty = (): ScenarioResult => ({
     scenario, feasibility: blockers.length ? "blocked" : "insufficient", blockers, conditions, missing, warnings, formulas, checks: [],
-    siteArea: A, bcrLimit: bcr ?? null, farApplied: farApplied ?? null, farMode: scenario.farMode,
+    siteArea: A, bcrLimit: bcr ?? null, farApplied: farApplied ?? null, farMode: scenario.farMode, farLabel,
     maxBuildingArea: 0, legalMaxFloorArea: 0, plannedBuildingArea: 0, units: 0, unitsByFar: 0, unitsByEnvelope: null,
     types: types.map((type) => ({ type, count: 0, exclusive: type.exclusive, supplyArea: 0, contractArea: 0 })),
     exclusiveTotal: 0, residentialCommon: 0, amenityArea: 0, aboveGroundArea: 0, floorsAbove: 0, legalFloors: floorLimit, heightEstimate: 0,
@@ -311,7 +337,7 @@ export function runScenario({ params, scenario, assumptions: a, site }: MassingI
 
   const checks: Check[] = [
     { label: "건폐율", limit: `${bcrV}% 이하`, planned: `${fmt(plannedBcr, 2)}%`, ok: plannedBcr <= bcrV + 1e-6 },
-    { label: "용적률", limit: `${fmt(farV)}% 이하${scenario.farMode === "relaxed" ? " (완화)" : ""}`, planned: `${fmt(plannedFar, 2)}%`, ok: plannedFar <= farV + 1e-6 },
+    { label: "용적률", limit: `${fmt(farV)}% 이하 (${farLabel})`, planned: `${fmt(plannedFar, 2)}%`, ok: plannedFar <= farV + 1e-6 },
     { label: "층수", limit: floorLimit !== null ? `${floorLimit}층 이하` : "제한 미확정", planned: `지상 ${floorsAbove}층`, ok: floorLimit !== null ? floorsAbove <= floorLimit : null },
     ...(maxHeight ? [{ label: "높이", limit: `${maxHeight}m 이하`, planned: `${fmt(heightEstimate)}m`, ok: heightEstimate <= maxHeight }] : []),
     ...(lh && lhMin ? [{ label: "LH 최소 호수", limit: `${lhMin}호 이상`, planned: `${units}${word}`, ok: units >= lhMin }] : []),
@@ -337,7 +363,7 @@ export function runScenario({ params, scenario, assumptions: a, site }: MassingI
   const feasibility: Feasibility = blockers.length ? "blocked" : conditions.length ? "conditional" : "ok";
   return {
     scenario, feasibility, blockers, conditions, missing, warnings, formulas, checks,
-    siteArea: A, bcrLimit: bcrV, farApplied: farV, farMode: scenario.farMode,
+    siteArea: A, bcrLimit: bcrV, farApplied: farV, farMode: scenario.farMode, farLabel,
     maxBuildingArea: r2(maxBuildingArea), legalMaxFloorArea: r2(legalMaxFloorArea), plannedBuildingArea: r2(plannedBuildingArea),
     units, unitsByFar, unitsByEnvelope, types: typeResults,
     exclusiveTotal: r2(exclusiveTotal), residentialCommon: r2(residentialCommon), amenityArea: r2(amenityArea),
@@ -361,7 +387,7 @@ export function summaryRows(res: ScenarioResult): Array<[string, string]> {
     ["대지면적", res.siteArea ? `${fmt(res.siteArea, 2)}㎡` : "—"],
     ["건축면적", v(res.plannedBuildingArea)],
     ["건폐율", ok ? `${fmt(res.plannedBcr, 2)}% (법정 ${res.bcrLimit}% 이하)` : "—"],
-    ["용적률", ok ? `${fmt(res.plannedFar, 2)}% (${res.farMode === "relaxed" ? "완화" : "기본"} ${fmt(res.farApplied ?? 0)}% 이하)` : "—"],
+    ["용적률", ok ? `${fmt(res.plannedFar, 2)}% (${res.farLabel} 이하)` : "—"],
     ["용적률 산정 연면적", v(res.aboveGroundArea)],
     ["법규상 최대 연면적", ok ? `${fmt(res.legalMaxFloorArea, 2)}㎡` : "—"],
     ["지상 연면적", v(res.aboveGroundArea)],

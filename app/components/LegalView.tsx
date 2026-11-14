@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { LhSupply, ParamKey, ParkingTier, Project, ReviewRow, RowStatus, RuleParams, SourceRef, UseVerdict } from "@/lib/review/types";
+import type { FarOption, LhSupply, ParamKey, ParkingTier, Project, ReviewRow, RowStatus, RuleParams, SourceRef, UseVerdict } from "@/lib/review/types";
 import { STATUS_LABEL, SUPPLY_LABEL } from "@/lib/review/types";
 import { NUMERIC_PARAMS, PARAM_LABEL, VERDICT_PARAMS, resolveParams } from "@/lib/review/params";
 import { lookupHint, officialLinks } from "@/lib/review/lookup-hints";
@@ -241,6 +241,8 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
           ? <select value={String(r.params?.[k] ?? "")} onChange={(e: { target: { value: string } }) => setParam(k, (e.target.value || undefined) as UseVerdict | undefined)}>
               {(Object.keys(VERDICT_LABEL) as UseVerdict[]).map((v) => <option key={v} value={v}>{VERDICT_LABEL[v]}</option>)}
             </select>
+          : k === "relaxedFarOptions"
+            ? <FarOptionsInput value={r.params?.[k] as FarOption[] | undefined} onChange={(v) => setParam(k, v as never)} />
           : k.endsWith("Tiers")
             ? <TierInput value={r.params?.[k] as ParkingTier[] | undefined} onChange={(v) => setParam(k, v as never)} />
             : <Num value={r.params?.[k] as number | undefined} step={0.01} onChange={(v) => setParam(k, v)} />}
@@ -248,9 +250,9 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
       </div>)}
       <div className="param add">
         <select value={addKey} onChange={(e: { target: { value: string } }) => setAddKey(e.target.value as ParamKey)}>
-          {([...NUMERIC_PARAMS, "parkingApartmentTiers", "parkingUrbanTiers", "parkingOfficetelTiers", ...VERDICT_PARAMS] as ParamKey[]).filter((k) => !paramKeys.includes(k)).map((k) => <option key={k} value={k}>{PARAM_LABEL[k]}</option>)}
+          {([...NUMERIC_PARAMS, "relaxedFarOptions", "parkingApartmentTiers", "parkingUrbanTiers", "parkingOfficetelTiers", ...VERDICT_PARAMS] as ParamKey[]).filter((k) => !paramKeys.includes(k)).map((k) => <option key={k} value={k}>{PARAM_LABEL[k]}</option>)}
         </select>
-        <button className="btn sm" onClick={() => setParam(addKey, VERDICT_PARAMS.includes(addKey) ? "allowed" : addKey.endsWith("Tiers") ? ([{ ratio: 1 }] as never) : 0)}>+ 수치 추가</button>
+        <button className="btn sm" onClick={() => setParam(addKey, VERDICT_PARAMS.includes(addKey) ? "allowed" : addKey.endsWith("Tiers") ? ([{ ratio: 1 }] as never) : addKey === "relaxedFarOptions" ? ([] as never) : 0)}>+ 수치 추가</button>
       </div>
     </div>
 
@@ -300,6 +302,22 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
 
 /** 주차기준 구간 입력: "<30:0.7, 60:0.9, 1" 또는 "85:1/70㎡, 1/65㎡"
  *  상한(㎡, '<'면 미만):세대당 대수[/전용 ㎡당 1대]. 상한 없는 마지막 구간은 "대수[/㎡]" */
+/** 완화 용적률 단계 입력: "300:매입임대, 400:공공임대 추가공급" */
+function FarOptionsInput({ value, onChange }: { value?: FarOption[]; onChange: (v: FarOption[] | undefined) => void }) {
+  const [draft, setDraft] = useState((value ?? []).map((o) => `${o.far}:${o.label}`).join(", "));
+  return <input title="용적률%:설명, … (예: 300:매입임대, 400:공공임대 추가공급)" value={draft}
+    onChange={(e: { target: { value: string } }) => setDraft(e.target.value)}
+    onBlur={() => {
+      const prev = new Map((value ?? []).map((o) => [o.far, o]));
+      const list = draft.split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
+        const [far, ...label] = x.split(":");
+        const n = Number(far.replace(/[^\d.]/g, ""));
+        return { ...(prev.get(n) ?? {}), far: n, label: label.join(":").trim() || `${n}%` };
+      }).filter((o) => Number.isFinite(o.far) && o.far > 0);
+      onChange(list.length ? list : undefined);
+    }} />;
+}
+
 function TierInput({ value, onChange }: { value?: ParkingTier[]; onChange: (v: ParkingTier[] | undefined) => void }) {
   const fmt = (t: ParkingTier) => {
     const rule = [t.ratio !== undefined ? String(t.ratio) : "", t.sqmPerStall ? `/${t.sqmPerStall}㎡` : ""].join("");
