@@ -58,7 +58,20 @@ let downUntil = 0;
 let downReason = "";
 export function eumUnavailable() { return Date.now() < downUntil ? downReason : null; }
 
+// 토지이음은 짧은 시간에 요청이 몰리면 접속을 일정 시간 차단한다 → 요청을 한 줄로 세우고 간격을 둔다.
+let queue: Promise<unknown> = Promise.resolve();
+const GAP_MS = 700;
+function throttled<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queue.then(fn, fn);
+  queue = run.then(() => new Promise((r) => setTimeout(r, GAP_MS)), () => new Promise((r) => setTimeout(r, GAP_MS)));
+  return run;
+}
+
 async function timed(url: string, init: RequestInit = {}, ms = 10_000) {
+  return throttled(() => timedNow(url, init, ms));
+}
+
+async function timedNow(url: string, init: RequestInit = {}, ms = 10_000) {
   if (Date.now() < downUntil) throw new Error(downReason);
   let response: Response;
   try {
@@ -235,7 +248,7 @@ async function analyzeGosi(row: GosiListRow, ctx: EumSearchContext): Promise<Eum
     const files = detail.attachments
       .filter((a) => ["pdf", "hwpx"].includes(a.ext))
       .sort((a, b) => Number(/조서|지침|고시문|결정/.test(b.name)) - Number(/조서|지침|고시문|결정/.test(a.name)) || Number(/도면|고시도/.test(a.name)) - Number(/도면|고시도/.test(b.name)))
-      .slice(0, 2);
+      .slice(0, 1);
     for (const file of files) {
       try {
         const data = await downloadAttachment(row.seq, file.path, page.cookie);
@@ -295,7 +308,7 @@ async function inBatches<T, R>(items: T[], size: number, fn: (item: T, index: nu
 
 const resultCache = new Map<string, { at: number; value: { documents: EumPlanDocument[]; errors: string[] } }>();
 
-export async function collectEumPlanDocuments(ctx: EumSearchContext, limit = 3): Promise<{ documents: EumPlanDocument[]; errors: string[] }> {
+export async function collectEumPlanDocuments(ctx: EumSearchContext, limit = 2): Promise<{ documents: EumPlanDocument[]; errors: string[] }> {
   const key = JSON.stringify([ctx.sggCd, ctx.dong, ctx.lot, ctx.planNames, ctx.renewal, ctx.agencyHints, limit]);
   const hit = resultCache.get(key);
   if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.value;
@@ -308,14 +321,14 @@ export async function collectEumPlanDocuments(ctx: EumSearchContext, limit = 3):
 
 async function collectEumPlanDocumentsUncached(ctx: EumSearchContext, limit: number): Promise<{ documents: EumPlanDocument[]; errors: string[] }> {
   const hints = (ctx.agencyHints ?? []).filter(Boolean);
+  // 요청 수를 최소화: 시군구 '지구단위' 1쪽 + 계획명(또는 동) 1회 + (노후계획도시면) '특별정비' 1회
+  const name = ctx.planNames[0] ?? ctx.dong;
   const searches: Array<{ keyword: string; sgg: string | null; pages: number }> = [
-    { keyword: "지구단위", sgg: ctx.sggCd, pages: 2 },
-    ...(ctx.dong ? [{ keyword: ctx.dong, sgg: ctx.sggCd, pages: 1 }] : []),
-    // 계획 이름은 시군구 코드 없이 찾는다(서울시·도 결정 고시 포함) → 담당기관으로 거른다.
-    ...ctx.planNames.slice(0, 2).map((keyword) => ({ keyword, sgg: hints.length ? null : ctx.sggCd, pages: 1 })),
+    { keyword: "지구단위", sgg: ctx.sggCd, pages: 1 },
+    ...(name ? [{ keyword: name, sgg: hints.length ? null : ctx.sggCd, pages: 1 }] : []),
     ...(ctx.renewal ? [{ keyword: "특별정비", sgg: ctx.sggCd, pages: 1 }] : []),
   ];
-  const settled = await inBatches(searches, 2, (q) => searchGosi(q.keyword, q.sgg, q.pages).then((rows) =>
+  const settled = await inBatches(searches, 1, (q) => searchGosi(q.keyword, q.sgg, q.pages).then((rows) =>
     q.sgg ? rows : rows.filter((r) => hints.some((h) => r.agency.includes(h)))));
   const errors = [...new Set(settled.flatMap((s) => s.status === "rejected" ? [(s.reason instanceof Error ? s.reason.message : "토지이음 고시 검색 실패").replace(/\s*\[.*\]$/, "")] : []))];
   const rows = new Map<string, GosiListRow>();
@@ -328,6 +341,7 @@ async function collectEumPlanDocumentsUncached(ctx: EumSearchContext, limit: num
     // 같은 고시번호가 담당부서별로 중복 등록되는 경우가 있다.
     .filter((x) => { const key = x.r.gosiNo.replace(/\s+/g, "") || x.r.seq; if (seenNo.has(key)) return false; seenNo.add(key); return true; })
     .slice(0, limit);
-  const documents = await Promise.all(ranked.map((x) => analyzeGosi(x.r, ctx)));
+  const documents: EumPlanDocument[] = [];
+  for (const x of ranked) documents.push(await analyzeGosi(x.r, ctx));
   return { documents, errors };
 }

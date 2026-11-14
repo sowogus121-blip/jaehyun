@@ -376,8 +376,14 @@ export async function POST(request: NextRequest) {
     const planNames = [
       ...landUse.filter((l) => /지구단위|택지개발지구/.test(l.name) && l.category !== "용도지역")
         .map((l) => l.name.replace(/\d*택지개발지구|지구단위계획(?:구역)?|\(.*?\)|구역/g, "").replace(/\d+$/, "").trim()),
-      gu ? gu.replace(/구$/, "") : "",
-      lotMatch ? lotMatch[1].replace(/\d*(?:동|가|읍|면|리)$/, "") : "",
+      // 1기 신도시처럼 구 이름이 곧 계획명이면(분당·일산) 구 우선, 아니면 동 이름(상계·산본) 우선
+      ...(() => {
+        const plain = gu ? gu.replace(/구$/, "") : "";
+        const trimmed = gu ? gu.replace(/[동서]구$/, "") : "";
+        const guStem = !NEW_TOWN_HINT.test(plain) && NEW_TOWN_HINT.test(trimmed) ? trimmed : plain; // 일산동구 → 일산, 강동구는 그대로
+        const dongStem = lotMatch ? lotMatch[1].replace(/\d*(?:동|가|읍|면|리)$/, "") : "";
+        return NEW_TOWN_HINT.test(guStem) ? [guStem, dongStem] : [dongStem, guStem];
+      })(),
     ].filter((n) => n.length >= 2);
     const govParts = localGovernment.split(/\s+/).filter(Boolean);
     const agencyHints = [...new Set([govParts.at(-1) ?? "", /(?:특별시|광역시|특별자치시)$/.test(govParts[0] ?? "") ? govParts[0] : ""].filter(Boolean))];
