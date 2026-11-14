@@ -622,6 +622,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   }
 
   attachCollected(rows, review, zoneName);
+  applySetbackAnnex(rows, review, uses);
   markProhibited(rows);
   return orderRows([...rows.values()]);
 }
@@ -633,6 +634,33 @@ const VERDICT_NAME: Partial<Record<string, string>> = {
   lhMechApartment: "LH 기계식 인수(공동주택)", lhMechUrban: "LH 기계식 인수(도시형생활주택)", lhMechOfficetel: "LH 기계식 인수(오피스텔)",
   lhParking03: "LH 0.3대 특례",
 };
+/**
+ * 건축조례 별표 '대지 안의 공지'에서 공동주택 항목(건축선·인접대지경계선 각각)을 뽑아 내용·형광펜으로 쓴다.
+ * 예) 마. 공동주택 • 아파트 : 3미터 이상 단, 도시형생활주택(아파트형)은 2미터 이상 • 연립주택 : 2미터 이상 • 다세대주택 : 1미터 이상
+ */
+function applySetbackAnnex(rows: Map<string, ReviewRow>, review: SiteReviewResult | null, uses: UseKind[]) {
+  const annex = (review?.collected ?? []).find((c) => c.rowId === "bld.setback" && c.article.startsWith("별표") && /대지\s*안?의\s*공지/.test(c.article));
+  const row = rows.get("bld.setback");
+  if (!annex || !row || row.status === "user") return;
+  const text = annex.text.replace(/\s+/g, " ");
+  const sections = text.split(/(?=\b\d\.\s*(?:건축선|인접\s*대지))/).filter((x) => /^\d\.\s*(건축선|인접)/.test(x));
+  const picks: Array<{ label: string; line: string }> = [];
+  for (const sec of sections) {
+    const label = /^\d\.\s*건축선/.test(sec) ? "건축선으로부터" : "인접대지경계선으로부터";
+    const m = sec.match(/[가-하]\.\s*공동주택[\s\S]*?(?=\s[가-하]\.\s|\s\d\.\s|$)/);
+    if (m) picks.push({ label, line: m[0].replace(/^[가-하]\.\s*/, "").trim().slice(0, 220) });
+  }
+  if (!picks.length) return;
+  const officetelOnly = uses.length > 0 && uses.every((u) => u === "officetel");
+  rows.set("bld.setback", {
+    ...row,
+    content: picks.map((p) => `${p.label}: ${p.line}`).join("\n") + (officetelOnly ? "\n※ 오피스텔(업무시설)은 표의 해당 용도 기준 확인" : ""),
+    law: row.law.includes(annex.article.split(" · ")[0]) ? row.law : `${row.law}, ${annex.title} ${annex.article.split(" · ")[0]}`,
+    status: officetelOnly ? row.status : "verified",
+    sources: row.sources.map((s) => s.title === annex.title && s.article === annex.article ? { ...s, highlights: picks.map((p) => p.line) } : s),
+  });
+}
+
 /** 공고문 쪽번호 표기: " p.11, 12" */
 function pageLabel(pages: Array<number | undefined>) {
   const list = [...new Set(pages.filter((p): p is number => typeof p === "number"))].sort((a, b) => a - b);
