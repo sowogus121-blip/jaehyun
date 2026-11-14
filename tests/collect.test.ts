@@ -418,3 +418,25 @@ describe("LH 공고문 기계식주차 인수기준 자동 추출", () => {
     expect(r.ratioText).toContain("20대 미만인 경우 우대");
   });
 });
+
+import { checkTransit } from "../lib/server/transit";
+describe("LH 0.3대 특례 입지 자동 판정", () => {
+  it("역 출구 거리로 500m 이내를 판정한다", async () => {
+    const original = globalThis.fetch;
+    // 대상지 (127.0, 37.5) 기준: 출구 약 330m, 대학 약 1.1km
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const q = new URL(String(input)).searchParams.get("query");
+      const items = q === "출구" ? [{ title: "독산역 2번 출구", category: "교통시설 > 지하철", point: { x: "127.0", y: "37.503" } }]
+        : q === "역" ? [{ title: "독산역", category: "교통시설 > 지하철,전철", point: { x: "127.0", y: "37.506" } }]
+        : [{ title: "한국대학교", category: "교육 > 대학교", point: { x: "127.0", y: "37.51" } }];
+      return new Response(JSON.stringify({ response: { status: "OK", result: { items } } }));
+    }) as typeof fetch;
+    try {
+      const r = await checkTransit(127.0, 37.5, "k", "d");
+      expect(r.station?.kind).toBe("exit");
+      expect(r.station!.distance).toBeGreaterThan(300);
+      expect(r.station!.distance).toBeLessThan(360);
+      expect(r.verdict).toBe("within");
+    } finally { globalThis.fetch = original; }
+  });
+});

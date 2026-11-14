@@ -124,6 +124,12 @@ export function buildChecklist(p: Project): CheckGroup[] {
       { id: "lh-pdf", label: "공고문 PDF 분석", state: notice?.rules || notice?.extractedCriteria?.length ? "ok" as const : "missing" as const, detail: notice?.rules ? "원문 검증된 기준 적용" : notice?.extractedCriteria?.length ? `주차·면적·커뮤니티 문구 ${notice.extractedCriteria.length}건 확보 (행 근거로 첨부)` : "PDF 자동 분석 실패 · 공고문 업로드 권장", link: notice?.pdfUrl ? { label: "공고문", url: notice.pdfUrl } : undefined },
       { id: "lh-guide", label: "설계·시공 가이드라인·체크리스트", state: notice?.guideUrl ? "ok" as const : "missing" as const, detail: notice?.guideUrl ? "공고 첨부(신청서식·가이드라인) 원본 확보" : "공고 첨부 확인", link: notice?.guideUrl ? { label: "첨부 받기", url: notice.guideUrl } : undefined },
       fromCollected("park.lh03", "law", "0.3대 특례 (공공주택 특별법 시행령)"),
+      (() => {
+        const t = r?.transit;
+        const state: CheckState = p.site.transitWithin500m || t?.verdict === "within" || t?.verdict === "outside" ? "ok" : t?.verdict === "borderline" ? "partial" : "missing";
+        return { id: "lh-transit", label: "0.3대 특례 입지 (역 출구·대학 500m)", rowId: "park.lh03", state,
+          detail: t ? `${t.verdict === "within" ? "500m 이내" : t.verdict === "borderline" ? "경계 · 확인 필요" : t.verdict === "outside" ? "500m 밖" : "판정 실패"} · ${t.basis}` : "자동 판정 전 · 다시 수집" };
+      })(),
     ] }] : []),
   ];
   return groups;

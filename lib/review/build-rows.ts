@@ -521,7 +521,13 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     id: "park.lh03",
     content: "조건 충족 시 0.3대/호\n- 전용 30㎡ 미만\n- 청년형은 도시철도역 출구 또는 대학 교문 직선거리 500m 이내 (고령자형 입지 무관)\n- LH 선정심의 → 조건부 매입약정 → 매입약정증명서 발급 → 인허가 제출",
     law: "공공주택 특별법 시행령 제37조제4항" + (notice ? ` · ${notice.title}` : " · LH 지역본부 공고"),
-    note: lh ? (site.transitWithin500m ? "검토자: 역세권 500m 입지 확인" : "역세권 입지 미확인") : "LH 매입약정 사업 아님",
+    note: !lh ? "LH 매입약정 사업 아님"
+      : site.transitWithin500m ? (review?.transit?.verdict === "within" ? `입지 자동 확인: ${review.transit.basis}` : "검토자: 역세권 500m 입지 확인")
+      : review?.transit ? (review.transit.verdict === "within" ? `입지 자동 확인: ${review.transit.basis}`
+        : review.transit.verdict === "borderline" ? `경계 거리 · 출구·교문 기준 확인 필요: ${review.transit.basis}`
+        : review.transit.verdict === "outside" ? `500m 밖 · 청년형 특례 불가 (고령자형은 입지 무관): ${review.transit.basis}`
+        : "입지 자동 판정 실패 · 직접 확인")
+      : "역세권 입지 미확인",
     status: lh ? "candidate" : "missing",
     params: lh ? { lhParking03: "conditional", lhParking03MaxArea: rules?.parking03MaxArea ?? 30 } : undefined,
     sources: [lawRef(review, LAW.publicHousingDecree, "제37조"), ...(noticeSource ? [noticeSource] : [])],

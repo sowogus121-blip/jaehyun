@@ -358,6 +358,8 @@ export interface SiteReviewResult {
   missing: string[];
   /** Vercel 배포 환경 (production / preview / development) */
   deployEnv?: string | null;
+  /** LH 0.3대 특례 입지 자동 판정 (역 출구·대학교 직선거리) */
+  transit?: import("./server/transit").TransitCheck | null;
   /** 국가법령정보센터 외 대체 출처 사용 표시 (예: ELIS) */
   lawSources?: string[];
   errors: string[];
