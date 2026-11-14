@@ -598,7 +598,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
       return put({
         id,
         content: `소형주택(도시형생활주택): 전용 ${smallStd.under}㎡ 미만 세대당 ${smallStd.low}대 이상 · 그 외(60㎡ 이하) 세대당 ${smallStd.base}대 이상\n단지형 연립·다세대는 공동주택 조례 기준 적용`,
-        law: "주택건설기준 등에 관한 규정 제27조제1항제2호 · " + `${annex.title} ${annex.article.split(" · ")[0]}`,
+        law: "주택건설기준 등에 관한 규정 제27조제1항제2호" + (annex ? ` · ${annex.title} ${annex.article.split(" · ")[0]}` : " · 주차장법 시행령 별표 1 제5호"),
         note: `검토요망: ${urbanNoRule ? "조례 별표에 도시형생활주택 항목 없음 → 주차장법 시행령 별표1 제5호에 따라" : "조례 별표 단서(도시형생활주택은 「주택건설기준」 제27조)에 따라"} 「주택건설기준」 제27조제1항제2호 소형주택 기준 적용${m27 ? " (법령 원문에서 수치 확인)" : ""} · 같은 호 단서의 조례 강화·완화 여부 확인`,
         status: "verified",
         params: { parkingUrbanTiers: [{ maxArea: smallStd.under, strict: true, ratio: smallStd.low }, { maxArea: 60, ratio: smallStd.base }] },
