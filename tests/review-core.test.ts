@@ -250,15 +250,30 @@ describe("개통 예정역 (신독산역)", () => {
     timeline: [{ label: "실시계획", value: "공사기간 2019~2026년", source: "국토교통부 고시 제2026-410호", page: 3, official: true }] }];
   const base = review({ address: addr, zone: "준공업지역", area: 900 });
   const r = { ...base, transit: { station: null, university: null, verdict: "outside" as const, basis: "독산역 역사 중심까지 직선 908m", checkedAt: "", errors: [], planned } };
-  it("기본은 현행 역 기준으로 불가, 예정역은 참고로 표기", () => {
-    const rows = buildRows(site(addr), r);
+  it("예정역 제외 시 현행 역 기준으로 불가, 예정역은 참고로 표기", () => {
+    const rows = buildRows(site(addr, { countPlannedStations: false }), r);
     expect(row(rows, "park.lh03").note).toContain("불가(청년형)");
     expect(row(rows, "park.lh03").note).toContain("신독산역");
     expect(row(rows, "park.lh03").sources.some((s) => s.title.includes("2026-410"))).toBe(true);
   });
-  it("'개통 예정역 포함'이면 예정역 거리로 조건부 충족", () => {
-    const rows = buildRows(site(addr, { countPlannedStations: true }), r);
+  it("기본(개통 예정역 포함)이면 예정역 거리로 조건부 충족", () => {
+    const rows = buildRows(site(addr), r);
     expect(row(rows, "park.lh03").note).toContain("조건부 충족");
     expect(row(rows, "park.lh03").note).toContain("LH 지역본부 확인");
+  });
+});
+
+describe("역세권 경계 50m = 검토요망", () => {
+  const addr = "서울특별시 금천구 독산동 151-10";
+  const base = review({ address: addr, zone: "준공업지역", area: 900 });
+  const r = { ...base, transit: { station: { name: "독산역", distance: 530, kind: "station" as const }, university: null, verdict: "outside" as const, basis: "독산역 역사 중심까지 직선 530m", checkedAt: "", errors: [] } };
+  it("530m는 경계로 보고 비고에 검토요망", () => {
+    const rows = buildRows(site(addr), r);
+    expect(row(rows, "park.lh03").note).toMatch(/^검토요망/);
+    expect(row(rows, "park.lh03").params?.transitReview).toBe("review");
+  });
+  it("560m는 미충족", () => {
+    const r2 = { ...r, transit: { ...r.transit, station: { ...r.transit.station, distance: 560 } } };
+    expect(row(buildRows(site(addr), r2), "park.lh03").note).toContain("불가(청년형)");
   });
 });

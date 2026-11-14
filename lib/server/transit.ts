@@ -40,6 +40,13 @@ export async function checkPlannedStations(x: number, y: number, geocode: (addre
 }
 const plannedCoordCache = new Map<string, { x: number; y: number }>();
 
+/** 500m 이내 충족 · 500~550m(약 50m 여유) '경계 = 검토요망'으로 우선 반영 · 그 밖은 미충족 */
+export const TRANSIT_LIMIT = 500;
+export const TRANSIT_REVIEW_MARGIN = 50;
+export function transitVerdictOf(distance: number): "within" | "borderline" | "outside" {
+  return distance <= TRANSIT_LIMIT ? "within" : distance <= TRANSIT_LIMIT + TRANSIT_REVIEW_MARGIN ? "borderline" : "outside";
+}
+
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371008.8;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -100,11 +107,9 @@ export async function checkTransit(x: number, y: number, key: string, domain: st
   // 출구 기준 500m 이내 → 충족. 역사 중심점만 있으면 400m 이내 충족·650m 이내 경계.
   // 대학은 주소 대표점 기준이라 400m 이내 충족·700m 이내 경계.
   const stationVerdict = !stationPick ? null
-    : stationPick.kind === "exit" ? (stationPick.distance <= 500 ? "within" : stationPick.distance <= 600 ? "borderline" : "outside")
-    : stationPick.distance <= 400 ? "within" : stationPick.distance <= 650 ? "borderline" : "outside";
+    : transitVerdictOf(stationPick.distance);
   const univIsGate = !!university && /입구|정문|후문/.test(university.name);
-  const univVerdict = !university ? null : univIsGate ? (university.distance <= 500 ? "within" : university.distance <= 600 ? "borderline" : "outside")
-    : university.distance <= 400 ? "within" : university.distance <= 700 ? "borderline" : "outside";
+  const univVerdict = !university ? null : transitVerdictOf(university.distance);
   const order = ["within", "borderline", "outside"] as const;
   const verdicts = [stationVerdict, univVerdict].filter(Boolean) as Array<(typeof order)[number]>;
   const verdict = verdicts.length ? order.find((v) => verdicts.includes(v))! : errors.length ? "unknown" : "outside";

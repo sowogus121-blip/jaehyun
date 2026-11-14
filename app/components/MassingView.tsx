@@ -120,6 +120,7 @@ export function ComparisonTable({ results, selectedId, onSelect, print = false }
       <tr className="check-row"><th>법규 충족 검토</th>{results.map((r) => <td key={r.scenario.id}>
         {r.checks.map((c) => <span key={c.label} className={`check ${c.ok === false ? "bad" : c.ok ? "good" : ""}`}>{c.ok === false ? "초과 " : c.ok ? "✓ " : "· "}{c.label} {c.planned} / {c.limit}</span>)}
         {r.blockers.map((b) => <span key={b} className="check bad">불가: {b}</span>)}
+        {r.conditions.filter((c) => c.startsWith("검토요망")).map((c) => <span key={c} className="check review-flag">{c.split(" — ")[0]} — {c.split(" — ")[1]?.split(" · ")[0] ?? ""}</span>)}
         {r.missing.map((m) => <span key={m} className="check miss">근거 필요: {m}</span>)}
       </td>)}</tr>
     </tbody>
@@ -198,7 +199,7 @@ function ScenarioDetail({ result: r }: { result: ScenarioResult }) {
         {(r.blockers.length > 0 || r.missing.length > 0 || r.conditions.length > 0 || r.warnings.length > 0) && <div className="notes">
           {r.blockers.map((x) => <p key={x} className="bad">불가 · {x}</p>)}
           {r.missing.map((x) => <p key={x} className="miss">근거 필요 · {x}</p>)}
-          {r.conditions.map((x) => <p key={x} className="cond">조건 · {x}</p>)}
+          {r.conditions.map((x) => x.startsWith("검토요망") ? <p key={x} className="cond review">{x}</p> : <p key={x} className="cond">조건 · {x}</p>)}
           {r.warnings.map((x) => <p key={x} className="warn">참고 · {x}</p>)}
         </div>}
         <h4>계산식</h4>

@@ -214,6 +214,10 @@ mark { background: var(--mark); padding: 0 1px; }
 .feas { display: inline-block; margin-top: 3px; border-radius: 3px; padding: 0 6px; font-size: 11px; font-weight: 600; background: #fff; }
 .feas-ok { color: var(--ok); }
 .feas-conditional { color: var(--cand); }
+.feas-review { color: #6a3fb5; background: #f1ebfb; padding: 0 6px; border-radius: 4px; }
+.notes p.review, .report-list li.review { color: #6a3fb5; background: #f1ebfb; }
+td.note .review-flag, .review-flag { color: #6a3fb5; background: #f1ebfb; font-weight: 600; padding: 0 4px; border-radius: 3px; }
+tr.row-review td.note { background: #f7f2fd; }
 .feas-blocked { color: var(--miss); }
 .feas-insufficient { color: var(--muted); }
 .check { display: block; font-size: 12px; }
