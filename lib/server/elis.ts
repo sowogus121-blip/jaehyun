@@ -77,10 +77,11 @@ export function elisLink(alrNo: string, histNo: string) {
 
 /** law-api.searchOrdinance와 같은 판정 규칙으로 ELIS에서 관할 조례를 찾는다. */
 export async function searchOrdinanceElis(query: string, jurisdiction: string): Promise<OrdinanceRecord | null> {
-  // ELIS 검색어는 제목 단어를 모두 포함해야 걸리므로 '주차장 설치 및 관리 조례' → '주차장'으로 줄여 찾고 판정은 제목 규칙으로 한다.
-  const keyword = query.replace(/\s*설치\s*및\s*관리\s*조례$/, "").replace(/\s*조례$/, "").trim();
-  const hits = await elisSearch(keyword);
-  const current = hits.filter((h) => (h.tag === "현" || h.tag === "예") && h.kind === "조례" && ordinanceTitleMatches(h.title, query, jurisdiction));
+  // ELIS 검색어는 제목 단어를 모두 포함해야 걸린다. '…주차장 설치 및 관리 조례'로 못 찾으면 '…주차장 조례'로 다시 찾는다(청주시 주차장 조례 등).
+  const pick = (hits: ElisHit[]) => hits.filter((h) => (h.tag === "현" || h.tag === "예") && h.kind === "조례" && ordinanceTitleMatches(h.title, query, jurisdiction));
+  let current = pick(await elisSearch(query));
+  const short = query.replace(/\s*설치\s*및\s*관리\s*조례$/, " 조례").trim();
+  if (!current.length && short !== query) current = pick(await elisSearch(short));
   const norm = (v: string) => v.replace(/\s+/g, "");
   // 같은 조례가 현·예 두 줄로 나오면 현행을 우선한다. 예(시행예정)만 있으면 본문 연혁에서 현행 판본을 다시 고른다.
   const ranked = [...current].sort((a, b) => Number(norm(b.title) === norm(query)) - Number(norm(a.title) === norm(query)) || Number(b.tag === "현") - Number(a.tag === "현"));
