@@ -38,3 +38,16 @@ describe("상세 개요표 (실무 양식)", () => {
     expect((ws.model as unknown as { merges: string[] }).merges.length).toBeGreaterThan(50);
   });
 });
+
+import { resolveHighlights } from "../lib/report/format";
+describe("형광펜 문장 단위", () => {
+  it("짧은 낱말은 대상지 용도지역 문장 하나로만 칠한다", () => {
+    const t = "제44조(건폐율) ① 다음과 같다.\n1. 제1종전용주거지역: 50퍼센트\n3. 제1종일반주거지역: 60퍼센트\n10. 준공업지역: 60퍼센트\n11. 보전녹지지역: 20퍼센트";
+    const hs = resolveHighlights(t, ["60퍼센트"], ["준공업지역"]);
+    expect(hs).toHaveLength(1);
+    expect(hs[0]).toContain("준공업지역");
+  });
+  it("다른 용도지역만 언급한 문장은 칠하지 않는다", () => {
+    expect(resolveHighlights("2. 자연경관지구 안에서 건폐율은 40퍼센트 이하로 한다.\n3. 자연녹지지역: 20퍼센트", ["20퍼센트"], ["준공업지역"])).toEqual([]);
+  });
+});

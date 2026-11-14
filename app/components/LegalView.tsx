@@ -272,7 +272,7 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
         {s.url && <a href={s.url} target="_blank" rel="noreferrer">원문 열기</a>}
         <button className="btn sm danger" onClick={() => setR((x) => ({ ...x, sources: x.sources.filter((_, j) => j !== i) }))}>삭제</button>
       </div>
-      {s.excerpt && <p className="preview">{s.verbatim ? "" : <em className="muted">[요지 · 원문 대조 필요] </em>}<Marked text={s.excerpt} highlights={s.highlights} /></p>}
+      {s.excerpt && <p className="preview">{s.verbatim ? "" : <em className="muted">[요지 · 원문 대조 필요] </em>}<Marked text={s.excerpt} highlights={s.highlights} zones={zone ? [zone] : []} sentences /></p>}
     </div>)}
     <button className="btn sm" onClick={() => setR((x) => ({ ...x, sources: [...x.sources, { title: "", kind: "other" }] }))}>+ 근거 직접 추가</button>
 

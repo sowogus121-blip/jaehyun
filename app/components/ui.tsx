@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { emphasizeNumbers, highlightRuns } from "@/lib/report/format";
+import { emphasizeNumbers, highlightRuns, resolveHighlights } from "@/lib/report/format";
 import type { RowStatus } from "@/lib/review/types";
 import { STATUS_LABEL } from "@/lib/review/types";
 
@@ -11,8 +11,9 @@ export function Emph({ text }: { text: string }) {
   ))}</>;
 }
 
-export function Marked({ text, highlights }: { text: string; highlights?: string[] }) {
-  return <>{highlightRuns(text, highlights).map((r, i) => r.emphasis ? <mark key={i}>{r.text}</mark> : <span key={i}>{r.text}</span>)}</>;
+export function Marked({ text, highlights, zones, sentences }: { text: string; highlights?: string[]; zones?: string[]; sentences?: boolean }) {
+  const hs = sentences ? resolveHighlights(text, highlights, zones) : highlights;
+  return <>{highlightRuns(text, hs).map((r, i) => r.emphasis ? <mark key={i}>{r.text}</mark> : <span key={i}>{r.text}</span>)}</>;
 }
 
 export function StatusChip({ status, compact = false }: { status: RowStatus; compact?: boolean }) {
