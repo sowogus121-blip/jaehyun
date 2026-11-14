@@ -287,11 +287,11 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
     const ord = params[keys.mech]?.value as UseVerdict | undefined;
     const lhv = params[keys.lh]?.value as UseVerdict | undefined;
     if (ord === "prohibited") blockers.push("조례상 해당 용도 기계식주차 설치 불가");
-    else if (!ord) conditions.push("조례상 기계식 허용 근거 미확정: 기계식 0대(자주식)로 산정");
+    else if (!ord) conditions.push("검토요망: 조례상 기계식 제한 조항 미확인 — 제한 없는 것으로 보고 우선 반영 (조례·주차장법 시행규칙 기계식 설치기준 확인)");
     if (lh && lhv === "prohibited") blockers.push(`LH 기계식주차 인수 대상 아님${params[keys.lh]?.note ? ` (${String(params[keys.lh]!.note).replace(/^불가:\s*/, "").slice(0, 120)})` : ""}`);
     else if (lh && !lhv) conditions.push("LH 기계식 인수기준 미확정");
     if (lh && lhv !== "prohibited" && params.transitReview?.value === "review") conditions.push("검토요망: LH 기계식 — 역세권 경계 거리(500m 초과 50m 이내)로 우선 반영 · 출구 위치·LH 인정 확인");
-    if (ord && ord !== "prohibited" && !(lh && lhv === "prohibited")) {
+    if (ord !== "prohibited" && !(lh && lhv === "prohibited")) {
       const caps = [scenario.mechanicalShare, params.mechMaxPercent?.value as number | undefined, lh ? params.lhMechMaxPercent?.value as number | undefined : undefined]
         .filter((v): v is number => typeof v === "number");
       mechanicalCap = Math.min(...caps);
