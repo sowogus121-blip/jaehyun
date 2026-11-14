@@ -112,7 +112,8 @@ export function ordinanceTitleMatches(titleRaw: string, query: string, jurisdict
 }
 
 export async function searchOrdinance(query: string, oc: string, jurisdiction: string): Promise<OrdinanceRecord | null> {
-  const params = new URLSearchParams({ OC: oc, target: "ordin", type: "JSON", query, display: "10" });
+  // 광역 조례(예: '서울특별시 주차장 설치 및 관리 조례')는 자치구 조례 수십 건 뒤에 나올 수 있어 넉넉히 받는다.
+  const params = new URLSearchParams({ OC: oc, target: "ordin", type: "JSON", query, display: "100" });
   const data = await fetchJson(`https://www.law.go.kr/DRF/lawSearch.do?${params.toString()}`);
   const root = data?.OrdinSearch ?? data?.LawSearch;
   const resultCode = String(root?.resultCode ?? data?.resultCode ?? "");

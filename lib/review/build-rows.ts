@@ -485,7 +485,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     const tierKey = use === "apartment" ? "parkingApartmentTiers" : use === "urban" ? "parkingUrbanTiers" : "parkingOfficetelTiers";
     // 도시형생활주택(소형주택): 조례 별표가 도시형생활주택을 「주택건설기준」 제27조로 돌리거나 따로 정하지 않으면
     // 제27조제1항제2호(세대당 0.6대, 전용 30㎡ 미만 0.5대)를 적용한다. 단지형 연립·다세대는 공동주택 조례 구간.
-    if (use === "urban" && found && (found.rule.use !== "urban" || /도시형\s*생활주택[^.]{0,40}제27조/.test(found.rule.quote))) {
+    if (use === "urban" && found && /도시형\s*생활주택[^.]{0,60}주택건설기준[^.]{0,30}제27조/.test(found.rule.quote)) {
       const { annex } = found;
       return put({
         id,
