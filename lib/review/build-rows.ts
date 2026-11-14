@@ -484,14 +484,14 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     const tierKey = use === "apartment" ? "parkingApartmentTiers" : use === "urban" ? "parkingUrbanTiers" : "parkingOfficetelTiers";
     if (found) {
       const { rule, annex } = found;
-      const nums = (rule.tiers ?? []).flatMap((t) => [`${t.ratio}대`, ...(t.maxArea !== undefined ? [`${t.maxArea}제곱미터`] : [])]);
+      const nums = (rule.tiers ?? []).flatMap((t) => [...(t.ratio ? [`${t.ratio}대`] : []), ...(t.sqmPerStall ? [`${t.sqmPerStall}㎡당`] : []), ...(t.maxArea !== undefined ? [`${t.maxArea}제곱미터`, `${t.maxArea}㎡`] : [])]);
       return put({
         id,
-        content: (rule.tiers ? `${word}당 최소 ${describeTiers(rule.tiers, word)}` : "조례 별표 기준 (아래 원문)")
+        content: (rule.tiers ? describeTiers(rule.tiers, word) : "조례 별표 기준 (아래 원문)")
           + (rule.refHousingStd27 ? `\n「주택건설기준 등에 관한 규정」 제27조 산정 대수와 비교해 큰 값 적용` : "")
           + `\n원문: ${rule.quote.slice(0, 260)}${rule.quote.length > 260 ? "…" : ""}`,
         law: `${annex.title} ${annex.article.split(" · ")[0]}` + (rule.refHousingStd27 ? " · 주택건설기준 등에 관한 규정 제27조" : ""),
-        note: rule.tiers ? `별표 원문에서 자동 판독 · 규모검토에 ${word}당 최소대수로 반영` : "별표 문구에 구간 수치가 없어 원문 인용만 · 대수는 직접 입력",
+        note: rule.tiers ? `별표 원문에서 자동 판독 · 규모검토에서 타입별 전용면적으로 법정대수 산정` : "별표 문구에서 수치를 판독하지 못해 원문 인용만 · 대수는 직접 입력",
         status: rule.tiers ? "verified" : "candidate",
         params: rule.tiers ? { [tierKey]: rule.tiers } : undefined,
         sources: [

@@ -298,17 +298,27 @@ function RowEditor({ row, address, zone, isNew, onSave, onCancel, onDelete, onRe
   </div>;
 }
 
-/** 세대(호)당 최소주차 구간 입력: "30:0.5, 60:0.8, 1" = 전용 30㎡ 이하 0.5대 · 60㎡ 이하 0.8대 · 그 외 1대 */
+/** 주차기준 구간 입력: "<30:0.7, 60:0.9, 1" 또는 "85:1/70㎡, 1/65㎡"
+ *  상한(㎡, '<'면 미만):세대당 대수[/전용 ㎡당 1대]. 상한 없는 마지막 구간은 "대수[/㎡]" */
 function TierInput({ value, onChange }: { value?: ParkingTier[]; onChange: (v: ParkingTier[] | undefined) => void }) {
-  const text = (value ?? []).map((t) => t.maxArea !== undefined ? `${t.maxArea}:${t.ratio}` : String(t.ratio)).join(", ");
-  const [draft, setDraft] = useState(text);
-  return <input title="전용면적㎡ 이하:대수, … , 그 외 대수 (예: 30:0.5, 60:0.8, 1)" value={draft}
+  const fmt = (t: ParkingTier) => {
+    const rule = [t.ratio !== undefined ? String(t.ratio) : "", t.sqmPerStall ? `/${t.sqmPerStall}㎡` : ""].join("");
+    return t.maxArea !== undefined ? `${t.strict ? "<" : ""}${t.maxArea}:${rule}` : rule;
+  };
+  const [draft, setDraft] = useState((value ?? []).map(fmt).join(", "));
+  const parse = (x: string): ParkingTier | null => {
+    const [cond, rule] = x.includes(":") ? x.split(":") : ["", x];
+    const t: ParkingTier = {};
+    if (cond.trim()) { t.strict = cond.trim().startsWith("<") || undefined; t.maxArea = Number(cond.replace(/[<\s]/g, "")); }
+    const [ratio, sqm] = rule.split("/");
+    if (ratio?.trim()) t.ratio = Number(ratio.trim());
+    if (sqm) t.sqmPerStall = Number(sqm.replace(/[^\d.]/g, ""));
+    return (t.ratio !== undefined && Number.isFinite(t.ratio)) || t.sqmPerStall ? t : null;
+  };
+  return <input title="상한㎡:세대당 대수[/㎡당 1대] — 예: <30:0.7, 60:0.9, 1  또는  85:1/70㎡, 1/65㎡" value={draft}
     onChange={(e: { target: { value: string } }) => setDraft(e.target.value)}
     onBlur={() => {
-      const tiers = draft.split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
-        const [a, b] = x.split(":").map((y) => Number(y.trim()));
-        return b === undefined ? { ratio: a } : { maxArea: a, ratio: b };
-      }).filter((t) => Number.isFinite(t.ratio));
+      const tiers = draft.split(",").map((x) => x.trim()).filter(Boolean).map(parse).filter((t): t is ParkingTier => !!t);
       onChange(tiers.length ? tiers : undefined);
     }} />;
 }

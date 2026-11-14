@@ -530,8 +530,18 @@ export async function POST(request: NextRequest) {
       for (const topic of ORDINANCE_TOPICS.filter((t) => t.ordinance === subject)) {
         for (const found of findArticlesByKeyword(result.value, topic.terms, 2)) {
           if (collected.some((c) => c.title === ordinance.name && c.article === found.article && c.rowId === topic.rowId)) continue;
-          collected.push({ topic: topic.label, rowId: topic.rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article: found.article, text: found.text.slice(0, found.article.startsWith("별표") ? 8000 : 2500), kind: "ordinance" });
+          collected.push({ topic: topic.label, rowId: topic.rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article: found.article, text: found.text.slice(0, 2500), kind: "ordinance" });
         }
+      }
+      // ELIS에서 읽은 별표(HWP 등)는 키워드 개수 제한 없이 원문 전체를 붙인다.
+      const payload = result.value as { 별표?: Array<Record<string, string>>; ELIS별표?: Array<Record<string, string>> };
+      for (const annex of [...(payload.별표 ?? []), ...(payload.ELIS별표 ?? [])]) {
+        if (!annex?.별표내용) continue;
+        const rowId = subject === "주차장" ? "park.ordinance" : subject === "건축" ? "bld.setback" : subject === "도시계획" ? "plan.use" : null;
+        if (!rowId) continue;
+        const article = `별표 ${annex.별표번호} · ${annex.별표제목.replace(/^\[별표\s*\d+\]\s*/, "")}`;
+        if (collected.some((c) => c.title === ordinance.name && c.article === article)) continue;
+        collected.push({ topic: "조례 별표", rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article, text: annex.별표내용.slice(0, 12000), kind: "ordinance" });
       }
     });
   }

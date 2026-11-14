@@ -8,6 +8,8 @@ import { FEASIBILITY_LABEL, defaultScenario, runScenario, summaryRows, type Scen
 import { uid } from "@/lib/project/store";
 import { fmtNum } from "@/lib/report/format";
 import { Field, Num, Panel, StatusChip } from "./ui";
+import { describeTiers } from "@/lib/review/parking-rules";
+import type { ParkingTier } from "@/lib/review/types";
 
 export function useResults(project: Project) {
   const params = useMemo(() => resolveParams(project.rows), [project.rows]);
@@ -17,7 +19,7 @@ export function useResults(project: Project) {
 
 const VERDICT: Record<string, string> = { allowed: "허용", conditional: "조건부", prohibited: "불가" };
 const showValue = (v: unknown) => typeof v === "number" ? fmtNum(v)
-  : Array.isArray(v) ? (v as Array<{ maxArea?: number; ratio: number }>).map((t) => t.maxArea !== undefined ? `${t.maxArea}㎡↓ ${t.ratio}` : `그 외 ${t.ratio}`).join(" · ")
+  : Array.isArray(v) ? describeTiers(v as ParkingTier[], "세대")
   : VERDICT[String(v)] ?? String(v);
 
 export function MassingView({ project, onChange, onGoLegal }: { project: Project; onChange: (p: Project) => void; onGoLegal: (rowId?: string) => void }) {
