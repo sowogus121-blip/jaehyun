@@ -108,7 +108,11 @@ export default function Home() {
         onDelete={(id) => { setProjects((list) => list.filter((x) => x.id !== id)); if (currentId === id) setCurrentId(null); }}
         onImport={(text) => { try { const p = importProjectJson(text); upsert(p); setCurrentId(p.id); setView("legal"); setToast("프로젝트를 불러왔습니다."); } catch (e) { setToast(e instanceof Error ? e.message : "불러오기 실패"); } }} />}
       {view === "legal" && project && <LegalView project={project} onChange={change} refreshing={refreshing} onRefresh={() => runReview(project)} onUpload={upload} />}
-      {view === "massing" && project && <MassingView project={project} onChange={(p) => change(p)} onGoLegal={() => setView("legal")} />}
+      {view === "massing" && project && <MassingView project={project} onChange={(p) => {
+        // 규모검토에서 새 용도(예: 도시형생활주택) 대안을 만들면 법규검토 대상 용도에도 넣고 행(주차기준 등)을 다시 만든다.
+        const extra = [...new Set(p.scenarios.map((s) => s.use))].filter((u) => !p.site.uses.includes(u));
+        change(extra.length ? { ...p, site: { ...p.site, uses: [...p.site.uses, ...extra] } } : p, extra.length > 0);
+      }} onGoLegal={() => setView("legal")} />}
       {view === "output" && project && <OutputView project={project} notify={setToast} />}
     </main>
     {toast && <div className="toast" role="status">{toast}</div>}
