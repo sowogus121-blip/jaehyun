@@ -81,8 +81,11 @@ export function MassingView({ project, onChange, onGoLegal }: { project: Project
     <Panel title="대안별 건축개요 비교" sub="설계도서 이전 개략 검토값 · 법규상 최대 연면적과 계획 가능 연면적을 구분합니다."
       actions={<>
         <button className="btn" onClick={() => setShowAssumptions((v) => !v)}>설계 가정값 {showAssumptions ? "닫기" : "보기"}</button>
-        {farOptions.length > 0 && <button className="btn primary" onClick={addFarScenarios} title={farOptions.map((o) => `${o.far}% ${o.label}`).join(" / ")}>+ 완화 용적률 단계별 대안 ({farOptions.map((o) => o.far + "%").join("·")})</button>}
-        {(["apartment", "urban", "officetel"] as UseKind[]).map((u) => <button key={u} className="btn" onClick={() => addScenario(u)}>+ {USE_SHORT[u]}</button>)}
+        <select className="add-menu" value="" onChange={(e: { target: { value: string } }) => { const v = e.target.value; if (v === "far") addFarScenarios(); else if (v) addScenario(v as UseKind); }}>
+          <option value="">+ 대안 추가</option>
+          {(["apartment", "urban", "officetel"] as UseKind[]).map((u) => <option key={u} value={u}>{USE_SHORT[u]} 대안</option>)}
+          {farOptions.length > 0 && <option value="far">완화 용적률 단계별 ({farOptions.map((o) => o.far + "%").join("·")})</option>}
+        </select>
       </>}>
       {showAssumptions && <div className="assumptions">
         {([

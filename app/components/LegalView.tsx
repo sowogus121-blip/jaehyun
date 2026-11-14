@@ -67,15 +67,14 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
           </select>
         </Field>
         <Field label="공급유형"><div className="checks">{(Object.keys(SUPPLY_LABEL) as LhSupply[]).map((s) => <label key={s}><input type="checkbox" checked={project.site.supplies.includes(s)} onChange={() => setSite({ supplies: project.site.supplies.includes(s) ? project.site.supplies.filter((x) => x !== s) : [...project.site.supplies, s] })} />{SUPPLY_LABEL[s]}</label>)}</div></Field>
-        <Field label="0.3대 특례 입지"><label className="inline"><input type="checkbox" checked={Boolean(project.site.transitWithin500m)} onChange={(e: { target: { checked: boolean } }) => setSite({ transitWithin500m: e.target.checked })} />역 출구·대학 교문 500m 이내 확인</label>
-          {(project.review?.transit?.planned ?? []).length > 0 && <label className="inline"><input type="checkbox" checked={project.site.countPlannedStations !== false} onChange={(e: { target: { checked: boolean } }) => setSite({ countPlannedStations: e.target.checked })} />개통 예정역 포함 ({project.review!.transit!.planned!.map((p) => `${p.name} ${p.distance}m · ${p.openingYear ?? "?"}년 예정`).join(", ")}) · LH 인정 여부 확인 필요</label>}
-        </Field>
+        <Field label="역세권 입지 (500m)"><TransitSummary project={project} setSite={setSite} /></Field>
       </div>
-      {project.review && (project.review.missing.length > 0 || project.review.errors.length > 0) && <div className="alert">
+      {project.review && (project.review.missing.length > 0 || project.review.errors.length > 0) && <details className="alert compact">
+        <summary>조회 알림 {project.review.missing.length + project.review.errors.length}건 <small>(대체 출처로 확보한 항목 포함 · 펼쳐서 확인)</small></summary>
         {project.review.missing.length > 0 && <p><b>서버 환경변수 미설정{project.review.deployEnv ? ` (${project.review.deployEnv} 배포)` : ""}:</b> {project.review.missing.join(", ")} — 해당 공식자료는 자동 조회되지 않았습니다.
           {project.review.deployEnv === "preview" && <> Vercel → Settings → Environment Variables에서 이 키들의 적용 환경에 <b>Preview</b>를 체크한 뒤 재배포하세요.</>}</p>}
         {project.review.errors.map((e, i) => <p key={i}>{e}</p>)}
-      </div>}
+      </details>}
       {!project.review && <div className="alert info"><p>아직 공식자료를 조회하지 않았습니다. <b>공식자료 다시 조회</b>를 누르세요.</p></div>}
     </Panel>
 
@@ -104,6 +103,26 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
   </div>;
 }
 
+function TransitSummary({ project, setSite }: { project: Project; setSite: (patch: Partial<Project["site"]>) => void }) {
+  const t = project.review?.transit;
+  const row = project.rows.find((r) => r.id === "park.lh03");
+  const tv = row?.params?.transitReview;
+  const label = project.site.transitWithin500m ? ["ok", "충족 (검토자 확인)"] : tv === "within" ? ["ok", "충족"] : tv === "review" ? ["review", "검토요망 (경계 50m)"] : tv === "outside" ? ["bad", "미충족"] : ["muted", t ? "판정 불가" : "조회 전"];
+  const near = [
+    t?.station ? `${t.station.name.replace(/\s*\d+번\s*출(입)?구$/, "")} ${t.station.distance}m` : "",
+    ...(t?.planned ?? []).map((p) => `${p.name}(예정·${p.openingYear ?? "?"}) ${p.distance}m`),
+    t?.university ? `${t.university.name} ${t.university.distance}m` : "",
+  ].filter(Boolean);
+  return <div className="transit-sum">
+    <span className={`tv tv-${label[0]}`}>{label[1]}</span>
+    {near.length > 0 && <small>{near.join(" · ")}</small>}
+    <div className="tv-opts">
+      <label><input type="checkbox" checked={Boolean(project.site.transitWithin500m)} onChange={(e: { target: { checked: boolean } }) => setSite({ transitWithin500m: e.target.checked })} />검토자 확인</label>
+      {(t?.planned ?? []).length > 0 && <label title="개통 예정역도 거리 판정에 포함 (LH 인정 여부는 지역본부 확인)"><input type="checkbox" checked={project.site.countPlannedStations !== false} onChange={(e: { target: { checked: boolean } }) => setSite({ countPlannedStations: e.target.checked })} />예정역 포함</label>}
+    </div>
+  </div>;
+}
+
 const SOURCE_LABEL: Record<SourceState, string> = { ok: "정상", alt: "대체", fail: "실패", na: "해당없음" };
 function SourceStrip({ project }: { project: Project }) {
   const list = useMemo(() => sourceStatuses(project), [project]);
@@ -118,10 +137,11 @@ function SourceStrip({ project }: { project: Project }) {
 function ChecklistPanel({ project, refreshing, onRefresh, onJump }: { project: Project; refreshing: boolean; onRefresh: () => void; onJump: (rowId: string) => void }) {
   const groups = useMemo(() => buildChecklist(project), [project]);
   const sum = checklistSummary(groups);
-  const [open, setOpen] = useState(true);
-  return <Panel title="규모검토 필요자료" sub={`대상지 조회 시 자동 수집 · 확보 ${sum.ok} / 일부 ${sum.partial} / 미확보 ${sum.missing} / 직접 확인 ${sum.manual}`}
-    actions={<><button className="btn" onClick={onRefresh} disabled={refreshing}>{refreshing ? "수집 중…" : "자료 다시 수집"}</button><button className="btn" onClick={() => setOpen((v) => !v)}>{open ? "접기" : "펼치기"}</button></>}>
-    {open && <SourceStrip project={project} />}
+  const [open, setOpen] = useState(false);
+  void refreshing; void onRefresh;
+  return <Panel title="자료 수집 현황" sub={`확보 ${sum.ok} · 일부 ${sum.partial} · 미확보 ${sum.missing} · 직접 확인 ${sum.manual} — 항목을 누르면 법규검토표 해당 행으로 이동`}
+    actions={<button className="btn" onClick={() => setOpen((v) => !v)}>{open ? "항목 접기" : "항목 펼치기"}</button>}>
+    <SourceStrip project={project} />
     {open && <div className="checklist">
       {groups.map((g) => <div className="check-group" key={g.title}>
         <h4>{g.title}</h4>
@@ -159,9 +179,9 @@ export function LegalTable({ rows, selected, onSelect, print = false }: { rows: 
           {!row.sub && <th colSpan={2} className="g">{row.group}</th>}
           {row.sub && !continued && <th rowSpan={span} className="g">{row.group}</th>}
           {row.sub && <th className="g sub">{row.sub}</th>}
-          <td className="content"><Emph text={content} /></td>
+          <td className="content"><div className={selected === row.id || print ? "" : "clamp"}><Emph text={content} /></div></td>
           <td className="law">{row.law.split("\n").map((l, k) => <span className="line" key={k}>{l}</span>)}</td>
-          <td className="note">{/^(불가:[^·]*·\s*)?검토요망/.test(row.note) && <span className="review-flag">검토요망</span>} <Emph text={row.note} />{print && row.status === "candidate" && <span className="line flag">※ 원문 대조 필요</span>}</td>
+          <td className="note"><div className={selected === row.id || print ? "" : "clamp"}>{/^(불가:[^·]*·\s*)?검토요망/.test(row.note) && <span className="review-flag">검토요망</span>} <Emph text={row.note} /></div>{print && row.status === "candidate" && <span className="line flag">※ 원문 대조 필요</span>}</td>
           {!print && <td className="status"><StatusChip status={row.status} compact />{row.sources.length > 0 && <small>{row.sources.length}건</small>}{row.edited && <small className="edited">수정</small>}</td>}
         </tr>;
       })}
