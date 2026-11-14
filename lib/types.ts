@@ -332,7 +332,14 @@ export interface SiteReviewResult {
       sourceUrl: string;
       landingPage: string | null;
       status: "analyzed" | "link-only" | "failed";
-      format: "pdf" | "hwpx" | "xlsx" | null;
+      format: "pdf" | "hwpx" | "xlsx" | "html" | null;
+      /** 토지이음 고시: 고시문 본문·첨부 텍스트 (근거 부록용) */
+      text?: string;
+      gosiNo?: string;
+      gosiDate?: string | null;
+      agency?: string;
+      siteMention?: boolean;
+      attachments?: Array<{ name: string; analyzed: boolean; pages: number | null }>;
       textLength: number;
       pageCount: number | null;
       preview: string;

@@ -278,3 +278,34 @@ describe("운영 서버 실데이터 회귀 (2026-11-14 수도권 시뮬레이�
     expect(p.rows.find((r) => r.id === "zone.minor")?.content).toContain("절대보호구역");
   });
 });
+
+import { eucKrEncode, parseGosiList, parseGosiDetail, scoreGosi } from "../lib/server/eum-gosi";
+describe("토지이음 고시정보 자동 수집", () => {
+  it("검색어를 EUC-KR로 인코딩한다", () => {
+    expect(eucKrEncode("분당 지구단위")).toBe("%BA%D0%B4%E7+%C1%F6%B1%B8%B4%DC%C0%A7");
+  });
+  const list = `<tr class="center"> <td class="mb">2026-06-15</td> <td class="left mb" title="경기도 성남시 고시 제2026-121호"> 경기도 성남시 고시 제2026-121호 </td> <td class="left"> <a href='gvGosiDet.jsp?seq=638968&pageNo=1&zonenm=분당' title='성남 도시관리계획(학교, 주차장, 녹지, 분당지구단위계획) 결정(변경) 및 지형도면 고시' > [변경] … </a> </td> <td class="left mb" title="경기도 성남시 도시주택국 도시계획과">경기도 성남시 도시주택국 도시계획과</td> </tr>
+  <tr class="center"> <td class="mb">2026-06-01</td> <td class="left mb" title="경기도 성남시 고시 제2026-90호"> x </td> <td class="left"> <a href='gvGosiDet.jsp?seq=638971' title='성남 도시관리계획(위례지구단위계획)결정(변경) 및 지형도면 고시' >x</a></td><td class="left mb" title="경기도 성남시">x</td></tr>
+  <tr class="center"> <td class="mb">2026-05-01</td> <td class="left mb" title="경기도 성남시 공고 제2026-1호"> x </td> <td class="left"> <a href='gvGosiDet.jsp?seq=638000' title='성남 도시관리계획(분당지구단위계획) 결정(변경)(안) 주민의견 청취 공람 공고' >x</a></td><td class="left mb" title="경기도 성남시">x</td></tr>`;
+  it("목록에서 고시번호·고시일·제목을 읽고 대상지 관련도로 순위를 매긴다", () => {
+    const rows = parseGosiList(list);
+    expect(rows[0]).toMatchObject({ seq: "638968", date: "2026-06-15", gosiNo: "경기도 성남시 고시 제2026-121호" });
+    const ctx = { sggCd: "41135", dong: "정자동", lot: "178-1", planNames: ["분당", "정자"], renewal: true };
+    const scores = rows.map((r) => scoreGosi(r, ctx));
+    expect(scores[0]).toBeGreaterThan(scores[1]); // 분당 > 위례
+    expect(scores[2]).toBe(0); // 공람 공고는 결정 전이라 제외
+  });
+  it("상세 화면에서 고시문 본문과 첨부 목록을 읽는다", () => {
+    const html = `<thead> <tr> <th scope="row" colspan="4">성남 도시관리계획(분당지구단위계획) 결정(변경) 고시</th></tr></thead>
+    <th class="bg" scope="row">고시번호</th> <td class="left" colspan="3">경기도 성남시 고시 제2026-121호</td>
+    <th class="bg" id="tb1_cel_4_1">고시일</th> <td class="left" headers="tb1_cel_4_1"> 2026-06-15 </td>
+    <a href="javascript:download('/web/FileDownload.do', '/2026/08/03/630000/638968/고시문(게재용).pdf')">고시문</a>
+    <a href="javascript:download('/web/FileDownload.do', '/x/고시문_1.hwp')">hwp</a>
+    <div class="edit_view"><p>1. 정자동 178-1번지 일원 분당 지구단위계획 결정(변경)</p><p>용적률 400% 이하</p></div> 목록으로`;
+    const d = parseGosiDetail(html, "638968");
+    expect(d.gosiNo).toBe("경기도 성남시 고시 제2026-121호");
+    expect(d.date).toBe("2026-06-15");
+    expect(d.attachments.map((a) => a.ext)).toEqual(["pdf", "hwp"]);
+    expect(d.body).toContain("용적률 400% 이하");
+  });
+});

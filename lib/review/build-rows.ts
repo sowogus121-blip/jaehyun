@@ -290,7 +290,10 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
         : "구역 포함만으로 획지 기준을 적용하지 않음. 결정도에서 획지번호 확인 후 입력",
       status: site.blockNo ? "user" : "candidate",
       missing: site.blockNo ? undefined : "해당 필지의 획지번호",
-      sources: planDocs.map((d) => ({ title: d.title, url: d.sourceUrl, excerpt: d.preview, kind: "plan" as const })),
+      sources: planDocs.filter((d) => d.status === "analyzed").slice(0, 4).map((d) => ({
+        title: d.title, noticeNo: d.gosiNo, effectiveDate: d.gosiDate ?? undefined,
+        url: d.sourceUrl, excerpt: (d.text ?? d.preview).slice(0, 4000), verbatim: !!d.gosiNo, kind: "plan" as const,
+      })),
     });
   }
 
