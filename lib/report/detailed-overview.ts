@@ -172,7 +172,9 @@ export function buildDetailedOverview(project: Project, r: ScenarioResult, extra
   set("I67", (mainTotal + amenTotal) / total);
   set("K59", "■ 근린생활시설 (계획 없음)");
 
-  return { name: s.name.replace(/[\\/?*[\]:]/g, " ").slice(0, 28), cells, notes };
+  // 시트 이름: "공동주택 400%" 처럼 짧게 (엑셀 31자 제한)
+  const short = `${USE_SHORT[s.use]} ${r.farMode === "base" ? "기본" : `${r.farApplied ?? ""}%`}${s.parking === "mixed" ? " 기계식" : ""}${s.apply03 ? " 0.3대" : ""}`;
+  return { name: short.replace(/[\\/?*[\]:]/g, " ").slice(0, 28), cells, notes };
 }
 
 /** 주차 기준 문구 (개요표 주차장 '법규' 칸) */

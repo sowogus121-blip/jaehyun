@@ -29,6 +29,10 @@ export async function POST(request: NextRequest) {
         const cell = ws.getCell(addr);
         cell.value = value === null ? null : value;
       }
+      // 비고 칸은 줄바꿈 표시
+      const remark = ws.getCell("C48");
+      remark.alignment = { ...(remark.alignment ?? {}), wrapText: true, vertical: "top", horizontal: "left" };
+      remark.font = { ...(remark.font ?? {}), size: 9 };
     });
     wb.removeWorksheet(template.id);
     wb.calcProperties = { fullCalcOnLoad: true };
