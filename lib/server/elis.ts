@@ -141,7 +141,7 @@ function koreaToday() {
  * 본문을 읽는다. 검색 결과가 시행예정(예) 이력이면 연혁에서 오늘 기준 현행 이력으로 바꿔 다시 읽는다.
  * 돌려주는 histNo/enforcementDate 가 실제 읽은 판본이다.
  */
-export async function fetchOrdinanceElis(alrNo: string, histNo: string, today = koreaToday(), subject: string | null = null) {
+export async function fetchOrdinanceElis(alrNo: string, histNo: string, today = koreaToday(), subject: string | null = null, zones: string[] = []) {
   let { text } = await timed(elisLink(alrNo, histNo), {}, 15_000);
   let parsed = parseElisBody(text);
   const inForce = parsed.history.filter((h) => h.alrNo === alrNo && h.enforcementDate <= today)
@@ -158,7 +158,7 @@ export async function fetchOrdinanceElis(alrNo: string, histNo: string, today = 
   const annexes: Array<Record<string, string>> = [];
   const annexErrors: string[] = [];
   if (subject) {
-    for (const a of pickAnnexes(parseElisAnnexList(text), subject)) {
+    for (const a of pickAnnexes(parseElisAnnexList(text), subject, zones)) {
       try {
         const body = await fetchElisAnnexText(alrNo, used, a.sn);
         if (body.trim()) annexes.push({ 별표번호: String(Number(a.sn)), 별표제목: a.title, 별표내용: body.slice(0, 20_000) });
@@ -201,9 +201,13 @@ async function timedRaw(url: string, ms = 15_000) {
 }
 
 /** 주제별로 필요한 별표만 고른다 (예: 주차장 조례 → 부설주차장 설치기준, 설치제한 기준). */
-export function pickAnnexes(list: ElisAnnex[], subject: string): ElisAnnex[] {
+export function pickAnnexes(list: ElisAnnex[], subject: string, zones: string[] = []): ElisAnnex[] {
+  if (subject === "도시계획" && zones.length) {
+    const z = zones.map((x) => x.replace(/\s+/g, ""));
+    return list.filter((a) => z.some((name) => a.title.replace(/\s+/g, "").includes(name))).slice(0, 3);
+  }
   const want = subject === "주차장" ? /부설주차장.*(설치기준|설치대상)|설치제한|기계식/
-    : subject === "건축" ? /대지\s*안의\s*공지|대지안의\s*공지|공개\s*공지|조경|일조|높이/
+    : subject === "건축" ? /대지\s*안?의\s*공지(?!.*(안내판|관리대장))/
     : subject === "도시계획" ? /용도지역|건축제한|건축할\s*수|용적률|건폐율/
     : null;
   return want ? list.filter((a) => want.test(a.title)).slice(0, 3) : [];

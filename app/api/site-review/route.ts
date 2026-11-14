@@ -485,10 +485,11 @@ export async function POST(request: NextRequest) {
     // 본문: 국가법령정보센터 레코드는 DRF 본문, 실패하면 같은 조례를 ELIS에서 읽는다. ELIS 레코드는 바로 ELIS.
     const subjectOf = (name: string) => name.includes("주차장") ? "주차장" : name.includes("도시계획") ? "도시계획" : name.replace(/\s+/g, "").endsWith("건축조례") ? "건축" : null;
     const annexNotes: string[] = [];
+    const zoneNames = landUse.filter((l) => l.category === "용도지역").map((l) => l.name);
     const readBody = async (ordinance: OrdinanceRecord): Promise<unknown> => {
       const subject = subjectOf(ordinance.name);
       if (ordinance.source === "elis" && ordinance.elis) {
-        const got = await fetchOrdinanceElis(ordinance.elis.alrNo, ordinance.elis.histNo, undefined, subject);
+        const got = await fetchOrdinanceElis(ordinance.elis.alrNo, ordinance.elis.histNo, undefined, subject, zoneNames);
         ordinance.elis.histNo = got.histNo;
         ordinance.link = got.link;
         ordinance.enforcementDate = got.enforcementDate ?? ordinance.enforcementDate;
@@ -501,7 +502,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         const alt = await searchOrdinanceElis(ordinance.name, ordinance.localGovernment ?? localGovernment).catch(() => null);
         if (!alt?.elis) throw error;
-        const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo, undefined, subject);
+        const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo, undefined, subject, zoneNames);
         Object.assign(ordinance, { source: "elis", elis: { alrNo: alt.elis.alrNo, histNo: got.histNo }, link: got.link, enforcementDate: got.enforcementDate ?? ordinance.enforcementDate });
         if (!lawSources.length) lawSources.push("ELIS 자치법규정보시스템(국가법령정보센터 대체)");
         annexNotes.push(...got.annexErrors);
@@ -512,7 +513,7 @@ export async function POST(request: NextRequest) {
         try {
           const alt = await searchOrdinanceElis(ordinance.name, ordinance.localGovernment ?? localGovernment);
           if (alt?.elis) {
-            const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo, undefined, subject);
+            const got = await fetchOrdinanceElis(alt.elis.alrNo, alt.elis.histNo, undefined, subject, zoneNames);
             annexNotes.push(...got.annexErrors);
             if (got.payload.별표.length) return { ...(payload as object), ELIS별표: got.payload.별표 };
           }
@@ -561,6 +562,10 @@ export async function POST(request: NextRequest) {
         if (!annex?.별표내용) continue;
         const rowId = subject === "주차장" ? "park.ordinance" : subject === "건축" ? "bld.setback" : subject === "도시계획" ? "plan.use" : null;
         if (!rowId) continue;
+        // 도시계획 조례 별표는 대상지 용도지역 것만 (예: 준공업지역 → 별표 12·17), 건축 조례는 대지 안의 공지만
+        const annexTitle = String(annex.별표제목 ?? "").replace(/\s+/g, "");
+        if (subject === "도시계획" && !landUse.some((l) => l.category === "용도지역" && annexTitle.includes(l.name.replace(/\s+/g, "")))) continue;
+        if (subject === "건축" && !/대지안?의공지/.test(annexTitle)) continue;
         const article = `별표 ${annex.별표번호} · ${annex.별표제목.replace(/^\[별표\s*\d+\]\s*/, "")}`;
         if (collected.some((c) => c.title === ordinance.name && c.article === article)) continue;
         collected.push({ topic: "조례 별표", rowId, title: ordinance.name, url: ordinance.link, effectiveDate: ordinance.enforcementDate, article, text: annex.별표내용.slice(0, 12000), kind: "ordinance" });
