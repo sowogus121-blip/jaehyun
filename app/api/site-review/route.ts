@@ -252,6 +252,10 @@ async function getParcelInfo(x: string, y: string, key: string, domain: string) 
   return null;
 }
 
+export const runtime = "nodejs";
+// 국내 공공 시스템(법령·ELIS·VWorld) 접근 안정성: 서울 리전 우선
+export const preferredRegion = "icn1";
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as { address?: string; parcelAddresses?: string[]; businessMode?: string; regionalOffice?: string; lhSupplyType?: string } | null;
   const address = body?.address?.trim();
