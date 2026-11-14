@@ -156,7 +156,11 @@ async function extractUnverifiedLhPdfClauses(pdfUrl:string):Promise<NonNullable<
   // truncate to the first 14 generic clauses (mostly type/size conditions).
   const ranked=analysis.candidates.filter(c=>/매입약정|전용|주차|기계식|청년|신혼|의무|완화|커뮤니티|용적률|건폐율|주택/.test(c.quote));
   ranked.sort((a,b)=>Number(/주차|기계식|0[.]3|승강기|카리프트|역세권/.test(b.quote))-Number(/주차|기계식|0[.]3|승강기|카리프트|역세권/.test(a.quote)));
-  return ranked.slice(0,55).map(c=>({topic:c.topic,quote:c.quote,value:c.value,unit:c.unit,page:c.page,verified:false as const}));
+  // 주차 문구가 앞을 다 차지하지 않도록 평면(전용면적·호수)·커뮤니티 문구를 따로 확보한다.
+  const plan=ranked.filter(c=>/전용\s*(면적\s*)?\d|\d+\s*(호|세대)\s*이상|\d\s*룸|방\s*\d/.test(c.quote)&&!/주차|기계식/.test(c.quote)).slice(0,12);
+  const comm=ranked.filter(c=>/커뮤니티|관리사무소|경비실/.test(c.quote)).slice(0,6);
+  const picked=[...new Set([...ranked.slice(0,45),...plan,...comm])];
+  return picked.slice(0,65).map(c=>({topic:c.topic,quote:c.quote,value:c.value,unit:c.unit,page:c.page,verified:false as const}));
 }
 
 export async function findLatestLhPurchaseNotice(district:string,regionContext=""):Promise<LhNotice|null> {
