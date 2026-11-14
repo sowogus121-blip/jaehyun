@@ -59,8 +59,13 @@ async function timed(url: string, init: RequestInit = {}, ms = 10_000) {
   return response;
 }
 async function getHtml(url: string) {
+  return (await getHtmlWithCookie(url)).html;
+}
+async function getHtmlWithCookie(url: string) {
   const response = await timed(url);
-  return new TextDecoder("euc-kr").decode(await response.arrayBuffer());
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  const cookie = (headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
+  return { html: new TextDecoder("euc-kr").decode(await response.arrayBuffer()), cookie };
 }
 
 // ───────── 목록 ─────────
@@ -118,11 +123,13 @@ export function gosiUrl(seq: string) {
   return `${BASE}/web/gs/gv/gvGosiDet.jsp?seq=${seq}`;
 }
 
-async function downloadAttachment(seq: string, path: string): Promise<Uint8Array> {
-  const body = new URLSearchParams({ file: path, gosi: "Y", seq, mobile_yn: "" });
+async function downloadAttachment(seq: string, path: string, cookie = ""): Promise<Uint8Array> {
+  // 토지이음 다운로드는 파일 경로를 EUC-KR로 보내야 한다(UTF-8이면 HTTP 500).
+  const body = `file=${eucKrEncode(path).replace(/%2F/g, "/")}&gosi=Y&seq=${seq}&mobile_yn=`;
   const response = await timed(`${BASE}/web/FileDownload.do`, {
-    method: "POST", body: body.toString(),
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Referer: gosiUrl(seq) },
+    method: "POST", body,
+    // 첨부 다운로드는 상세 화면 세션(JSESSIONID)이 있어야 500이 나지 않는다.
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Referer: gosiUrl(seq), ...(cookie ? { Cookie: cookie } : {}) },
   }, 15_000);
   const length = Number(response.headers.get("content-length") || 0);
   if (length > MAX_FILE) throw new Error("첨부 용량 제한 초과");
@@ -187,6 +194,11 @@ export function scoreGosi(row: GosiListRow, ctx: EumSearchContext): number {
   const otherPlan = t.match(/([가-힣0-9]{2,12})(?:지구)?지구단위계획/)?.[1];
   if (otherPlan && names.length && !names.some((n) => otherPlan.includes(n) || n.includes(otherPlan)) && !(ctx.dong && t.includes(ctx.dong))) score -= 8;
   if (/결정|변경|지형도면/.test(t)) score += 2;
+  // 다른 지번을 명시한 고시(예: '정자동 147번지')는 대상지와 무관할 가능성이 커서 감점.
+  if (ctx.dong && ctx.lot && score < 30 && new RegExp(`${ctx.dong}(?:산)?\\d+`).test(t)) score -= 10;
+  // 최신 고시 우선 (2016년 이후 1년당 1점, 최대 10점)
+  const year = Number(row.date?.slice(0, 4) ?? 0);
+  if (year) score += Math.min(10, Math.max(0, year - 2016));
   return Math.max(score, 0);
 }
 
@@ -198,7 +210,8 @@ async function analyzeGosi(row: GosiListRow, ctx: EumSearchContext): Promise<Eum
     siteMatchVerified: false, applicable: false,
   };
   try {
-    const detail = parseGosiDetail(await getHtml(url), row.seq);
+    const page = await getHtmlWithCookie(url);
+    const detail = parseGosiDetail(page.html, row.seq);
     const parts: string[] = [];
     const attachments: NonNullable<EumPlanDocument["attachments"]> = [];
     let pages = 0;
@@ -210,7 +223,7 @@ async function analyzeGosi(row: GosiListRow, ctx: EumSearchContext): Promise<Eum
       .slice(0, 2);
     for (const file of files) {
       try {
-        const data = await downloadAttachment(row.seq, file.path);
+        const data = await downloadAttachment(row.seq, file.path, page.cookie);
         const magicOk = file.ext === "pdf" ? data[0] === 0x25 && data[1] === 0x50 : data[0] === 0x50 && data[1] === 0x4b;
         if (!magicOk) throw new Error("첨부 형식 불일치");
         const parsed = await extractDocumentText(data, file.ext as "pdf" | "hwpx", 8_000);
