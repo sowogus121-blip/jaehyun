@@ -1,0 +1,29 @@
+name: Production regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: "대상지 주소 (| 구분, 비우면 기본 샘플)"
+        required: false
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx vitest run --config regression/vitest.config.ts
+        env:
+          REGRESSION_BASE: https://lh-plan-lab.vercel.app
+          REGRESSION_SITES: ${{ github.event.inputs.sites }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-report
+          path: regression-report.md
