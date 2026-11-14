@@ -320,8 +320,11 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const useArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건축제한", "용도지역 안에서의 건축제한", "건축제한"]);
   // 용도지역 별표(조례): '건축할 수 없는 건축물' 목록에 공동주택·오피스텔이 있는지로 판정
   const useAnnex = (review?.collected ?? []).find((c) => c.rowId === "plan.use" && c.article.startsWith("별표") && zoneName && c.text.replace(/\s+/g, "").includes(zoneName.replace(/\s+/g, "")));
-  const annexBan = useAnnex ? /없는\s*건축물/.test(useAnnex.article + useAnnex.text.slice(0, 200)) : null;
-  const annexHit = (re: RegExp) => useAnnex ? sentencesOf("plan.use", re, 2).filter((x) => x.src === useAnnex).map((x) => x.line) : [];
+  // 별표 제목으로 판단: '건축할 수 있는 건축물'이면 목록에 있으면 허용, '건축할 수 없는 건축물'이면 목록에 있으면 제한
+  const annexTitle = useAnnex ? (useAnnex.article + " " + useAnnex.text.slice(0, 120)).replace(/\s+/g, "") : "";
+  const annexBan = useAnnex ? (/있는건축물/.test(annexTitle) ? false : /없는건축물/.test(annexTitle) ? true : null) : null;
+  // 별표 본문 안에서만 찾는다 (다른 조문 문장이 먼저 잡혀 '없음'으로 오판하지 않게)
+  const annexHit = (re: RegExp) => useAnnex ? useAnnex.text.replace(/\r/g, "").split(/\n+|(?=\s\d{1,2}\.\s)|(?=\s[가-하]\.\s)/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 4 && re.test(l)).slice(0, 2).map((l) => l.slice(0, 200)) : [];
   const aptHit = annexHit(/공동주택/), offHit = annexHit(/업무시설|오피스텔/);
   const verdictOf = (hit: string[]) => annexBan === null ? undefined : annexBan ? (hit.length ? "conditional" as const : "allowed" as const) : hit.length ? "allowed" as const : "prohibited" as const;
   const commercial = !useAnnex && zoneName ? (/유통상업/.test(zoneName) ? "dist" : /(중심|일반|근린)상업/.test(zoneName) ? "comm" : null) : null;
@@ -515,9 +518,10 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   };
   lawRow("type.urban", /(주거전용면적|욕실|부엌|지하층|300세대|소형\s*주택|단지형)/, "도시형생활주택(소형주택·단지형 연립·다세대) 요건: 300세대 미만, 소형주택은 전용 60㎡ 이하·욕실·부엌·지하층 세대 미설치",
     "주택법 제2조제20호, 시행령 제10조", "도시형생활주택 대안은 이 요건을 충족해야 주차(제27조제1항제2호)·부대시설 완화 적용");
-  const approvalLines = sentencesOf("type.approval", /\d+\s*(세대|호)\s*(이상|이하)/, 4);
-  const approvalN = Number(approvalLines.map((x) => x.line.match(/공동주택[^.]{0,30}?(\d+)\s*세대/)?.[1]).find(Boolean) ?? NaN);
-  lawRow("type.approval", /\d+\s*(세대|호)\s*(이상|이하)/, "공동주택 30세대(도시형생활주택 등 일부 50세대) 이상: 주택법 사업계획승인 대상",
+  const approvalRe = /(단독주택|공동주택|도시형\s*생활주택|소형\s*주택)[^.]{0,40}?\d+\s*(세대|호)/;
+  const approvalLines = sentencesOf("type.approval", approvalRe, 4);
+  const approvalN = Number(approvalLines.map((x) => x.line.match(/공동주택[^.]{0,20}?(\d+)\s*세대/)?.[1]).find(Boolean) ?? NaN);
+  lawRow("type.approval", approvalRe, "공동주택 30세대(도시형생활주택 등 일부 50세대) 이상: 주택법 사업계획승인 대상",
     "주택법 제15조, 시행령 제27조", "규모검토 세대수가 기준 이상이면 사업계획승인(주택건설기준 전면 적용), 미만이면 건축허가",
     Number.isFinite(approvalN) ? { params: { approvalThreshold: approvalN } } : {});
   lawRow("bld.noise", /(데시벨|dB|소음)/, "공동주택 소음: 실외소음도 65데시벨 미만 확보 (도로·철도변 방음시설·이격)",

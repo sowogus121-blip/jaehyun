@@ -59,6 +59,8 @@ describe("운영 회귀검토", () => {
       }
       log(`- 지정·상위계획: 용도지역지구 ${(data.landUse ?? []).map((l) => `${l.category}:${l.name}`).join(", ")} · 토지이용계획 ${(data.siteFacts?.designations ?? []).map((d) => `${d.name}(${d.conflict ?? ""})`).join(", ")} · 지구단위 ${data.districtPlan ? "있음" : "없음"}`);
       for (const r of rows) log(`  · ROW ${r.id} [${r.status}] ${r.group}${r.sub ? "/" + r.sub : ""} | ${short(r.content, 150)} | 비고: ${short(r.note, 150)}${r.missing ? " | 누락: " + r.missing : ""}`);
+      for (const id of ["park.apartment", "plan.use"]) { const r = pick(id); const ex = r?.sources.find((x) => x.kind === "ordinance" && x.excerpt)?.excerpt; if (ex) log(`  · SRC ${id}: ${short(ex, 600)}`); }
+      log(`  · LG ${JSON.stringify((data as unknown as { localGovernment?: string }).localGovernment ?? null)} ${JSON.stringify((data.parcels ?? [])[0]?.inputAddress)}`);
       const hl = rows.flatMap((r) => r.sources.flatMap((s) => s.highlights ?? [])).filter(Boolean);
       log(`- 형광펜 후보 ${hl.length}개 · 짧은 낱말(<8자) ${hl.filter((h) => h.replace(/\s/g, "").length < 8).length}개`);
       const params = resolveParams(rows);
