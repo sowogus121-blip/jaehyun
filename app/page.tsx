@@ -8,13 +8,16 @@ import { ProjectsView, type NewProjectForm } from "./components/ProjectsView";
 import { LegalView } from "./components/LegalView";
 import { MassingView } from "./components/MassingView";
 import { OutputView } from "./components/OutputView";
+import { WorklogView } from "./components/WorklogView";
+import { loadWorklog, saveWorklog, type WorkEntry } from "@/lib/worklog";
 
-type View = "projects" | "legal" | "massing" | "output";
+type View = "projects" | "legal" | "massing" | "output" | "worklog";
 const NAV: Array<{ id: View; no: string; label: string; sub: string }> = [
   { id: "projects", no: "①", label: "프로젝트", sub: "목록·새 검토" },
   { id: "legal", no: "②", label: "법규검토", sub: "법규검토표·원문" },
   { id: "massing", no: "③", label: "규모검토", sub: "대안·건축개요" },
   { id: "output", no: "④", label: "결과 출력", sub: "엑셀·PDF·JSON" },
+  { id: "worklog", no: "⑤", label: "업무일지", sub: "날짜별 진행 기록" },
 ];
 
 export default function Home() {
@@ -24,9 +27,11 @@ export default function Home() {
   const [view, setView] = useState<View>("projects");
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [worklog, setWorklog] = useState<WorkEntry[]>([]);
 
   useEffect(() => {
     setProjects(loadProjects(window.localStorage));
+    setWorklog(loadWorklog(window.localStorage));
     setLoaded(true);
     // 과거 버전이 브라우저에 남긴 API 키 흔적 제거 (키는 서버 환경변수에서만 사용)
     for (const k of ["lh-plan-vworld-key", "lh-plan-law-oc"]) { window.localStorage.removeItem(k); window.sessionStorage.removeItem(k); }
@@ -36,6 +41,7 @@ export default function Home() {
     try { saveProjects(window.localStorage, projects); }
     catch { setToast("브라우저 저장 공간이 부족합니다. JSON 백업 후 오래된 프로젝트를 정리하세요."); }
   }, [projects, loaded]);
+  useEffect(() => { if (loaded) { try { saveWorklog(window.localStorage, worklog); } catch { /* 저장 공간 부족 */ } } }, [worklog, loaded]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t); }, [toast]);
 
   const project = useMemo(() => projects.find((p) => p.id === currentId) ?? null, [projects, currentId]);
@@ -85,12 +91,13 @@ export default function Home() {
     setToast(`문서 ${done.filter((d) => d.status === "analyzed").length}/${done.length}건 분석 완료 · 추출값은 후보로만 표시됩니다.`);
   };
 
-  const go = (v: View) => { if (v !== "projects" && !project) return; setView(v); };
+  const free = (v: View) => v === "projects" || v === "worklog";
+  const go = (v: View) => { if (!free(v) && !project) return; setView(v); };
 
   return <div className="app">
     <aside className="side">
       <div className="brand"><b>LH Plan Lab</b><small>법규검토 · 규모검토</small></div>
-      <nav>{NAV.map((n) => <button key={n.id} className={`${view === n.id ? "active" : ""}`} disabled={n.id !== "projects" && !project} onClick={() => go(n.id)}>
+      <nav>{NAV.map((n) => <button key={n.id} className={`${view === n.id ? "active" : ""}`} disabled={!free(n.id) && !project} onClick={() => go(n.id)}>
         <span className="no">{n.no}</span><span><b>{n.label}</b><small>{n.sub}</small></span>
         {project && n.id === "legal" && <i className={`dot ${project.legalDone ? "done" : ""}`} />}
         {project && n.id === "massing" && <i className={`dot ${project.massingDone ? "done" : ""}`} />}
@@ -114,6 +121,7 @@ export default function Home() {
         change(extra.length ? { ...p, site: { ...p.site, uses: [...p.site.uses, ...extra] } } : p, extra.length > 0);
       }} onGoLegal={() => setView("legal")} />}
       {view === "output" && project && <OutputView project={project} notify={setToast} />}
+      {view === "worklog" && <WorklogView entries={worklog} onChange={setWorklog} projects={projects} current={project} />}
     </main>
     {toast && <div className="toast" role="status">{toast}</div>}
   </div>;
