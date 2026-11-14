@@ -83,7 +83,14 @@ function parseBands(t: string): ParkingTier[] | null {
 
 export function parseTiers(text: string): ParkingTier[] | null {
   const t = normalize(text);
-  return parseParenthetical(t) ?? parseBands(t);
+  const tiers = parseParenthetical(t) ?? parseBands(t);
+  if (!tiers) return null;
+  // 같은 구간이 두 번 읽힌 경우(원문 반복) 하나로
+  const seen = new Set<string>();
+  const out = tiers.filter((x) => { const k = JSON.stringify(x); if (seen.has(k)) return false; seen.add(k); return true; });
+  // 구간 상한이 같거나 거꾸로 된 경우는 판독 실패로 본다(엉뚱한 수치 방지)
+  for (let i = 1; i < out.length; i++) if (out[i - 1].maxArea !== undefined && out[i].maxArea !== undefined && out[i].maxArea! <= out[i - 1].maxArea!) return null;
+  return out;
 }
 
 /** 별표 본문을 번호 항목(1. 2. 2-1. …)으로 나눠 주거용도 항목을 찾는다. 줄바꿈이 사라진 원문도 처리한다. */
@@ -99,7 +106,9 @@ export function extractParkingRules(annexText: string): ParkingRule[] {
     const quote = item.replace(/\s+/g, " ").slice(0, 900);
     const ref27 = /주택건설기준\s*등에\s*관한\s*규정[^가-힣]{0,6}제27조/.test(item);
     // 항목 안의 글머리(○, ㆍ)별로 도시형생활주택·다가구 문단을 분리
-    const bullets = item.split(/(?=○|ㆍ\s*(?:다가구|「?주택법|도시형))/);
+    // '가. 기준 … 나. 가목에도 불구하고(공공주택 특례 등)' 구조면 본 기준(가목)만 읽는다.
+    const itemMain = item.split(/\s나\.\s*(?=가목에도|가목의\s*규정에도|「?\s*공공주택)/)[0];
+    const bullets = itemMain.split(/(?=○|ㆍ\s*(?:다가구|「?주택법|도시형))/);
     // 첫 조각은 항목 제목을 포함하므로 도시형 문단 후보에서 뺀다.
     const urbanBullet = bullets.length > 1 ? bullets.slice(1).find((b) => /도시형\s*생활주택/.test(b) && /(\d+(?:\.\d+)?)\s*대/.test(b)) : undefined;
     const mainText = bullets.filter((b) => b !== urbanBullet && !/^\s*ㆍ?\s*다가구주택의\s*경우/.test(b)).join(" ");

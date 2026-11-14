@@ -327,23 +327,37 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const annexHit = (re: RegExp) => useAnnex ? useAnnex.text.replace(/\r/g, "").split(/\n+|(?=\s\d{1,2}\.\s)|(?=\s[가-하]\.\s)/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 4 && re.test(l)).slice(0, 2).map((l) => l.slice(0, 200)) : [];
   const aptHit = annexHit(/공동주택/), offHit = annexHit(/업무시설|오피스텔/);
   const verdictOf = (hit: string[]) => annexBan === null ? undefined : annexBan ? (hit.length ? "conditional" as const : "allowed" as const) : hit.length ? "allowed" as const : "prohibited" as const;
-  const commercial = !useAnnex && zoneName ? (/유통상업/.test(zoneName) ? "dist" : /(중심|일반|근린)상업/.test(zoneName) ? "comm" : null) : null;
-  const annexVerdict = useAnnex ? { useApartment: verdictOf(aptHit), useUrban: verdictOf(aptHit), useOfficetel: verdictOf(offHit) }
-    : commercial === "comm" ? { useApartment: "conditional" as const, useUrban: "conditional" as const, useOfficetel: "allowed" as const }
-    : commercial === "dist" ? { useApartment: "prohibited" as const, useUrban: "prohibited" as const, useOfficetel: "allowed" as const } : null;
+  const commercial = zoneName ? (/유통상업/.test(zoneName) ? "dist" : /(중심|일반|근린)상업/.test(zoneName) ? "comm" : null) : null;
+  // 국토계획법 시행령 별표(용도지역 건축제한)의 기본 판정: 조례 별표는 '조례로 추가 허용·제한'하는 목록이라 법령 허용 용도가 빠져 있다.
+  type V = "allowed" | "conditional" | "prohibited";
+  const aptBase: V | null = !zoneName ? null
+    : /제2종전용|제2종일반|제3종일반|준주거/.test(zoneName) ? "allowed"
+    : /제1종일반|자연녹지|생산녹지|계획관리/.test(zoneName) ? "conditional"
+    : /제1종전용|전용공업|일반공업|보전녹지|보전관리|생산관리|농림|자연환경/.test(zoneName) ? "prohibited"
+    : commercial === "comm" || /준공업/.test(zoneName) ? "conditional" : commercial === "dist" ? "prohibited" : null;
+  const offBase: V | null = !zoneName ? null : commercial || /준주거|준공업|일반공업/.test(zoneName) ? "allowed"
+    : /일반주거|계획관리/.test(zoneName) ? "conditional" : /전용|녹지|보전|생산관리|농림/.test(zoneName) ? "prohibited" : null;
+  const offHitStrict = useAnnex && !commercial ? annexHit(/오피스텔/) : offHit;
+  const offVerdict: V | undefined = offBase === "allowed" ? "allowed"
+    : useAnnex ? (offHitStrict.length ? (annexBan ? "conditional" : "conditional") : (offBase ?? undefined)) : offBase ?? undefined;
+  const annexVerdict = aptBase || offVerdict ? { useApartment: aptBase ?? undefined, useUrban: aptBase ?? undefined, useOfficetel: offVerdict } : null;
+  const aptLimit = useAnnex ? annexHit(/(층수|층\s*이하|아파트를\s*제외|아파트\s*제외)/) : [];
+  if (!commercial && aptBase) { aptHit.length = 0; aptHit.push(aptBase === "allowed" ? `국토계획법 시행령 별표: ${zoneName} 건축할 수 있는 건축물에 공동주택 포함${aptLimit[0] ? ` · 조례 단서: ${aptLimit[0].slice(0, 120)}` : ""}`
+    : aptBase === "conditional" ? `국토계획법 시행령 별표: ${zoneName}은 공동주택 중 일부(아파트 제외·층수 제한 등)만 허용${aptLimit[0] ? ` · 조례: ${aptLimit[0].slice(0, 120)}` : ""}`
+    : `국토계획법 시행령 별표: ${zoneName}에서 공동주택 건축 불가`); }
   if (commercial && !aptHit.length) aptHit.push(commercial === "comm"
     ? `국토계획법 시행령 별표: ${zoneName}은 공동주택(주거용 외 용도와 복합된 건축물 제외)을 도시·군계획조례로 금지할 수 있는 용도 → 주거복합 또는 조례 별표 확인`
     : `국토계획법 시행령 별표 11: 유통상업지역 안에서 건축할 수 없는 건축물에 공동주택 포함`);
   put({
     id: "plan.use",
     content: annexVerdict ? [
-      `· 공동주택·도시형생활주택: ${annexVerdict.useApartment === "allowed" ? "허용" : annexVerdict.useApartment === "conditional" ? "조건부(별표 제한 문구 확인)" : "불가"}${aptHit[0] ? ` — ${aptHit[0].slice(0, 120)}` : annexBan ? " (건축할 수 없는 건축물에 없음)" : ""}`,
-      `· 오피스텔(업무시설): ${annexVerdict.useOfficetel === "allowed" ? "허용" : annexVerdict.useOfficetel === "conditional" ? "조건부(별표 제한 문구 확인)" : "불가"}${offHit[0] ? ` — ${offHit[0].slice(0, 120)}` : annexBan ? " (건축할 수 없는 건축물에 없음)" : ""}`,
+      `· 공동주택·도시형생활주택: ${annexVerdict.useApartment === "allowed" ? "허용" : annexVerdict.useApartment === "conditional" ? "조건부" : annexVerdict.useApartment === "prohibited" ? "불가" : "확인 필요"}${aptHit[0] ? ` — ${aptHit[0].slice(0, 160)}` : ""}`,
+      `· 오피스텔(업무시설): ${annexVerdict.useOfficetel === "allowed" ? "허용" : annexVerdict.useOfficetel === "conditional" ? "조건부(바닥면적·층수 제한 확인)" : annexVerdict.useOfficetel === "prohibited" ? "불가" : "확인 필요"}${offHitStrict[0] ? ` — ${offHitStrict[0].slice(0, 120)}` : ""}`,
     ].join("\n") : zone
       ? uses.map((u) => `· ${USE_SHORT[u]}: ${zone.zone} 건축제한 별표에서 허용 여부 확인`).join("\n")
       : "용도지역 확정 후 계획 용도별 허용 여부 확인",
     law: [cityPlan?.title ? `${cityPlan.title} 용도지역 건축제한 조항·별표` : "", zone ? `국토계획법 시행령 제71조 별표 ${zone.annex}` : ""].filter(Boolean).join(", "),
-    note: useAnnex ? `검토요망: ${useAnnex.title} ${useAnnex.article.split(" · ")[0]} 원문으로 자동 판정 · 별표 단서(층수·비율 제한) 확인`
+    note: useAnnex ? `검토요망: 국토계획법 시행령 별표 + ${useAnnex.title} ${useAnnex.article.split(" · ")[0]}로 자동 판정 · 별표 단서(층수·바닥면적 제한) 확인`
       : commercial ? "검토요망: 조례 별표 미확보 → 국토계획법 시행령 별표 기준으로 우선 판정 (주거복합 여부·조례 금지 여부 확인)" : "허용·조건부·불허를 행 편집에서 지정해야 규모검토에 반영됨",
     status: annexVerdict ? "verified" : useArticle || zone ? "candidate" : "missing",
     params: annexVerdict ? (Object.fromEntries(Object.entries(annexVerdict).filter(([, v]) => v)) as ReviewRow["params"]) : undefined,
@@ -593,6 +607,30 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
           ...(annex ? [{ title: annex.title, article: annex.article.split(" · ")[0], effectiveDate: annex.effectiveDate ?? undefined, url: annex.url, excerpt: found?.rule.quote ?? annex.text.slice(0, 600), verbatim: true, highlights: [found?.rule.quote.match(/다만[^.]*도시형\s*생활주택[^.]*/)?.[0] ?? ""].filter(Boolean), kind: "ordinance" as const }] : []),
         ],
       });
+    }
+    // 조례가 「주택건설기준」 제27조로만 정하거나 공동주택·오피스텔 항목을 못 읽으면 제27조제1항 원문의 세대당 최소대수를 적용한다.
+    if (use !== "urban" && (!found || !found.rule.tiers?.length) && std27) {
+      const t = std27.text.replace(/\s+/g, " ");
+      const mm = t.match(/세대당\s*주차대수가\s*(\d(?:\.\d+)?)대\s*\(세대당\s*전용면적이\s*(\d+)\s*제곱미터\s*이하인\s*경우에는\s*(\d(?:\.\d+)?)대\)/);
+      const ordMin = found?.rule.quote.match(/세대당\s*(\d(?:\.\d+)?)대\s*(?:에\s*미달|이상)/);
+      if (mm) {
+        const base = Number(mm[1]), area = Number(mm[2]), low = Number(mm[3]);
+        const ordBase = ordMin ? Number(ordMin[1]) : null;
+        const tiers = ordBase && ordBase >= base ? [{ ratio: ordBase }] : [{ maxArea: area, ratio: low }, { ratio: base }];
+        return put({
+          id,
+          content: (ordBase && ordBase >= base ? `${word}당 ${ordBase}대 이상 (조례: 제27조 산정 대수가 미달하면 ${word}당 ${ordBase}대)` : `전용 ${area}㎡ 이하 ${word}당 ${low}대 이상 · 그 외 ${word}당 ${base}대 이상`)
+            + `\n「주택건설기준 등에 관한 규정」 제27조제1항 표(전용면적 합계 기준) 산정치가 더 크면 그 값`,
+          law: "주택건설기준 등에 관한 규정 제27조제1항" + (found ? ` · ${found.annex.title} ${found.annex.article.split(" · ")[0]}` : " · 주차장법 시행령 별표 1 제5호"),
+          note: `검토요망: ${found ? "조례 별표가 「주택건설기준」 제27조로 정함" : "조례 별표에서 해당 용도 항목을 읽지 못함"} → 제27조 원문의 세대당 최소대수로 우선 반영 · 제27조 표(면적당 대수)는 중대형 세대에서 더 클 수 있음`,
+          status: "verified",
+          params: { [tierKey]: tiers },
+          sources: [
+            { ...lawRef(review, LAW.housingStd, "제27조"), url: std27.url, excerpt: std27.text, verbatim: true, highlights: [mm[0]] },
+            ...(found ? [{ title: found.annex.title, article: found.annex.article.split(" · ")[0], effectiveDate: found.annex.effectiveDate ?? undefined, url: found.annex.url, excerpt: found.rule.quote, verbatim: true, highlights: [], kind: "ordinance" as const }] : []),
+          ],
+        });
+      }
     }
     if (found) {
       const { rule, annex } = found;
