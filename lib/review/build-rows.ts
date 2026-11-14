@@ -483,6 +483,23 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     const word = use === "officetel" ? "호" : "세대";
     const found = annexRule(use);
     const tierKey = use === "apartment" ? "parkingApartmentTiers" : use === "urban" ? "parkingUrbanTiers" : "parkingOfficetelTiers";
+    // 도시형생활주택(소형주택): 조례 별표가 도시형생활주택을 「주택건설기준」 제27조로 돌리거나 따로 정하지 않으면
+    // 제27조제1항제2호(세대당 0.6대, 전용 30㎡ 미만 0.5대)를 적용한다. 단지형 연립·다세대는 공동주택 조례 구간.
+    if (use === "urban" && found && (found.rule.use !== "urban" || /도시형\s*생활주택[^.]{0,40}제27조/.test(found.rule.quote))) {
+      const { annex } = found;
+      return put({
+        id,
+        content: "소형주택(도시형생활주택): 전용 30㎡ 미만 세대당 0.5대 이상 · 전용 30㎡ 이상 60㎡ 이하 세대당 0.6대 이상\n단지형 연립·다세대는 공동주택 조례 기준(30㎡ 이하 0.5대 · 60㎡ 이하 0.8대 · 그 외 1대)",
+        law: "주택건설기준 등에 관한 규정 제27조제1항제2호 · " + `${annex.title} ${annex.article.split(" · ")[0]}`,
+        note: "검토요망: 조례 별표 단서(도시형생활주택은 「주택건설기준」 제27조)에 따라 소형주택 기준 적용 · 제27조제1항제2호 단서에 따른 조례 강화·완화 여부 확인",
+        status: "verified",
+        params: { parkingUrbanTiers: [{ maxArea: 30, strict: true, ratio: 0.5 }, { maxArea: 60, ratio: 0.6 }] },
+        sources: [
+          { ...lawRef(review, LAW.housingStd, "제27조"), excerpt: "2. 소형 주택은 제1호에도 불구하고 세대당 주차대수가 0.6대(세대당 전용면적이 30제곱미터 미만인 경우에는 0.5대) 이상이 되도록 주차장을 설치해야 한다. 다만, 지역별 차량보유율 등을 고려하여 … 조례로 강화하거나 완화하여 정할 수 있다.", verbatim: true, highlights: ["세대당 주차대수가 0.6대(세대당 전용면적이 30제곱미터 미만인 경우에는 0.5대) 이상"] },
+          { title: annex.title, article: annex.article.split(" · ")[0], effectiveDate: annex.effectiveDate ?? undefined, url: annex.url, excerpt: found.rule.quote, verbatim: true, highlights: [found.rule.quote.match(/다만[^.]*도시형\s*생활주택[^.]*/)?.[0] ?? ""].filter(Boolean), kind: "ordinance" },
+        ],
+      });
+    }
     if (found) {
       const { rule, annex } = found;
       const nums = (rule.tiers ?? []).flatMap((t) => [...(t.ratio ? [`${t.ratio}대`] : []), ...(t.sqmPerStall ? [`${t.sqmPerStall}㎡당`] : []), ...(t.maxArea !== undefined ? [`${t.maxArea}제곱미터`, `${t.maxArea}㎡`] : [])]);
