@@ -30,6 +30,8 @@ export const ROW_ORDER: Array<{ id: string; group: string; sub?: string; section
   { id: "plan.bcrfar", group: "건폐율 / 용적률", section: "planning" },
   { id: "plan.relax", group: "공공임대 용적률 완화", section: "planning" },
   { id: "plan.height", group: "최고높이", section: "planning" },
+  { id: "type.urban", group: "주택유형·사업승인", sub: "도시형생활주택 요건", section: "planning" },
+  { id: "type.approval", group: "주택유형·사업승인", sub: "사업계획승인 대상", section: "planning" },
   { id: "bld.sunlight", group: "정북일조", section: "building" },
   { id: "bld.spacing", group: "채광·인동거리", section: "building" },
   { id: "bld.setback", group: "대지안의공지", section: "building" },
@@ -38,6 +40,8 @@ export const ROW_ORDER: Array<{ id: string; group: string; sub?: string; section
   { id: "bld.amenity", group: "부대복리시설", section: "building" },
   { id: "bld.safety", group: "피난·방화·승강기", section: "building" },
   { id: "bld.access", group: "장애인 편의시설", section: "building" },
+  { id: "bld.noise", group: "소음방지", section: "building" },
+  { id: "bld.green", group: "녹색건축·에너지", section: "building" },
   { id: "park.mech.ord", group: "기계식주차", sub: "조례", section: "parking" },
   { id: "park.mech.lh", group: "기계식주차", sub: "LH 기준", section: "parking" },
   { id: "park.ordinance", group: "주차", sub: "조례 기준", section: "parking" },
@@ -480,7 +484,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   });
   put({
     id: "bld.safety",
-    content: "직통계단·피난계단, 방화구획, 소방시설, 승강기(6층 이상·연면적 2천㎡ 이상) 기준",
+    content: ["직통계단·피난계단, 방화구획, 소방시설, 승강기(6층 이상·연면적 2천㎡ 이상) 기준", ...sentencesOf("bld.safety", /승강기[^.]{0,80}(층|세대|대\s*이상)/, 2).map((x) => "· " + x.line)].join("\n"),
     law: "건축법 제49·64조, 피난·방화규칙, 소방시설법",
     note: "층수·연면적 확정 후 판정",
     status: "candidate",
@@ -495,6 +499,32 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     sources: [lawRef(review, LAW.accessibility)],
   });
 
+  // ── 추가 국가법령 (원문 핵심 문장 그대로) ──
+  const lawRow = (id: string, re: RegExp, fallback: string, law: string, note: string, extra: Partial<ReviewRow> = {}) => {
+    const lines = sentencesOf(id, re, 4);
+    const src = collectedOf(id).filter((c) => c.kind === "law");
+    put({
+      id,
+      content: lines.length ? lines.map((x) => "· " + x.line).join("\n") : fallback,
+      law: src[0] ? [...new Set(src.map((c) => `${c.title} ${c.article.split(" · ")[0]}`))].join(", ") : law,
+      note: lines.length ? note : `법령 원문 미확보 (국가법령정보센터 조회 후 자동 표시) · ${note}`,
+      status: lines.length ? "verified" : "candidate",
+      sources: src.map((c) => ({ title: c.title, article: c.article.split(" · ")[0], url: c.url, effectiveDate: c.effectiveDate ?? undefined, excerpt: c.text, verbatim: true, highlights: lines.filter((x) => x.src === c).map((x) => x.line), kind: "law" as const })),
+      ...extra,
+    });
+  };
+  lawRow("type.urban", /(주거전용면적|욕실|부엌|지하층|300세대|소형\s*주택|단지형)/, "도시형생활주택(소형주택·단지형 연립·다세대) 요건: 300세대 미만, 소형주택은 전용 60㎡ 이하·욕실·부엌·지하층 세대 미설치",
+    "주택법 제2조제20호, 시행령 제10조", "도시형생활주택 대안은 이 요건을 충족해야 주차(제27조제1항제2호)·부대시설 완화 적용");
+  const approvalLines = sentencesOf("type.approval", /\d+\s*(세대|호)\s*(이상|이하)/, 4);
+  const approvalN = Number(approvalLines.map((x) => x.line.match(/공동주택[^.]{0,30}?(\d+)\s*세대/)?.[1]).find(Boolean) ?? NaN);
+  lawRow("type.approval", /\d+\s*(세대|호)\s*(이상|이하)/, "공동주택 30세대(도시형생활주택 등 일부 50세대) 이상: 주택법 사업계획승인 대상",
+    "주택법 제15조, 시행령 제27조", "규모검토 세대수가 기준 이상이면 사업계획승인(주택건설기준 전면 적용), 미만이면 건축허가",
+    Number.isFinite(approvalN) ? { params: { approvalThreshold: approvalN } } : {});
+  lawRow("bld.noise", /(데시벨|dB|소음)/, "공동주택 소음: 실외소음도 65데시벨 미만 확보 (도로·철도변 방음시설·이격)",
+    "주택건설기준 등에 관한 규정 제9조", "사업계획승인 대상(공동주택)일 때 적용 · 대로·철도 인접 시 소음 측정·저감계획");
+  lawRow("bld.green", /(제로에너지|에너지효율|인증)[^.]{0,120}(세대|연면적|공동주택|건축물)/, "에너지효율등급·제로에너지건축물 인증 의무 대상 여부 (공공 건축·공동주택 규모별)",
+    "녹색건축물 조성 지원법 제17조, 시행령 제11조의3", "LH 매입 공공임대는 공공부문 인증 의무 해당 여부와 LH 공고 인증 요건(ZEB 등급) 함께 확인");
+
   // ── 주차 ──
   const mechArticle = findArticle(review, "주차장", ["기계식"]);
   const mechLines = sentencesOf("park.mech.ord", /기계식[^.]{0,80}(설치할\s*수\s*없|설치하여서는|제한|이하로|미만인\s*경우|이상인\s*경우에만)/, 4)
@@ -507,7 +537,9 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     law: (mechArticle ? `${mechArticle.sourceTitle} ${mechArticle.article}` : cityParking?.title ?? "관할 주차장 조례") + ", 주차장법 시행규칙 제16조의2",
     note: mechLines.length ? "검토요망: 조례 원문의 기계식 제한 문장 · 용도·비율을 규모검토에 반영하려면 행에서 허용/조건부/불가 지정" : parkingOrds.length ? "검토요망: 제한 조항이 없어 규모검토는 기계식 허용으로 우선 반영 · 조례 개정 여부 확인" : "조례 허용 여부와 LH 인수 여부는 별도 판정",
     status: mechLines.length || parkingOrds.length ? "verified" : mechArticle ? "candidate" : "missing",
-    sources: [...(mechArticle ? [articleRef(mechArticle, ["기계식"])] : cityParking ? [cityParking] : []), lawRef(review, LAW.parkingRule)],
+    sources: [...(mechArticle ? [articleRef(mechArticle, ["기계식"])] : cityParking ? [cityParking] : []),
+      ...(collectedOf("park.mech.ord").filter((c) => c.kind === "law").map((c) => ({ title: c.title, article: c.article.split(" · ")[0], url: c.url, effectiveDate: c.effectiveDate ?? undefined, excerpt: c.text, verbatim: true, highlights: sentencesOf("park.mech.ord", /(진입로|전면공지|방향전환|대수|높이)/, 3).filter((x) => x.src === c).map((x) => x.line), kind: "law" as const }))),
+      lawRef(review, LAW.parkingRule)],
     missing: "조례상 기계식 허용 여부·비율·최소대수",
   });
   const parkingArticle = findArticle(review, "주차장", ["부설주차장의 설치기준", "부설주차장 설치기준", "주차대수"]);

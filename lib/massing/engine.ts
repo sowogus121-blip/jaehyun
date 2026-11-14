@@ -371,6 +371,8 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
       : "지하층 = 법정 주차기준 미확정으로 산정 보류",
   );
 
+  const approvalN = params.approvalThreshold?.value as number | undefined;
+  if (approvalN && scenario.use !== "officetel" && units >= approvalN) warnings.push(`주택법 사업계획승인 대상 (${units}${word} ≥ ${approvalN}세대 기준) → 주택건설기준(소음·부대복리·주차 등) 전면 적용`);
   const feasibility: Feasibility = blockers.length ? "blocked" : conditions.some((c) => c.startsWith("검토요망")) ? "review" : conditions.length ? "conditional" : "ok";
   return {
     scenario, feasibility, blockers, conditions, missing, warnings, formulas, checks,

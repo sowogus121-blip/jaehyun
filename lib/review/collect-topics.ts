@@ -34,7 +34,7 @@ export const ORDINANCE_TOPICS: OrdinanceTopic[] = [
   { id: "parkLimit", rowId: "park.ordinance", label: "주차장 설치제한", ordinance: "주차장", terms: ["설치제한", "설치 제한", "설치를 제한"] },
 ];
 
-export interface NationalArticle { rowId: string; law: string; no: number; branch?: number; label: string }
+export interface NationalArticle { rowId: string; law: string; no: number; branch?: number; label: string; /** 조 제목 확인 (번호 개정으로 다른 조문이 잡히지 않게) */ title?: RegExp }
 
 export const NATIONAL_ARTICLES: NationalArticle[] = [
   { rowId: "plan.bcrfar", law: "국토의 계획 및 이용에 관한 법률 시행령", no: 84, label: "용도지역 건폐율 상한" },
@@ -47,6 +47,12 @@ export const NATIONAL_ARTICLES: NationalArticle[] = [
   { rowId: "bld.amenity", law: "주택건설기준 등에 관한 규정", no: 28, label: "관리사무소 등" },
   { rowId: "bld.amenity", law: "주택건설기준 등에 관한 규정", no: 55, branch: 2, label: "주민공동시설" },
   { rowId: "park.lh03", law: "공공주택 특별법 시행령", no: 37, label: "공공주택 건설 특례(주차)" },
+  { rowId: "type.urban", law: "주택법 시행령", no: 10, label: "도시형 생활주택", title: /도시형/ },
+  { rowId: "type.approval", law: "주택법 시행령", no: 27, label: "사업계획의 승인", title: /사업계획/ },
+  { rowId: "bld.noise", law: "주택건설기준 등에 관한 규정", no: 9, label: "소음방지대책", title: /소음/ },
+  { rowId: "bld.safety", law: "주택건설기준 등에 관한 규정", no: 15, label: "승강기 등", title: /승강기/ },
+  { rowId: "park.mech.ord", law: "주차장법 시행규칙", no: 16, branch: 2, label: "기계식주차장의 설치기준", title: /기계식/ },
+  { rowId: "bld.green", law: "녹색건축물 조성 지원법 시행령", no: 11, branch: 3, label: "에너지효율등급·제로에너지건축물 인증", title: /인증|제로에너지|에너지효율/ },
 ];
 
 export const NATIONAL_LAWS = [...new Set(NATIONAL_ARTICLES.map((a) => a.law))];

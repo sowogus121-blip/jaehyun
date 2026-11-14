@@ -90,6 +90,8 @@ export interface RuleParams {
   lhMinHomes?: number;          // LH 최소 매입 호수
   lhCommunityThreshold?: number;// 커뮤니티 설치 기준 세대수
   lhCommunitySqmPerHome?: number;
+  /** 주택법 사업계획승인 대상 세대수 기준 (시행령 원문에서 추출) */
+  approvalThreshold?: number;
   publicOpenSpaceRatio?: number;// 공개공지 % of site
 }
 export type ParamKey = keyof RuleParams;
