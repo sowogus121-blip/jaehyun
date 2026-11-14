@@ -358,7 +358,7 @@ export async function grepGosi(seq: string, pattern: RegExp, maxFiles = 3): Prom
   for (const a of detail.attachments.filter((x) => ["pdf", "hwpx", "hwp"].includes(x.ext)).slice(0, maxFiles)) {
     try {
       const data = await downloadAttachment(seq, a.path, page.cookie);
-      const text = a.ext === "hwp" ? extractHwpText(data) : (await extractDocumentText(data, a.ext as "pdf" | "hwpx", 400_000)).text;
+      const text = a.ext === "hwp" ? await extractHwpText(data) : (await extractDocumentText(data, a.ext as "pdf" | "hwpx", 400_000)).text;
       scan(a.name, text);
     } catch (e) { errors.push(`${a.name}: ${e instanceof Error ? e.message : "실패"}`); }
   }
