@@ -30,7 +30,7 @@ export function newProject(site: Partial<SiteInput> & { address: string }, name?
   const fullSite: SiteInput = {
     address: site.address.trim(), extraParcels: site.extraParcels ?? [], siteAreaOverride: site.siteAreaOverride,
     business: site.business ?? "lh-purchase", uses: site.uses ?? ["apartment", "officetel"], supplies: site.supplies ?? [],
-    blockNo: site.blockNo, transitWithin500m: site.transitWithin500m, memo: site.memo,
+    blockNo: site.blockNo, transitWithin500m: site.transitWithin500m, countPlannedStations: site.countPlannedStations, memo: site.memo,
   };
   const scenarios = defaultScenarios(fullSite.uses);
   return {

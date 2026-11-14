@@ -242,3 +242,23 @@ describe("출력 서식", () => {
     expect(runs.find((r) => r.emphasis)?.text).toBe("250 퍼센트");
   });
 });
+
+describe("개통 예정역 (신독산역)", () => {
+  const addr = "서울특별시 금천구 독산동 151-10";
+  const planned = [{ id: "sinansan-sindoksan", name: "신독산역", line: "신안산선", status: "공사 중", distance: 380, verdict: "within" as const,
+    anchorAddress: "서울특별시 금천구 독산동 1030-1", anchorBasis: "특별계획구역", openingSummary: "2027년 개통 예정(서울시 발표)", openingYear: 2027,
+    timeline: [{ label: "실시계획", value: "공사기간 2019~2026년", source: "국토교통부 고시 제2026-410호", page: 3, official: true }] }];
+  const base = review({ address: addr, zone: "준공업지역", area: 900 });
+  const r = { ...base, transit: { station: null, university: null, verdict: "outside" as const, basis: "독산역 역사 중심까지 직선 908m", checkedAt: "", errors: [], planned } };
+  it("기본은 현행 역 기준으로 불가, 예정역은 참고로 표기", () => {
+    const rows = buildRows(site(addr), r);
+    expect(row(rows, "park.lh03").note).toContain("불가(청년형)");
+    expect(row(rows, "park.lh03").note).toContain("신독산역");
+    expect(row(rows, "park.lh03").sources.some((s) => s.title.includes("2026-410"))).toBe(true);
+  });
+  it("'개통 예정역 포함'이면 예정역 거리로 조건부 충족", () => {
+    const rows = buildRows(site(addr, { countPlannedStations: true }), r);
+    expect(row(rows, "park.lh03").note).toContain("조건부 충족");
+    expect(row(rows, "park.lh03").note).toContain("LH 지역본부 확인");
+  });
+});

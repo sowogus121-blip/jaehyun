@@ -165,6 +165,8 @@ export interface SiteInput {
   blockNo?: string;
   /** 청년형 0.3대 특례 입지 (역 출구·대학 500m) 확인 */
   transitWithin500m?: boolean;
+  /** 개통 예정역(공사 중)도 역세권 판정에 포함 (LH 인정 여부는 지역본부 확인) */
+  countPlannedStations?: boolean;
   memo?: string;
 }
 
