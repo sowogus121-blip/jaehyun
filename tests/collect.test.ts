@@ -311,7 +311,6 @@ describe("토지이음 고시정보 자동 수집", () => {
 });
 
 import { sourceStatuses } from "../lib/review/checklist";
-import { newProject } from "../lib/project/store";
 describe("수집 출처 상태 표시", () => {
   it("점검 중 국가법령·ELIS 대체 조례·토지이음 연결 실패를 구분한다", () => {
     const p = newProject({ address: "경기도 성남시 분당구 정자동 178-1" });
