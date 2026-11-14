@@ -370,7 +370,7 @@ export async function POST(request: NextRequest) {
   let laws: LawRecord[] = [];
   let ordinances: OrdinanceRecord[] = [];
   const lawSources: string[] = [];
-  {
+  if (lawOc) {
     const district = localGovernment.split(/\s+/).filter(Boolean).at(-1) ?? localGovernment;
     const metro = localGovernment.split(/\s+/)[0];
     const metropolitan = /(?:특별시|광역시|특별자치시)$/.test(metro);
@@ -388,9 +388,8 @@ export async function POST(request: NextRequest) {
       .flatMap((m) => m.rule ? m.rule.law.split(" · ").map((x) => x.replace(/\s*제\d.*$/, "").trim()) : [])
       .filter((name) => name && !LAW_QUERIES.includes(name) && !/조례/.test(name));
     const [settled, ordinanceSettled] = await Promise.all([
-      lawOc ? Promise.allSettled([...LAW_QUERIES, ...new Set(specialLaws)].map((query) => searchLaw(query, lawOc))) : Promise.resolve([] as PromiseSettledResult<LawRecord | null>[]),
-      lawOc ? Promise.allSettled(ordinanceQueries.map(({query,jurisdiction}) => searchOrdinance(query, lawOc, jurisdiction)))
-        : Promise.resolve(ordinanceQueries.map(() => ({ status: "rejected", reason: new Error("LAW_OPEN_API_OC 미설정") }) as PromiseRejectedResult)),
+      Promise.allSettled([...LAW_QUERIES, ...new Set(specialLaws)].map((query) => searchLaw(query, lawOc))),
+      Promise.allSettled(ordinanceQueries.map(({query,jurisdiction}) => searchOrdinance(query, lawOc, jurisdiction))),
     ]);
     laws = settled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
     const failures = settled.flatMap((result) => result.status === "rejected"
@@ -442,7 +441,7 @@ export async function POST(request: NextRequest) {
   // Reading the official full text is a separate step from finding its title.
   // Keyword matches remain unverified candidates; applicability is NOT inferred.
   let ordinanceArticleCandidates: OrdinanceArticleCandidate[] = [];
-  if (ordinances.length) {
+  if (lawOc && ordinances.length) {
     // 본문: 국가법령정보센터 레코드는 DRF 본문, 실패하면 같은 조례를 ELIS에서 읽는다. ELIS 레코드는 바로 ELIS.
     const readBody = async (ordinance: OrdinanceRecord): Promise<unknown> => {
       if (ordinance.source === "elis" && ordinance.elis) {
@@ -453,7 +452,6 @@ export async function POST(request: NextRequest) {
         return got.payload;
       }
       try {
-        if (!lawOc) throw new Error("LAW_OPEN_API_OC 미설정");
         return await fetchLawPayload("ordin", ordinance, lawOc);
       } catch (error) {
         const alt = await searchOrdinanceElis(ordinance.name, ordinance.localGovernment ?? localGovernment).catch(() => null);
