@@ -94,7 +94,7 @@ const seoulSemiIndustrial: LibraryEntry = {
       section: "parking",
       content: "주택·오피스텔 부설주차장 설치기준 (별표 2), 비주거 혼합 시 용도별 합산",
       law: "서울시 주차장 설치 및 관리 조례 제20·21조, 별표 2·3",
-      note: "전용면적 구간별 대수는 별표 2 원문에서 입력",
+      note: "주거용도 대수는 별표 2 원문을 자동 판독해 아래 행에 반영",
       status: "candidate",
       sources: [{ title: "서울특별시 주차장 설치 및 관리 조례", article: "제20조, 별표 2", effectiveDate: "2026-10-01", url: SEOUL_PARKING_URL, kind: "ordinance" }],
     },
