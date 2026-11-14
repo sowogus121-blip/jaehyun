@@ -99,6 +99,7 @@ function collectSources(rows: ReviewRow[]) {
 export function Report({ project, results, withAppendix, withFormulas, appendixMode = "text" }: { project: Project; results: ScenarioResult[]; withAppendix: boolean; withFormulas: boolean; appendixMode?: "text" | "image" }) {
   const address = project.review?.location?.parcelAddress || project.site.address;
   const siteZones = [...new Set((project.review?.landUse ?? []).filter((l) => l.category === "용도지역").map((l) => l.name))];
+  const siteDesignations = [...(project.review?.landUse ?? []).map((l) => l.name), ...(project.review?.siteFacts?.designations ?? []).map((d) => d.name)];
   const sources = collectSources(project.rows);
   const rows = project.rows.filter((r) => r.content.trim() || r.status !== "missing");
   const date = new Date().toLocaleDateString("ko-KR");
@@ -138,9 +139,9 @@ export function Report({ project, results, withAppendix, withFormulas, appendixM
               {originalPages(s).map((p) => <figure key={p}><img src={`/api/source-image?url=${encodeURIComponent(s.pdfUrl ?? s.url!)}&page=${p}`} alt={`${s.title} ${p}쪽 원본`} loading="lazy"
                 onError={(e: { currentTarget: { closest: (sel: string) => HTMLElement | null } }) => { const f = e.currentTarget.closest("figure"); if (f) f.classList.add("img-failed"); }} />
                 <figcaption>원본 {p}쪽 · 이미지가 보이지 않으면 아래 텍스트판 참조</figcaption></figure>)}
-              {resolveHighlights(s.excerpt ?? "", s.highlights, siteZones).length > 0 && <ul className="appendix-keys">{resolveHighlights(s.excerpt ?? "", s.highlights, siteZones).map((h) => <li key={h}><mark>{h}</mark></li>)}</ul>}
+              {resolveHighlights(s.excerpt ?? "", s.highlights, siteZones, siteDesignations).length > 0 && <ul className="appendix-keys">{resolveHighlights(s.excerpt ?? "", s.highlights, siteZones, siteDesignations).map((h) => <li key={h}><mark>{h}</mark></li>)}</ul>}
             </div>
-          : <blockquote><Marked text={s.excerpt ?? ""} highlights={s.highlights} zones={siteZones} sentences /></blockquote>}
+          : <blockquote><Marked text={s.excerpt ?? ""} highlights={s.highlights} zones={siteZones} designations={siteDesignations} sentences /></blockquote>}
       </div>)}
     </section>}
   </article>;
