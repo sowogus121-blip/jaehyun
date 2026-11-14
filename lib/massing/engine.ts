@@ -138,8 +138,13 @@ export function runScenario({ params, candidates, scenario, assumptions: a, site
   const word = UNIT_WORD[scenario.use];
   const lh = site.business === "lh-purchase";
   const A = Number(params.siteArea?.value ?? 0);
-  const bcr = params.bcr?.value as number | undefined;
-  const baseFar = params.far?.value as number | undefined;
+  // 확정값이 없으면 법규검토표 후보값(조례 원문 자동추출 등)으로 '검토요망' 계산
+  const bcrConfirmed = params.bcr?.value as number | undefined;
+  const farConfirmed = params.far?.value as number | undefined;
+  const bcr = bcrConfirmed ?? (candidates?.bcr?.value as number | undefined);
+  const baseFar = farConfirmed ?? (candidates?.far?.value as number | undefined);
+  if ((bcrConfirmed === undefined && bcr !== undefined) || (farConfirmed === undefined && baseFar !== undefined))
+    conditions.push(`검토요망: 건폐율·용적률 — 법규검토표 후보값(${bcr ?? "?"}% / ${baseFar ?? "?"}%)으로 우선 반영 · ${candidates?.far?.note ?? candidates?.bcr?.note ?? "지구단위계획·조례 확인"}`.slice(0, 200));
   const relaxed = params.relaxedFar?.value as number | undefined;
   if (!A) missing.push("대지면적");
   if (bcr === undefined) missing.push("건폐율 (원문 확인 또는 검토자 입력)");
