@@ -400,7 +400,10 @@ export async function POST(request: NextRequest) {
       errors.push(`국가법령정보센터 ${failures.length}개 조회 실패: ${reasons.join(" / ")}`);
     }
     // 국가법령정보센터 자치법규 검색이 실패(점검·장애·키 없음)한 항목만 행정안전부 자치법규정보시스템(ELIS)으로 다시 찾는다.
-    const fallbackIdx = ordinanceSettled.flatMap((result, index) => result.status === "rejected" ? [index] : []);
+    // 국가법령정보센터가 점검 응답을 빈 결과로 돌려주는 경우도 있어, 법령 조회가 실패한 회차에는 '결과 없음'도 ELIS로 다시 확인한다.
+    const lawCenterTrouble = settled.some((r) => r.status === "rejected");
+    const fallbackIdx = ordinanceSettled.flatMap((result, index) =>
+      result.status === "rejected" || (lawCenterTrouble && !result.value) ? [index] : []);
     const elisSettled = await Promise.allSettled(fallbackIdx.map((index) => searchOrdinanceElis(ordinanceQueries[index].query, ordinanceQueries[index].jurisdiction)));
     const merged: PromiseSettledResult<OrdinanceRecord | null>[] = ordinanceSettled.map((result) => result);
     fallbackIdx.forEach((index, k) => { merged[index] = elisSettled[k]; });
