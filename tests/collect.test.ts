@@ -403,3 +403,18 @@ describe("지자체별 주차 별표 표현 차이", () => {
     expect(r.find((x) => x.use === "urban")!.tiers).toEqual([{ maxArea: 30, strict: true, ratio: 0.7 }, { ratio: 0.9 }]);
   });
 });
+
+import { extractLhMechRule } from "../lib/review/parking-rules";
+describe("LH 공고문 기계식주차 인수기준 자동 추출", () => {
+  it("허용요건 3가지와 비율 50%를 읽고 공동주택은 제외로 본다", () => {
+    const r = extractLhMechRule([
+      "⑤ 기계식 주차 설치 허용기준 ㅇ (대상요건) (1) 서울·인천·경기도 역세권(GTX역 포함 도시철도역 출구로부터 직선거리 500m 내), (2) 청년용, 신혼·신생아Ⅰ,Ⅱ용",
+      "(3) 주거용오피스텔 또는 도시형생활주택(3가지 요건 모두 충족 시) ㅇ 기계식 주차 비율 * 150세대 이상 : 총 주차대수의 50% 이하로 계획",
+      "ㅇ 기계식 주차 비율 * 150세대 이상 : 총 주차대수의 50% 이하로 계획 ** 150세대 미만 : 총 주차대수의 50% 이하로 계획하되, 기계식 주차 대수가 20대 미만인 경우 우대",
+    ])!;
+    expect(r.maxPercent).toBe(50);
+    expect(r.apartmentExcluded).toBe(true);
+    expect(r.requirement).toContain("충족 시)");
+    expect(r.ratioText).toContain("20대 미만인 경우 우대");
+  });
+});
