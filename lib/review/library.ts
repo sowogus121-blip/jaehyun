@@ -250,7 +250,7 @@ const osong1Plan: LibraryEntry = {
     const plan: RowPatch = {
       id: "plan.district",
       content: block
-        ? `오송생명과학단지 지구단위계획구역 · ${block.replace(/-(\d+)$/, " 가구 획지$1")}${ctx.blockNo ? " (검토자 지정)" : " (결정조서 지번 대조)"}` + (lotArea ? `\n결정조서 획지면적 ${lotArea.toLocaleString()}㎡` : "")
+        ? `오송생명과학단지 지구단위계획구역 · ${block.replace(/-(\d+)$/, " 가구 획지 $1번")}${ctx.blockNo ? " (검토자 지정)" : " (결정조서 지번 대조)"}` + (lotArea ? `\n결정조서 획지면적 ${lotArea.toLocaleString()}㎡` : "")
         : "오송생명과학단지 지구단위계획구역 · 결정조서에서 해당 지번의 가구·획지 미확인",
       law: "오송생명과학단지 지구단위계획 결정조서(상업용지 가구·획지), 시행지침 제30조",
       note: "획지 분할 불가 · 합병 허용(넓은 도로 접 필지의 지침 적용, 도로폭 같으면 강화된 규정). 대전국토청 고시 제2025-141호 실시계획 변경에서 상업용지 변경없음",
