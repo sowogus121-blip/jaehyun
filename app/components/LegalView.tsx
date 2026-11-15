@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { parseParcelList, parcelBase } from "@/lib/parcel-list";
 import type { FarOption, LhSupply, ParamKey, ParkingTier, Project, ReviewRow, RowStatus, RuleParams, SourceRef, UseVerdict } from "@/lib/review/types";
 import { STATUS_LABEL, SUPPLY_LABEL } from "@/lib/review/types";
 import { NUMERIC_PARAMS, PARAM_LABEL, VERDICT_PARAMS, resolveParams } from "@/lib/review/params";
@@ -20,7 +21,7 @@ const VERDICT_LABEL: Record<UseVerdict, string> = { allowed: "허용", condition
 export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }: {
   project: Project;
   onChange: (p: Project, rebuild?: boolean) => void;
-  onRefresh: () => void;
+  onRefresh: (next?: Project) => void;
   refreshing: boolean;
   onUpload: (files: File[]) => void;
 }) {
@@ -52,11 +53,12 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
   return <div className="view legal-view">
     <Panel title="대상지 조건" sub="이 값이 바뀌면 자동 행이 다시 작성됩니다. 검토자가 수정한 행은 유지됩니다."
       actions={<>
-        <button className="btn" onClick={onRefresh} disabled={refreshing}>{refreshing ? "공식자료 조회 중…" : "공식자료 다시 조회"}</button>
+        <button className="btn" onClick={() => onRefresh()} disabled={refreshing}>{refreshing ? "공식자료 조회 중…" : "공식자료 다시 조회"}</button>
         <label className={`toggle ${project.legalDone ? "on" : ""}`}><input type="checkbox" checked={project.legalDone} onChange={(e: { target: { checked: boolean } }) => onChange({ ...project, legalDone: e.target.checked })} />법규검토 완료</label>
       </>}>
       <div className="site-bar">
-        <Field label="대상지"><div className="static">{address}{project.site.extraParcels.length ? ` 외 ${project.site.extraParcels.length}필지` : ""}</div></Field>
+        <Field label="대상지"><div className="static">{address}{project.site.extraParcels.length ? ` 외 ${project.site.extraParcels.length}필지 (합필)` : ""}</div></Field>
+        <ParcelMerge project={project} refreshing={refreshing} apply={(list) => { const next = { ...project, site: { ...project.site, extraParcels: list } }; onChange(next, true); onRefresh(next); }} />
         <Field label="대지면적 수정" hint={project.review?.parcel?.area ? `조회값 ${project.review.parcel.area.toLocaleString()}㎡` : "조회값 없음"}>
           <Num value={project.site.siteAreaOverride} onChange={(v) => setSite({ siteAreaOverride: v })} suffix="㎡" step={0.1} placeholder="자동" />
         </Field>
@@ -132,6 +134,22 @@ function SourceStrip({ project }: { project: Project }) {
       <i>{SOURCE_LABEL[s.state]}</i><b>{s.name}</b><small>{s.detail}</small>
     </span>)}
   </div>;
+}
+
+function ParcelMerge({ project, refreshing, apply }: { project: Project; refreshing: boolean; apply: (list: string[]) => void }) {
+  const base = parcelBase(project.site.address);
+  const show = (list: string[]) => list.map((a) => (base && a.startsWith(base + " ") ? a.slice(base.length + 1) : a)).join(", ");
+  const [text, setText] = useState(show(project.site.extraParcels));
+  useEffect(() => { setText(show(project.site.extraParcels)); }, [project.id, project.site.extraParcels.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parsed = parseParcelList(text, project.site.address);
+  const changed = parsed.join("|") !== project.site.extraParcels.join("|");
+  const total = project.review?.parcels && project.review.parcels.length > 1 ? project.review.parcels.reduce((s, x) => s + (x.parcel?.area ?? 0), 0) : null;
+  return <Field label="합필 필지" hint={`대표 필지 외 · 같은 동·리는 번지만${total ? ` · 합계 ${Math.round(total * 10) / 10}㎡ (${project.review!.parcels.length}필지)` : ""}`}>
+    <div className="merge-input">
+      <input value={text} onChange={(e: { target: { value: string } }) => setText(e.target.value)} placeholder="예: 867, 869, 870" />
+      <button className="btn" disabled={!changed || refreshing} onClick={() => apply(parsed)}>{parsed.length ? "합필 적용" : changed ? "합필 해제" : "합필 적용"}</button>
+    </div>
+  </Field>;
 }
 
 function ChecklistPanel({ project, refreshing, onRefresh, onJump }: { project: Project; refreshing: boolean; onRefresh: () => void; onJump: (rowId: string) => void }) {
