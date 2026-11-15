@@ -46,7 +46,7 @@ describe("운영 회귀검토", () => {
       const collected = data.collected ?? [];
       log(`- 자동 수집 조문 ${collected.length}건 · 행별: ${Object.entries(collected.reduce<Record<string, number>>((a, c) => ({ ...a, [c.rowId]: (a[c.rowId] ?? 0) + 1 }), {})).map(([k, v]) => `${k}:${v}`).join(" ")}`);
       const tr = data.transit;
-      log(`- 웹검색: ${(data as unknown as { webSearch?: { status?: string; results?: unknown[]; errors?: string[] } }).webSearch?.status} · 결과 ${(data as unknown as { webSearch?: { results?: unknown[] } }).webSearch?.results?.length ?? 0}건 · 공식문서 ${(data as unknown as { officialDocuments?: unknown[] }).officialDocuments?.length ?? 0}건`);
+      log(`- 웹검색: ${(data as unknown as { webSearch?: { status?: string; results?: unknown[]; errors?: string[] } }).webSearch?.status} · 결과 ${(data as unknown as { webSearch?: { results?: unknown[] } }).webSearch?.results?.length ?? 0}건 · 공식문서 ${((data as unknown as { officialDocuments?: { documents?: Array<{ title: string; status: string; kind?: string; gosiNo?: string; siteMention?: boolean }> } }).officialDocuments?.documents ?? []).map((d) => `[${d.status}${d.siteMention ? "·지번언급" : ""}] ${d.title.slice(0, 50)}${d.gosiNo ? " (" + d.gosiNo + ")" : ""}`).join(" / ") || "0건"}`);
       log(`- 역세권: ${tr ? `${tr.verdict} · ${short(tr.basis, 160)}${(tr.planned ?? []).length ? ` · 예정 ${tr.planned!.map((p) => `${p.name} ${p.distance}m`).join(",")}` : ""}` : "없음"}`);
       log(`- LH 공고: ${data.lhNotice ? `${data.lhNotice.title} · 기준 ${(data.lhNotice.extractedCriteria ?? []).length}건 (쪽 ${[...new Set((data.lhNotice.extractedCriteria ?? []).map((c) => c.page).filter(Boolean))].join(",")})` : "없음"}`);
 
@@ -60,6 +60,7 @@ describe("운영 회귀검토", () => {
       }
       log(`- 지정·상위계획: 용도지역지구 ${(data.landUse ?? []).map((l) => `${l.category}:${l.name}`).join(", ")} · 토지이용계획 ${(data.siteFacts?.designations ?? []).map((d) => `${d.name}(${d.conflict ?? ""})`).join(", ")} · 지구단위 ${data.districtPlan ? "있음" : "없음"}`);
       for (const r of rows) log(`  · ROW ${r.id} [${r.status}] ${r.group}${r.sub ? "/" + r.sub : ""} | ${short(r.content, 150)} | 비고: ${short(r.note, 150)}${r.missing ? " | 누락: " + r.missing : ""}`);
+      for (const id of ["plan.bcrfar", "bld.setback"]) { const r = pick(id); for (const x of (r?.sources ?? []).filter((x) => x.excerpt && x.kind === "ordinance").slice(0, 3)) { const z = (data.landUse ?? []).find((l) => l.category === "용도지역")?.name ?? ""; const ex = x.excerpt!.replace(/\s+/g, " "); const at = Math.max(0, ex.indexOf(z.replace(/지역$/, "")) - 60); log(`  · SRC ${id} ${x.title} ${x.article ?? ""}: ${ex.slice(at, at + 400)}`); } }
       for (const id of ["park.apartment", "plan.use"]) { const r = pick(id); const ex = r?.sources.find((x) => x.kind === "ordinance" && x.excerpt)?.excerpt; if (ex) log(`  · SRC ${id}: ${short(ex, 600)}`); }
       log(`  · LG ${JSON.stringify((data as unknown as { localGovernment?: string }).localGovernment ?? null)} ${JSON.stringify((data.parcels ?? [])[0]?.inputAddress)}`);
       const hl = rows.flatMap((r) => r.sources.flatMap((s) => s.highlights ?? [])).filter(Boolean);
