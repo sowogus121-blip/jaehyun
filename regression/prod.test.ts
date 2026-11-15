@@ -30,7 +30,7 @@ describe("운영 회귀검토", () => {
     it(address, async () => {
       log(`\n## ${address}`);
       const t0 = Date.now();
-      const res = await fetch(`${BASE}/api/site-review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, parcelAddresses: [], businessMode: "purchase", lhSupplyType: "youth" }), signal: AbortSignal.timeout(110_000) }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: String(e) }) }) as unknown as Response);
+      const res = await fetch(`${BASE}/api/site-review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, parcelAddresses: [], businessMode: "purchase", lhSupplyType: "youth", skipWebSearch: process.env.REGRESSION_WEB !== "1" }), signal: AbortSignal.timeout(110_000) }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: String(e) }) }) as unknown as Response);
       const data = await res.json().catch(() => ({})) as SiteReviewResult & { error?: string };
       log(`- HTTP ${res.status} · ${Math.round((Date.now() - t0) / 1000)}s · status=${data.status} · 오류 ${data.errors?.length ?? "?"} · 미설정 ${data.missing?.join(",") || "없음"}`);
       if (!res.ok || !data.location) { log(`- 실패: ${short(data.error ?? JSON.stringify(data).slice(0, 300))}`); return; }
@@ -46,6 +46,7 @@ describe("운영 회귀검토", () => {
       const collected = data.collected ?? [];
       log(`- 자동 수집 조문 ${collected.length}건 · 행별: ${Object.entries(collected.reduce<Record<string, number>>((a, c) => ({ ...a, [c.rowId]: (a[c.rowId] ?? 0) + 1 }), {})).map(([k, v]) => `${k}:${v}`).join(" ")}`);
       const tr = data.transit;
+      log(`- 웹검색: ${(data as unknown as { webSearch?: { status?: string; results?: unknown[]; errors?: string[] } }).webSearch?.status} · 결과 ${(data as unknown as { webSearch?: { results?: unknown[] } }).webSearch?.results?.length ?? 0}건 · 공식문서 ${(data as unknown as { officialDocuments?: unknown[] }).officialDocuments?.length ?? 0}건`);
       log(`- 역세권: ${tr ? `${tr.verdict} · ${short(tr.basis, 160)}${(tr.planned ?? []).length ? ` · 예정 ${tr.planned!.map((p) => `${p.name} ${p.distance}m`).join(",")}` : ""}` : "없음"}`);
       log(`- LH 공고: ${data.lhNotice ? `${data.lhNotice.title} · 기준 ${(data.lhNotice.extractedCriteria ?? []).length}건 (쪽 ${[...new Set((data.lhNotice.extractedCriteria ?? []).map((c) => c.page).filter(Boolean))].join(",")})` : "없음"}`);
 
