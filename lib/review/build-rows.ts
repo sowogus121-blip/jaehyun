@@ -6,7 +6,7 @@
  */
 import type { SiteReviewResult } from "../types";
 import { findZone, LAW, lawUrl, ref, useRestrictionRef, SUNLIGHT_TEXT, SUNLIGHT_HIGHLIGHTS, OPEN_SPACE_ZONES, OPEN_SPACE_FLOOR_AREA } from "./national";
-import { matchLibrary, type LibraryContext, type RowPatch } from "./library";
+import { matchLibrary, autoBlockOf, type LibraryContext, type RowPatch } from "./library";
 import { findArticle, zoneRatio, type Article } from "./articles";
 import { assessParcelAssembly } from "../parcel-assembly";
 import { ORDINANCE_TOPICS, NATIONAL_ARTICLES, lhCriterionRow } from "./collect-topics";
@@ -780,7 +780,8 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   }
 
   // 지구단위계획 구역인데 획지 기준이 확정되지 않았다면 건폐율·용적률·용도·높이를 후보로 묶는다.
-  if (districtPlanOf(review) && !site.blockNo) {
+  // 결정조서 지번 대조로 획지가 자동 확정된 경우(라이브러리 등록 구역)는 예외
+  if (districtPlanOf(review) && !site.blockNo && !autoBlockOf(ctx.address)) {
     for (const id of ["plan.bcrfar", "plan.use", "plan.height"]) {
       const row = rows.get(id);
       if (row && (row.status === "verified" || row.status === "user")) {
