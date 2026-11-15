@@ -212,7 +212,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const sentencesOf = (rowId: string, test: RegExp, max = 4) => {
     const out: Array<{ line: string; src: NonNullable<SiteReviewResult["collected"]>[number] }> = [];
     for (const c of collectedOf(rowId)) {
-      for (const raw of c.text.replace(/\r/g, "").split(/\n+|(?<=[가-힣)][.。])\s+|(?=\s[①-⑳])|(?=\s\d{1,2}\.\s)|(?=\s[가-하]\.\s)/)) {
+      for (const raw of c.text.replace(/\r/g, "").split(/\n+|(?<=[가-힣)][.。])\s+|(?=\s[①-⑳])|(?=\s\d{1,2}\.\s)|(?=\s[가나다라마바사아자차카타파하]\.\s)/)) {
         const line = raw.replace(/\s+/g, " ").trim();
         if (line.length >= 8 && line.length <= 260 && test.test(line) && !out.some((o) => o.line === line)) out.push({ line, src: c });
         if (out.length >= max) return out;
@@ -324,7 +324,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const annexTitle = useAnnex ? (useAnnex.article + " " + useAnnex.text.slice(0, 120)).replace(/\s+/g, "") : "";
   const annexBan = useAnnex ? (/있는건축물/.test(annexTitle) ? false : /없는건축물/.test(annexTitle) ? true : null) : null;
   // 별표 본문 안에서만 찾는다 (다른 조문 문장이 먼저 잡혀 '없음'으로 오판하지 않게)
-  const annexHit = (re: RegExp) => useAnnex ? useAnnex.text.replace(/\r/g, "").split(/\n+|(?=\s\d{1,2}\.\s)|(?=\s[가-하]\.\s)/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 4 && re.test(l)).slice(0, 2).map((l) => l.slice(0, 200)) : [];
+  const annexHit = (re: RegExp) => useAnnex ? useAnnex.text.replace(/\r/g, "").split(/\n+|(?=\s\d{1,2}\.\s)|(?=\s[가나다라마바사아자차카타파하]\.\s)/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 4 && re.test(l)).slice(0, 2).map((l) => l.slice(0, 200)) : [];
   const aptHit = annexHit(/공동주택/), offHit = annexHit(/업무시설|오피스텔/);
   const verdictOf = (hit: string[]) => annexBan === null ? undefined : annexBan ? (hit.length ? "conditional" as const : "allowed" as const) : hit.length ? "allowed" as const : "prohibited" as const;
   const commercial = zoneName ? (/유통상업/.test(zoneName) ? "dist" : /(중심|일반|근린)상업/.test(zoneName) ? "comm" : null) : null;
@@ -371,20 +371,22 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   });
 
   // ── 건폐율 / 용적률 ──
-  const bcrArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건폐율", "용도지역 안에서의 건폐율"]);
-  const farArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 용적률", "용도지역 안에서의 용적률"]);
+  const bcrArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 건폐율", "용도지역 안에서의 건폐율", "용도지역에서의 건폐율", "용도지역의 건폐율", "용도지역별 건폐율"]);
+  const farArticle = findArticle(review, "도시계획 조례", ["용도지역안에서의 용적률", "용도지역 안에서의 용적률", "용도지역에서의 용적률", "용도지역의 용적률", "용도지역별 용적률"]);
   const fromCollected = (label: string) => (review?.collected ?? []).filter((c) => c.topic === label)
     .map((c) => ({ sourceTitle: c.title, sourceUrl: c.url, topic: label, article: c.article, excerpt: c.text.slice(0, 270), fullText: c.text, verified: false as const }));
   const bcrPick = zoneName ? [bcrArticle, ...fromCollected("용도지역별 건폐율")].find((a) => a && zoneRatio(a, zoneName)) ?? bcrArticle : bcrArticle;
   const farPick = zoneName ? [farArticle, ...fromCollected("용도지역별 용적률")].find((a) => a && zoneRatio(a, zoneName)) ?? farArticle : farArticle;
   const bcr = zoneName ? zoneRatio(bcrPick ?? null, zoneName) : null;
-  const far = zoneName ? zoneRatio(farPick ?? null, zoneName) : null;
+  // 공동주택(LH 매입) 계획이면 조례의 공동주택 전용 용적률(예: 중심상업 공동주택 500%)을 우선
+  const housingPlan = uses.some((u) => u === "apartment" || u === "urban");
+  const far = zoneName ? zoneRatio(farPick ?? null, zoneName, { housing: housingPlan }) : null;
   const plansGovern = Boolean(districtPlanOf(review));
   const bcrfarStatus: RowStatus = bcr && far ? (plansGovern ? "candidate" : "verified") : bcr || far || zone ? "candidate" : "missing";
   put({
     id: "plan.bcrfar",
     content: bcr || far
-      ? `건폐율 ${bcr ? bcr.value + "%" : "미추출"} 이하\n용적률 ${far ? fmt(far.value) + "%" : "미추출"} 이하`
+      ? `건폐율 ${bcr ? bcr.value + "%" : `미추출 → 시행령 상한 ${zone?.bcr ?? "?"}%`} 이하\n용적률 ${far ? fmt(far.value) + "%" + (far.housing ? " (조례의 공동주택 기준)" : "") : `미추출 → 시행령 상한 ${zone ? fmt(zone.far) : "?"}%`} 이하`
       : zone ? `조례 수치 미추출 (국토계획법 시행령 상한: 건폐율 ${zone.bcr}%, 용적률 ${fmt(zone.far)}%)` : "용도지역 미확정",
     law: [bcrPick ? `${bcrPick.sourceTitle} ${bcrPick.article}` : "", farPick ? `${farPick.sourceTitle} ${farPick.article}` : ""].filter(Boolean).join(",\n")
       || "국토계획법 시행령 제84조·제85조 / 관할 도시계획 조례",
@@ -817,8 +819,9 @@ function applySetbackAnnex(rows: Map<string, ReviewRow>, review: SiteReviewResul
   const picks: Array<{ label: string; line: string }> = [];
   for (const sec of sections) {
     const label = /^\d\.\s*건축선/.test(sec) ? "건축선으로부터" : "인접대지경계선으로부터";
-    const m = sec.match(/[가-하]\.\s*공동주택[\s\S]*?(?=\s[가-하]\.\s|\s\d\.\s|$)/);
-    if (m) picks.push({ label, line: m[0].replace(/^[가-하]\.\s*/, "").trim().slice(0, 220) });
+    // 항목 기호는 가·나·다… 한 글자(점 생략 표기 '라 공동주택'도 있음). [가-하] 범위는 대부분의 한글을 포함하므로 쓰지 않는다.
+    const m = sec.match(/[가나다라마바사아자차카타파하]\.?\s*공동주택[\s\S]*?(?=\s[가나다라마바사아자차카타파하]\.?\s+[가-힣]|\s\d\.\s|$)/);
+    if (m) picks.push({ label, line: m[0].replace(/^[가나다라마바사아자차카타파하]\.?\s*/, "").trim().slice(0, 220) });
   }
   if (!picks.length) return;
   const officetelOnly = uses.length > 0 && uses.every((u) => u === "officetel");

@@ -25,7 +25,7 @@ const squash = (t: string) => t.replace(/\s+/g, "");
 /** 문장·항목 단위로 자르기 (줄, 마침표, ①, 1., 가. 등) — 원문 위치 보존 */
 function segments(text: string): Array<{ start: number; end: number; text: string }> {
   const out: Array<{ start: number; end: number; text: string }> = [];
-  const re = /\n+|(?<=[가-힣)」][.。])\s+|(?=[①-⑳])|(?<=\s)(?=\d{1,2}\.\s)|(?<=\s)(?=[가-하]\.\s)/g;
+  const re = /\n+|(?<=[가-힣)」][.。])\s+|(?=[①-⑳])|(?<=\s)(?=\d{1,2}\.\s)|(?<=\s)(?=[가나다라마바사아자차카타파하]\.\s)/g;
   let last = 0;
   const push = (a: number, b: number) => {
     const raw = text.slice(a, b);
@@ -136,7 +136,7 @@ export const fmtNum = (v: number, d = 2) => v.toLocaleString("ko-KR", { maximumF
 export function keySentencesFor(text: string, keywords: string[], max = 3, zone?: string): string[] {
   const clean = text.replace(/\r/g, "");
   const parts = clean
-    .split(/(?<=[.。])\s+|\n+|(?=\s[①-⑳]\s?)|(?=\s\d{1,2}\.\s)|(?=\s[가-하]\.\s)|(?=\s[-ㆍ○•]\s)/)
+    .split(/(?<=[.。])\s+|\n+|(?=\s[①-⑳]\s?)|(?=\s\d{1,2}\.\s)|(?=\s[가나다라마바사아자차카타파하]\.\s)|(?=\s[-ㆍ○•]\s)/)
     .map((p) => p.trim())
     .filter((p) => p.length >= 6);
   const kw = keywords.map((k) => k.replace(/\s+/g, "")).filter(Boolean);

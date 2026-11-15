@@ -20,8 +20,8 @@ export interface OrdinanceTopic { id: string; rowId: string; label: string; ordi
 
 export const ORDINANCE_TOPICS: OrdinanceTopic[] = [
   { id: "use", rowId: "plan.use", label: "용도지역 건축제한", ordinance: "도시계획", terms: ["건축할 수 있는 건축물", "건축할 수 없는 건축물", "안에서의 건축제한", "안의 건축제한"] },
-  { id: "bcr", rowId: "plan.bcrfar", label: "용도지역별 건폐율", ordinance: "도시계획", terms: ["안에서의 건폐율", "안의 건폐율"] },
-  { id: "far", rowId: "plan.bcrfar", label: "용도지역별 용적률", ordinance: "도시계획", terms: ["안에서의 용적률", "안의 용적률"] },
+  { id: "bcr", rowId: "plan.bcrfar", label: "용도지역별 건폐율", ordinance: "도시계획", terms: ["안에서의 건폐율", "안의 건폐율", "용도지역에서의 건폐율", "용도지역의 건폐율"] },
+  { id: "far", rowId: "plan.bcrfar", label: "용도지역별 용적률", ordinance: "도시계획", terms: ["안에서의 용적률", "안의 용적률", "용도지역에서의 용적률", "용도지역의 용적률"] },
   { id: "relax", rowId: "plan.relax", label: "임대주택 용적률 완화", ordinance: "도시계획", terms: ["임대주택"] },
   { id: "height", rowId: "plan.height", label: "건축물 높이 제한", ordinance: "건축", terms: ["높이 제한", "높이제한", "가로구역"] },
   { id: "sun", rowId: "bld.sunlight", label: "일조 등의 확보", ordinance: "건축", terms: ["일조"] },
