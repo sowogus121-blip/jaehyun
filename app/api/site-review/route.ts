@@ -407,7 +407,11 @@ export async function POST(request: NextRequest) {
     if (!found.documents.length && !found.errors.length && ctx.sggCd && !ctx.sggCd.endsWith("0")) found = await collectEumPlanDocuments({ ...ctx, sggCd: ctx.sggCd.slice(0, 4) + "0" });
     return found;
   }).catch((error) => ({ documents: [], errors: [error instanceof Error ? error.message : "토지이음 고시 조회 실패"] }));
-  const webSearchPromise = siteFactsPromise.then((facts) => {
+  // 자동 점검(회귀검토)은 웹검색 크레딧을 쓰지 않도록 끌 수 있다.
+  const skipWeb = body?.skipWebSearch === true;
+  const webSearchPromise = skipWeb
+    ? Promise.resolve({ status: "skipped" as const, provider: null, searchedAt: new Date().toISOString(), results: [], errors: [] } as unknown as Awaited<ReturnType<typeof searchOfficialSources>>)
+    : siteFactsPromise.then((facts) => {
     const matches = classifyDesignations(facts.designations ?? []);
     const extraQueries = matches.filter((m) => m.rule?.search).flatMap((m) => m.designations.slice(0, 1).map((d) => `${localGovernment} ${d.name} ${m.rule!.search}`));
     return searchOfficialSources({ address: fullAddress, localGovernment, businessMode: body?.businessMode, regionalOffice: body?.regionalOffice, extraQueries });

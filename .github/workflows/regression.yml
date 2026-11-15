@@ -6,6 +6,10 @@ on:
       sites:
         description: "대상지 주소 (| 구분, 비우면 기본 샘플)"
         required: false
+      web:
+        description: "웹검색 사용 (1=사용, 크레딧 소모)"
+        required: false
+        default: "0"
 
 jobs:
   regression:
@@ -22,6 +26,7 @@ jobs:
         env:
           REGRESSION_BASE: https://lh-plan-lab.vercel.app
           REGRESSION_SITES: ${{ github.event.inputs.sites }}
+          REGRESSION_WEB: ${{ github.event.inputs.web }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
