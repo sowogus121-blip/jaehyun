@@ -597,8 +597,21 @@ export async function POST(request: NextRequest) {
   // 토지이음 고시를 우선 근거로 두고, 웹검색 문서는 분석 성공한 것만 덧붙인다(토지이음 고시를 찾았을 때).
   const eumDocs = eumDocuments?.documents ?? [];
   const eumSeqs = new Set(eumDocs.map((d) => d.sourceUrl.match(/seq=(\d+)/)?.[1]).filter(Boolean));
+  // 웹검색 문서 관련성: 지구단위계획은 대상지 동명·구역명이 제목/본문에 있는 것만, LH 공고는 올해·작년 것만(반지하·공사비연동 등 다른 유형 제외)
+  const siteDong = (fullAddress.match(/([가-힣0-9]+(?:동|읍|면|리|가))\s+(?:산\s*)?\d/) ?? [])[1] ?? "";
+  const planNames = (landUse ?? []).filter((l) => /지구단위|택지|정비|역세권/.test(l.name)).map((l) => l.name.replace(/\s*(지구단위계획구역|구역|지구)$/, ""));
+  const thisYear = new Date().getFullYear();
+  const relevantPlan = (d: (typeof discoveredDocuments.documents)[number]) => {
+    const hay = (d.title + " " + (d.preview ?? "") + " " + ((d as { text?: string }).text ?? "")).replace(/\s+/g, "");
+    return (!!siteDong && hay.includes(siteDong)) || planNames.some((n) => n.length >= 2 && hay.includes(n.replace(/\s+/g, "")));
+  };
   const webDocs = discoveredDocuments.documents.filter((d) => {
+    if (d.kind === "lh-notice") {
+      const yr = Number((d.title.match(/(20\d{2})년/) ?? [])[1]);
+      return (!yr || yr >= thisYear - 0) && !/반지하|지하층|공사비\s*연동/.test(d.title);
+    }
     if (d.kind !== "district-plan") return true;
+    if (!relevantPlan(d)) return false;
     const seq = d.sourceUrl.match(/gvGosiDet\.jsp\?[^#]*seq=(\d+)/)?.[1];
     if (seq && eumSeqs.has(seq)) return false;
     return !eumDocs.length || d.status === "analyzed";
