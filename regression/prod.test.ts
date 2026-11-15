@@ -46,7 +46,7 @@ describe("운영 회귀검토", () => {
       const collected = data.collected ?? [];
       log(`- 자동 수집 조문 ${collected.length}건 · 행별: ${Object.entries(collected.reduce<Record<string, number>>((a, c) => ({ ...a, [c.rowId]: (a[c.rowId] ?? 0) + 1 }), {})).map(([k, v]) => `${k}:${v}`).join(" ")}`);
       const tr = data.transit;
-      log(`- 웹검색: ${(data as unknown as { webSearch?: { status?: string; results?: unknown[]; errors?: string[] } }).webSearch?.status} · 결과 ${(data as unknown as { webSearch?: { results?: unknown[] } }).webSearch?.results?.length ?? 0}건 · 공식문서 ${(data as unknown as { officialDocuments?: unknown[] }).officialDocuments?.length ?? 0}건`);
+      log(`- 웹검색: ${(data as unknown as { webSearch?: { status?: string; results?: unknown[]; errors?: string[] } }).webSearch?.status} · 결과 ${(data as unknown as { webSearch?: { results?: unknown[] } }).webSearch?.results?.length ?? 0}건 · 공식문서 ${((data as unknown as { officialDocuments?: { documents?: Array<{ title: string; status: string; kind?: string; gosiNo?: string; siteMention?: boolean }> } }).officialDocuments?.documents ?? []).map((d) => `[${d.status}${d.siteMention ? "·지번언급" : ""}] ${d.title.slice(0, 50)}${d.gosiNo ? " (" + d.gosiNo + ")" : ""}`).join(" / ") || "0건"}`);
       log(`- 역세권: ${tr ? `${tr.verdict} · ${short(tr.basis, 160)}${(tr.planned ?? []).length ? ` · 예정 ${tr.planned!.map((p) => `${p.name} ${p.distance}m`).join(",")}` : ""}` : "없음"}`);
       log(`- LH 공고: ${data.lhNotice ? `${data.lhNotice.title} · 기준 ${(data.lhNotice.extractedCriteria ?? []).length}건 (쪽 ${[...new Set((data.lhNotice.extractedCriteria ?? []).map((c) => c.page).filter(Boolean))].join(",")})` : "없음"}`);
 
