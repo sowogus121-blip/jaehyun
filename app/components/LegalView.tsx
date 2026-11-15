@@ -53,7 +53,7 @@ export function LegalView({ project, onChange, onRefresh, refreshing, onUpload }
   return <div className="view legal-view">
     <Panel title="대상지 조건" sub="이 값이 바뀌면 자동 행이 다시 작성됩니다. 검토자가 수정한 행은 유지됩니다."
       actions={<>
-        <button className="btn" onClick={onRefresh} disabled={refreshing}>{refreshing ? "공식자료 조회 중…" : "공식자료 다시 조회"}</button>
+        <button className="btn" onClick={() => onRefresh()} disabled={refreshing}>{refreshing ? "공식자료 조회 중…" : "공식자료 다시 조회"}</button>
         <label className={`toggle ${project.legalDone ? "on" : ""}`}><input type="checkbox" checked={project.legalDone} onChange={(e: { target: { checked: boolean } }) => onChange({ ...project, legalDone: e.target.checked })} />법규검토 완료</label>
       </>}>
       <div className="site-bar">
