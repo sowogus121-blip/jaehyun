@@ -262,7 +262,7 @@ export const runtime = "nodejs";
 export const preferredRegion = "icn1";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null) as { address?: string; parcelAddresses?: string[]; businessMode?: string; regionalOffice?: string; lhSupplyType?: string } | null;
+  const body = await request.json().catch(() => null) as { address?: string; parcelAddresses?: string[]; businessMode?: string; regionalOffice?: string; lhSupplyType?: string; skipWebSearch?: boolean } | null;
   const address = body?.address?.trim();
   if (!address) return NextResponse.json({ error: "검토할 주소가 필요합니다." }, { status: 400 });
 
