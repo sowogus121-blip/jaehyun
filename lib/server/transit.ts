@@ -118,7 +118,7 @@ export async function checkTransit(x: number, y: number, key: string, domain: st
   const verdicts = [stationVerdict, univVerdict].filter(Boolean) as Array<(typeof order)[number]>;
   const verdict = verdicts.length ? order.find((v) => verdicts.includes(v))! : errors.length ? "unknown" : "outside";
   const basis = [
-    stationPick ? `${stationPick.name} ${stationPick.kind === "exit" ? "출구" : "역사 중심"}까지 직선 ${stationPick.distance}m` + (generalRail ? ` (일반·고속철도역${stationPick.category ? ": " + stationPick.category.split(">").pop()!.trim() : ""} — 도시철도역 인정 여부 LH 확인 필요)` : "") : "반경 1.2km 내 철도역 없음",
+    stationPick ? `${stationPick.name} ${stationPick.kind === "exit" ? "출구" : "역사 중심"}까지 직선 ${stationPick.distance}m` + (generalRail ? ` (KTX·일반철도역 — 지하철·경전철이 아니어서 LH 도시철도역 인정 여부 확인 필요)` : "") : "반경 1.2km 내 철도역 없음",
     university ? `${university.name} ${univIsGate ? "" : "대표점"}까지 직선 ${university.distance}m` : "반경 1.2km 내 대학교 없음",
   ].join(" · ");
   return { station: stationPick, university, verdict, basis, checkedAt: new Date().toISOString(), errors };
