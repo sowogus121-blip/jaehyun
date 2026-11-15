@@ -158,7 +158,8 @@ const osongBiopolis: LibraryEntry = {
   id: "osong-biopolis",
   title: "오송바이오폴리스지구 지구단위계획 시행지침 (C01~C18 상업·업무시설용지)",
   checkedAt: "2026-11-11",
-  match: (ctx) => inCity(ctx, "청주시", "오송읍") && compact(ctx.address).includes("오송읍"),
+  // 오송1산단(오송생명과학단지: 만수리·연제리)은 별도 계획이므로 제외
+  match: (ctx) => inCity(ctx, "청주시", "오송읍") && compact(ctx.address).includes("오송읍") && !osong1Area(ctx),
   rows: (ctx) => {
     const plan: RowPatch = {
       id: "plan.district",
@@ -197,6 +198,90 @@ const osongBiopolis: LibraryEntry = {
       status: "user",
       params: { maxFloors: floors },
       sources: [{ title: "오송바이오폴리스지구 지구단위계획 시행지침", article: "제28조", url: OSONG_GUIDE_URL, excerpt: "최고층수 C01~C06 15층, C07~C18 10층", highlights: [`${floors}층`], kind: "plan" }],
+    }];
+  },
+};
+
+// ───────── 오송생명과학단지(오송1산단) 지구단위계획 ─────────
+// 원문: 오송생명과학단지 개발사업 지구단위계획구역 및 지구단위계획 결정조서·시행지침 (2017.1)
+//  - 결정조서 p.30 상업용지 가구·획지별 지번, p.38 건축물 기준
+//  - 시행지침 제30조(획지), 제31조 <표7> 상업용지 허용·불허용도
+// 대전국토청 고시 제2025-141호 실시계획(변경)에서 상업용지는 "변경없음"
+const OSONG1_PLAN_URL = "https://cjic.cheongju.go.kr/DATA/download/cic/cts225_file.pdf";
+const osong1Area = (ctx: LibraryContext) => inCity(ctx, "오송읍") && /(만수리|연제리)/.test(compact(ctx.address));
+/** 결정조서 p.30 상업용지 획지별 지번 (부번 없는 본번만) */
+const OSONG1_LOTS: Record<string, string> = (() => {
+  const table: [string, string, number[]][] = [
+    ["상업3-12", "만수리", [519, 520, 521, 522, 523, 524]],
+    ["상업3-13", "만수리", [530, 531, 532, 533, 534, 535]],
+    ["상업3-14", "만수리", [537, 538]],
+    ["상업3-15", "만수리", [539, 540, 541, 542, 543, 544, 545, 546]],
+    ["상업3-16", "만수리", [525, 526, 528, 529]],
+    ["상업4-1", "연제리", [832, 833, 834, 835]],
+    ["상업4-2", "만수리", [846, 847, 848, 849]],
+    ["상업4-3", "만수리", [858, 859, 860]],
+    ["상업4-4", "만수리", [862, 863, 864, 865]],
+    ["상업4-5", "만수리", [866, 867, 869, 870]],
+    ["상업4-6", "만수리", [850, 851, 852, 853, 854, 855, 856, 857]],
+  ];
+  const out: Record<string, string> = {};
+  for (const [blk, ri, lots] of table) for (const n of lots) out[`${ri}${n}`] = blk;
+  return out;
+})();
+export function osong1BlockOf(address: string): string {
+  const m = compact(address).match(/(만수리|연제리)(?:산)?(\d+)(-\d+)?(?!\d)/);
+  if (!m || m[3]) return "";
+  return OSONG1_LOTS[`${m[1]}${m[2]}`] ?? "";
+}
+const OSONG1_LOT_AREA: Record<string, number> = { "만수리866": 513.7, "만수리867": 459.9, "만수리869": 460.6, "만수리870": 514.6 };
+const osong1 = (article: string, excerpt?: string, highlights?: string[]): SourceRef =>
+  ({ title: "오송생명과학단지 지구단위계획 결정조서·시행지침 (2017.1)", article, url: OSONG1_PLAN_URL, excerpt, highlights, kind: "plan" });
+
+const osong1Plan: LibraryEntry = {
+  id: "osong1-life-science",
+  title: "오송생명과학단지(오송1산단) 지구단위계획 상업용지",
+  checkedAt: "2026-11-15",
+  match: (ctx) => inCity(ctx, "청주시") && osong1Area(ctx),
+  rows: (ctx) => {
+    const auto = osong1BlockOf(ctx.address);
+    const block = ctx.blockNo || auto;
+    const lotKey = (compact(ctx.address).match(/(만수리|연제리)(\d+)(?!\d|-)/) ?? []).slice(1).join("");
+    const lotArea = OSONG1_LOT_AREA[lotKey];
+    const plan: RowPatch = {
+      id: "plan.district",
+      content: block
+        ? `오송생명과학단지 지구단위계획구역 · ${block.replace(/-(\d+)$/, " 가구 획지$1")}${ctx.blockNo ? " (검토자 지정)" : " (결정조서 지번 대조)"}` + (lotArea ? `\n결정조서 획지면적 ${lotArea.toLocaleString()}㎡` : "")
+        : "오송생명과학단지 지구단위계획구역 · 결정조서에서 해당 지번의 가구·획지 미확인",
+      law: "오송생명과학단지 지구단위계획 결정조서(상업용지 가구·획지), 시행지침 제30조",
+      note: "획지 분할 불가 · 합병 허용(넓은 도로 접 필지의 지침 적용, 도로폭 같으면 강화된 규정). 대전국토청 고시 제2025-141호 실시계획 변경에서 상업용지 변경없음",
+      status: block ? "verified" : "candidate",
+      sources: [osong1("결정조서 상업용지 (p.30), 시행지침 제30조", block === "상업4-5" ? "상업4 ⑤ 1,948.8㎡ — 만수리 866 513.7 / 867 459.9 / 869 460.6 / 870 514.6" : undefined, block === "상업4-5" ? ["⑤", "1,948.8"] : undefined)],
+      missing: block ? undefined : "해당 필지 가구·획지번호",
+    };
+    if (!/^상업4-[1-6]$/.test(block)) return [plan];
+    return [plan, {
+      id: "plan.use",
+      content: "상업용지 C1: 일반상업지역 건축가능 건축물 허용\n불허: 단독 및 공동주택(도시형생활주택 포함), 격리병원·장례식장, 관람장·동식물원, 숙박·위락(일부 가구만 허용)\n오피스텔(업무시설)은 불허용도에 없음 → 허용",
+      law: "오송생명과학단지 지구단위계획 시행지침 제31조 <표7>",
+      note: "지구단위계획 불허용도가 조례 허용용도에 우선. 공동주택이 불허이므로 주상복합·도생 시나리오 불가",
+      status: "verified",
+      params: { useApartment: "prohibited", useUrban: "prohibited", useOfficetel: "allowed" },
+      sources: [osong1("시행지침 제31조 <표7> (PDF p.63)", "C1 … 일반상업 지역에서 건축 가능한 건축물 / 불허용도 ∙ 단독 및 공동주택 …", ["단독 및 공동주택"])],
+    }, {
+      id: "plan.bcrfar",
+      content: `건폐율 80% 이하\n용적률 1,300% 이하 (${block}, C1)`,
+      law: "오송생명과학단지 지구단위계획 결정조서 건축물 기준(p.38), 시행지침 제31조 <표7>",
+      note: "조례 일반값(1,000%)보다 지구단위계획 획지 기준이 우선",
+      status: "verified",
+      params: { bcr: 80, far: 1300 },
+      sources: [osong1("시행지침 제31조 <표7>", "C1 … 80 이하 1300 이하", ["80 이하", "1300 이하"])],
+    }, {
+      id: "plan.height",
+      content: "최고높이 지정 없음 (C1)\n건축한계선 1m·2m 지정 구간 — 결정도 확인",
+      law: "오송생명과학단지 지구단위계획 결정조서 건축물 기준(p.38)",
+      note: "높이는 건축법·일조 등 일반 기준 적용",
+      status: "verified",
+      sources: [osong1("결정조서 건축물 기준 (p.38)")],
     }];
   },
 };
@@ -279,7 +364,12 @@ const uijeongbu2nd: LibraryEntry = {
   ],
 };
 
-export const LIBRARY: LibraryEntry[] = [seoulSemiIndustrial, cheongjuCommercial, cheongjuParking, osongBiopolis, uijeongbu2nd];
+export const LIBRARY: LibraryEntry[] = [seoulSemiIndustrial, cheongjuCommercial, cheongjuParking, osongBiopolis, osong1Plan, uijeongbu2nd];
+
+/** 결정조서 지번 대조로 획지를 자동 확정할 수 있는 구역의 획지번호 (없으면 "") */
+export function autoBlockOf(address: string): string {
+  return inCity({ address, zones: [], districtPlan: null, blockNo: "" }, "오송읍") ? osong1BlockOf(address) : "";
+}
 
 export function matchLibrary(ctx: LibraryContext): LibraryEntry[] {
   return LIBRARY.filter((entry) => entry.match(ctx));
