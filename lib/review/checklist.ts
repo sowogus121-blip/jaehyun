@@ -4,6 +4,7 @@
  */
 import type { Project, ReviewRow } from "./types";
 import { districtPlanOf } from "./build-rows";
+import { autoBlockOf } from "./library";
 
 export type CheckState = "ok" | "partial" | "missing" | "manual";
 export interface CheckItem { id: string; label: string; state: CheckState; detail: string; rowId?: string; link?: { label: string; url: string } }
@@ -89,13 +90,22 @@ export function buildChecklist(p: Project): CheckGroup[] {
         (() => {
           const got = planDocs.filter((d) => d.status === "analyzed");
           const gosi = got.filter((d) => d.gosiNo);
-          const state: CheckState = gosi.length ? "ok" : got.length ? "partial" : "missing";
-          const detail = gosi.length
+          // 검증 라이브러리에 원문(결정조서·시행지침)이 등록된 구역이면 확보로 본다
+          const dRow = row("plan.district");
+          const libDoc = dRow && dRow.status === "verified" ? dRow.sources.find((s) => s.kind === "plan" && s.url) : undefined;
+          const state: CheckState = gosi.length || libDoc ? "ok" : got.length ? "partial" : "missing";
+          const detail = libDoc
+            ? `${libDoc.title}${libDoc.article ? " · " + libDoc.article : ""} · 원문 대조 완료`
+            : gosi.length
             ? gosi.map((d) => `${d.gosiNo}${d.gosiDate ? "(" + d.gosiDate + ")" : ""}${d.siteMention ? " ★지번 기재" : ""}`).join(", ") + " · 토지이음 고시문" + (gosi.some((d) => d.attachments?.some((a) => a.analyzed)) ? "·첨부" : "") + " 자동 확보 · 획지는 결정도로 확인"
             : got.length ? got.map((d) => d.title).join(", ") : planDocs.length ? "고시 후보는 찾았지만 본문을 읽지 못함 · 토지이음 고시에서 열람" : "토지이음 고시에서 결정고시를 찾지 못함";
-          return { id: "dp-doc", label: "지구단위계획 결정조서·결정도·시행지침", state, detail, link: { label: "토지이음 고시", url: gosi[0]?.sourceUrl ?? EUM_GOSI } };
+          return { id: "dp-doc", label: "지구단위계획 결정조서·결정도·시행지침", state, detail, rowId: "plan.district", link: libDoc ? { label: "원문 PDF", url: libDoc.url! } : { label: "토지이음 고시", url: gosi[0]?.sourceUrl ?? EUM_GOSI } };
         })(),
-        { id: "dp-block", label: "획지번호", state: p.site.blockNo ? "ok" as const : "missing" as const, detail: p.site.blockNo ? `획지 ${p.site.blockNo}` : "결정도에서 확인 후 대상지 조건에 입력", rowId: "plan.district" },
+        (() => {
+          const auto = p.site.blockNo ? "" : autoBlockOf(r?.location?.parcelAddress || r?.location?.address || p.site.address);
+          return { id: "dp-block", label: "획지번호", state: p.site.blockNo || auto ? "ok" as const : "missing" as const,
+            detail: p.site.blockNo ? `획지 ${p.site.blockNo} (검토자 입력)` : auto ? `${auto} · 결정조서 지번 대조로 자동 확인` : "결정도에서 확인 후 대상지 조건에 입력", rowId: "plan.district" };
+        })(),
       ] : []),
       { id: "height", label: "최고높이·층수 제한", rowId: "plan.height",
         state: rowState(row("plan.height")) === "ok" || (zones.length > 0 && !overlays.some((o) => o.name.includes("고도")) && !districtPlanOf(r ?? null) && !row("zone.height-district")) || has("plan.height").length ? "ok" : overlays.some((o) => o.name.includes("고도")) || districtPlanOf(r ?? null) || row("zone.height-district") ? "partial" : "missing",
