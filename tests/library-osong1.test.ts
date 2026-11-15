@@ -28,3 +28,13 @@ describe("오송생명과학단지(오송1산단) 지구단위계획", () => {
     expect(matchLibrary(ctx).map((e) => e.id)).toContain("osong-biopolis");
   });
 });
+
+describe("오송1산단 합필", () => {
+  it("상업4⑤ 네 필지 합필 시 획지 전체 1,948.8㎡로 표시", () => {
+    const ctx = { address: addr("866"), zones: ["일반상업지역"], districtPlan: true, blockNo: "", extraParcels: ["867", "869", "870"].map(addr) };
+    const plan = matchLibrary(ctx).find((e) => e.id === "osong1-life-science")!.rows(ctx).find((r) => r.id === "plan.district")!;
+    expect(plan.content).toContain("합필 4필지");
+    expect(plan.content).toContain("1,948.8㎡");
+    expect(plan.content).toContain("획지 전체");
+  });
+});

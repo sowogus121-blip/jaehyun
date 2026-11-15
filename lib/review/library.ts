@@ -16,6 +16,7 @@ export interface LibraryContext {
   zones: string[];      // 정확한 용도지역 이름 목록
   districtPlan: boolean | null;
   blockNo: string;      // 대문자, 공백 제거
+  extraParcels?: string[]; // 합필 대상 추가 필지 (전체 주소)
 }
 
 export type RowPatch = Partial<Omit<ReviewRow, "id" | "origin">> & { id: string };
@@ -247,10 +248,20 @@ const osong1Plan: LibraryEntry = {
     const block = ctx.blockNo || auto;
     const lotKey = (compact(ctx.address).match(/(만수리|연제리)(\d+)(?!\d|-)/) ?? []).slice(1).join("");
     const lotArea = OSONG1_LOT_AREA[lotKey];
+    // 합필: 추가 필지들의 획지·면적
+    const extra = (ctx.extraParcels ?? []).map((a) => ({ a, blk: osong1BlockOf(a), key: (compact(a).match(/(만수리|연제리)(\d+)(?!\d|-)/) ?? []).slice(1).join("") }));
+    const merged = extra.length > 0;
+    const blocks = [...new Set([block, ...extra.map((e) => e.blk)].filter(Boolean))];
+    const areas = [lotArea, ...extra.map((e) => OSONG1_LOT_AREA[e.key])];
+    const mergedArea = merged && areas.every((v) => typeof v === "number") ? Math.round(areas.reduce((x, y) => x! + y!, 0)! * 10) / 10 : null;
+    const blockAll = block === "상업4-5" && merged && extra.length === 3 && blocks.length === 1;
+    const mergeLine = !merged ? "" : blocks.length === 1 && extra.every((e) => e.blk)
+      ? `\n합필 ${extra.length + 1}필지 · 모두 동일 획지(${block})${mergedArea ? ` · 결정조서 면적 합계 ${mergedArea.toLocaleString()}㎡` : ""}${blockAll ? " = 획지 전체" : ""}`
+      : `\n합필 ${extra.length + 1}필지 · 획지 ${[block || "미확인", ...extra.map((e) => e.blk || "미확인")].join(" / ")} — 획지 간 합병 시 넓은 도로에 접한 필지의 지침 적용(시행지침 제30조)`;
     const plan: RowPatch = {
       id: "plan.district",
       content: block
-        ? `오송생명과학단지 지구단위계획구역 · ${block.replace(/-(\d+)$/, " 가구 획지 $1번")}${ctx.blockNo ? " (검토자 지정)" : " (결정조서 지번 대조)"}` + (lotArea ? `\n결정조서 획지면적 ${lotArea.toLocaleString()}㎡` : "")
+        ? `오송생명과학단지 지구단위계획구역 · ${block.replace(/-(\d+)$/, " 가구 획지 $1번")}${ctx.blockNo ? " (검토자 지정)" : " (결정조서 지번 대조)"}` + (lotArea && !merged ? `\n결정조서 획지면적 ${lotArea.toLocaleString()}㎡` : "") + mergeLine
         : "오송생명과학단지 지구단위계획구역 · 결정조서에서 해당 지번의 가구·획지 미확인",
       law: "오송생명과학단지 지구단위계획 결정조서(상업용지 가구·획지), 시행지침 제30조",
       note: "획지 분할 불가 · 합병 허용(넓은 도로 접 필지의 지침 적용, 도로폭 같으면 강화된 규정). 대전국토청 고시 제2025-141호 실시계획 변경에서 상업용지 변경없음",

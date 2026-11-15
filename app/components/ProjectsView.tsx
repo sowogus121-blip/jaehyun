@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { parseParcelList } from "@/lib/parcel-list";
 import type { BusinessType, LhSupply, Project, UnitType, UseKind } from "@/lib/review/types";
 import { SUPPLY_LABEL, USE_SHORT } from "@/lib/review/types";
 import { projectProgress, uid } from "@/lib/project/store";
@@ -42,7 +43,7 @@ export function ProjectsView({ projects, onOpen, onCreate, onDuplicate, onDelete
 
   const submit = () => {
     if (!form.address.trim()) return;
-    onCreate({ ...form, extraParcels: parcelText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean), types: parseTypes(typeText, form.supplies) });
+    onCreate({ ...form, extraParcels: parseParcelList(parcelText, form.address), types: parseTypes(typeText, form.supplies) });
     setShowForm(false);
     setForm((f) => ({ ...f, name: "", address: "", siteArea: undefined, blockNo: "" }));
     setTypeText(""); setParcelText("");
@@ -78,7 +79,7 @@ export function ProjectsView({ projects, onOpen, onCreate, onDuplicate, onDelete
           </Field>
           <Field label="목표 전용면적 (㎡)" hint="쉼표로 구분 · 예: 26, 36, 46 (비우면 용도별 기본 타입)"><input value={typeText} onChange={(e: { target: { value: string } }) => setTypeText(e.target.value)} placeholder="26, 36" /></Field>
           <Field label="지구단위계획 획지번호 (알고 있으면)" hint="결정도로 확인한 경우만 입력 · 예: C04"><input value={form.blockNo ?? ""} onChange={(e: { target: { value: string } }) => set("blockNo", e.target.value)} /></Field>
-          <Field label="합필 대상 추가 필지" wide hint="한 줄에 한 필지 · 대표 필지 제외"><textarea rows={2} value={parcelText} onChange={(e: { target: { value: string } }) => setParcelText(e.target.value)} /></Field>
+          <Field label="합필 대상 추가 필지" wide hint="대표 필지 제외 · 같은 동·리면 번지만 (예: 867, 869, 870)"><textarea rows={2} value={parcelText} onChange={(e: { target: { value: string } }) => setParcelText(e.target.value)} /></Field>
         </div>
         <div className="form-actions"><button className="btn primary lg" disabled={!form.address.trim() || busy} onClick={submit}>{busy ? "조회 중…" : "생성하고 법규 자동조사 시작"}</button></div>
       </div>}

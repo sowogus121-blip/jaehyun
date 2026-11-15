@@ -97,6 +97,7 @@ function siteContext(site: SiteInput, review: SiteReviewResult | null): LibraryC
     zones,
     districtPlan: review ? districtPlanOf(review) : null,
     blockNo: compact(site.blockNo ?? "").toUpperCase(),
+    extraParcels: site.extraParcels.filter(Boolean),
   };
 }
 
