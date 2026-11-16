@@ -441,8 +441,8 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     id: "bld.sunlight",
     content: zone?.sunlight ? SUNLIGHT_TEXT : zone ? `${zone.zone}: 정북일조 사선 비적용 (채광·인동거리는 별도)` : "용도지역 확정 후 판단",
     law: "건축법 제61조제1항, 시행령 제86조제1항" + (sunArticle ? `, ${sunArticle.sourceTitle} ${sunArticle.article}` : ""),
-    note: zone?.sunlight ? "조례 강화 여부 확인" : "",
-    status: zone ? "candidate" : "missing",
+    note: zone?.sunlight ? "조례 강화 여부 확인" : zone ? "건축법 제61조제1항은 전용주거·일반주거지역에만 적용 — 해당 용도지역 아님" : "",
+    status: zone ? (zone.sunlight ? "candidate" : "verified") : "missing",
     sources: [lawRef(review, LAW.buildingDecree, "제86조"), ...(sunArticle ? [articleRef(sunArticle, ["정북"])] : [])].map((s, i) => i === 0 ? { ...s, excerpt: zone?.sunlight ? SUNLIGHT_TEXT : undefined, highlights: SUNLIGHT_HIGHLIGHTS } : s),
   });
   // 채광창·인동거리 문장만 (정북일조 인접대지 이격·조경 산입 문장 제외)
@@ -781,6 +781,32 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   // ── 검증 근거 라이브러리 (우선 적용) ──
   for (const entry of matchLibrary(ctx)) {
     for (const patch of entry.rows(ctx)) applyPatch(rows, patch, entry.title);
+  }
+
+  // 라이브러리로 원문 대조가 끝난 항목은 관련 후보 행도 확정한다.
+  const dRow = rows.get("plan.district");
+  const planSrc = dRow && dRow.status === "verified" ? dRow.sources.find((x) => x.kind === "plan" && x.url) : undefined;
+  const zdp = rows.get("zone.district-plan");
+  if (planSrc && zdp && zdp.status === "candidate") {
+    rows.set("zone.district-plan", { ...zdp,
+      content: zdp.content.split("\n").filter((l) => !l.startsWith("· 확인:")).join("\n") + `\n· 원문 확인: ${dRow!.content.split("\n")[0]}\n· 용도·건폐율·용적률·높이는 '지구단위계획' 행에 반영`,
+      note: `${planSrc.title} 원문 대조 완료`, status: "verified", sources: [planSrc, ...zdp.sources], missing: undefined });
+  }
+  const useRow = rows.get("plan.use");
+  const relax = rows.get("plan.relax");
+  if (relax && useRow && (useRow.status === "verified" || useRow.status === "user") && useRow.params?.useApartment === "prohibited" && useRow.params?.useUrban === "prohibited") {
+    rows.set("plan.relax", { ...relax,
+      content: "공동주택·도시형생활주택: 해당 없음 (용도 불허)\n오피스텔: 완화 없이 기본 용적률로 계산 — 오피스텔(준주택)은 조례의 공공임대주택 완화 대상인지 불명확",
+      note: `근거: ${useRow.law} · 오피스텔 완화를 쓰려면 지구단위계획 시행지침·조례의 완화 조문에 준주택 포함 여부 확인`, status: "verified", missing: undefined });
+  }
+  const minorRow = rows.get("zone.minor");
+  if (minorRow && minorRow.status === "candidate") {
+    const items = minorRow.content.split("\n").filter(Boolean);
+    // 가축사육제한구역(축사 입지 규제)·산업단지/택지 용지 구분 표시는 건축물 규모·용도에 영향 없음
+    const harmless = (l: string) => /가축사육제한구역|^·\s*(상업|주거|공업|업무|지원시설|공공시설|산업시설)용지/.test(l);
+    if (items.length && items.every(harmless)) {
+      rows.set("zone.minor", { ...minorRow, note: "가축사육제한구역은 축사 설치만 제한 · 'OO용지'는 단지계획상 토지용도 표시(지구단위계획 행에서 반영) → 규모·용도 영향 없음", status: "verified" });
+    }
   }
 
   // 지구단위계획 구역인데 획지 기준이 확정되지 않았다면 건폐율·용적률·용도·높이를 후보로 묶는다.
