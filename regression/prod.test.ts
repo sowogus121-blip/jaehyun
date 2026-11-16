@@ -26,11 +26,15 @@ const log = (s = "") => { out.push(s); console.log(s); };
 const short = (s: string | undefined, n = 220) => (s ?? "").replace(/\s+/g, " ").slice(0, n);
 
 describe("운영 회귀검토", () => {
-  for (const address of SITES) {
-    it(address, async () => {
-      log(`\n## ${address}`);
+  for (const entry of SITES) {
+    // "대표주소 + 867, 869" 형식이면 합필 검토
+    const [address, extraText] = entry.split(/\s*\+\s*/, 2);
+    const base = address.replace(/\s*\d+(-\d+)?$/, "");
+    const parcelAddresses = (extraText ?? "").split(/[,，]/).map((t) => t.trim()).filter(Boolean).map((t) => (/^\d+(-\d+)?$/.test(t) ? `${base} ${t}` : t));
+    it(entry, async () => {
+      log(`\n## ${entry}`);
       const t0 = Date.now();
-      const res = await fetch(`${BASE}/api/site-review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, parcelAddresses: [], businessMode: "purchase", lhSupplyType: "youth", skipWebSearch: process.env.REGRESSION_WEB !== "1" }), signal: AbortSignal.timeout(110_000) }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: String(e) }) }) as unknown as Response);
+      const res = await fetch(`${BASE}/api/site-review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, parcelAddresses, businessMode: "purchase", lhSupplyType: "youth", skipWebSearch: process.env.REGRESSION_WEB !== "1" }), signal: AbortSignal.timeout(110_000) }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: String(e) }) }) as unknown as Response);
       const data = await res.json().catch(() => ({})) as SiteReviewResult & { error?: string };
       log(`- HTTP ${res.status} · ${Math.round((Date.now() - t0) / 1000)}s · status=${data.status} · 오류 ${data.errors?.length ?? "?"} · 미설정 ${data.missing?.join(",") || "없음"}`);
       if (!res.ok || !data.location) { log(`- 실패: ${short(data.error ?? JSON.stringify(data).slice(0, 300))}`); return; }
@@ -50,7 +54,7 @@ describe("운영 회귀검토", () => {
       log(`- 역세권: ${tr ? `${tr.verdict} · ${short(tr.basis, 160)}${(tr.planned ?? []).length ? ` · 예정 ${tr.planned!.map((p) => `${p.name} ${p.distance}m`).join(",")}` : ""}` : "없음"}`);
       log(`- LH 공고: ${data.lhNotice ? `${data.lhNotice.title} · 기준 ${(data.lhNotice.extractedCriteria ?? []).length}건 (쪽 ${[...new Set((data.lhNotice.extractedCriteria ?? []).map((c) => c.page).filter(Boolean))].join(",")})` : "없음"}`);
 
-      let p = newProject({ address, business: "lh-purchase", uses: ["apartment", "urban", "officetel"], supplies: ["youth"] });
+      let p = newProject({ address, extraParcels: parcelAddresses, business: "lh-purchase", uses: ["apartment", "urban", "officetel"], supplies: ["youth"] });
       p = applyReview(p, data);
       const rows = p.rows;
       const pick = (id: string) => rows.find((r) => r.id === id);
