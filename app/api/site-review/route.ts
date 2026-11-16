@@ -11,7 +11,7 @@ import type { OrdinanceArticleCandidate } from "../../../lib/server/ordinance-ar
 import { searchOrdinanceElis, fetchOrdinanceElis } from "../../../lib/server/elis";
 import { fetchJson, fetchLawPayload, searchLaw, searchOrdinance, lawGovernmentFromAddress, localGovernmentFromAddress, type LawRecord, type OrdinanceRecord } from "../../../lib/server/law-api";
 import { extractOrdinanceArticles, findArticleByNumber, findArticlesByKeyword } from "../../../lib/server/ordinance-articles";
-import { collectSiteFacts } from "../../../lib/server/site-facts";
+import { collectSiteFacts, landCharacteristics } from "../../../lib/server/site-facts";
 import { classifyDesignations } from "../../../lib/review/special-zones";
 import { NATIONAL_ARTICLES, NATIONAL_LAWS, ORDINANCE_TOPICS, type CollectedArticle } from "../../../lib/review/collect-topics";
 import { findLhPurchaseNotice, noticeIsOpen, koreaLocalDay } from "../../../lib/metro-annex-lh-catalog";
@@ -353,12 +353,21 @@ export async function POST(request: NextRequest) {
     if (mixedJurisdiction) errors.push("서로 다른 시·군·구 필지가 포함되어 관할 지자체·LH 인수기준을 일괄 적용할 수 없습니다.");
     const failedParcels = additionalReviews.filter((item) => item.errors.length);
     if (failedParcels.length) errors.push(`복수 필지 ${failedParcels.length}개 일부 조회 실패`);
+    // 지적도형 환산면적 대신 필지별 토지대장 면적(토지특성정보)으로 교체 — 전부 확보되면 공식 합계로 본다
+    let officialAll = false;
+    if (vworldKey && !duplicatePnu) {
+      const official = await Promise.all(parcels.map((item) => item.parcel?.pnu
+        ? landCharacteristics(item.parcel.pnu, vworldKey, request.nextUrl.origin).then((l) => l?.officialArea ?? null).catch(() => null)
+        : Promise.resolve(null)));
+      officialAll = official.every((v) => v !== null && v > 0);
+      if (officialAll) parcels.forEach((item, i) => { if (item.parcel) item.parcel = { ...item.parcel, area: official[i]!, approximate: false, source: "토지대장 면적 (VWorld 토지특성정보)" }; });
+    }
     if (!duplicatePnu && !mixedJurisdiction && parcels.every((item) => item.parcel?.area && item.parcel.area > 0 && item.errors.length === 0)) {
       parcel = {
-        area: parcels.reduce((sum, item) => sum + (item.parcel?.area ?? 0), 0),
+        area: Math.round(parcels.reduce((sum, item) => sum + (item.parcel?.area ?? 0), 0) * 10) / 10,
         landCategory: [...new Set(parcels.map((item) => item.parcel?.landCategory).filter(Boolean))].join(" · ") || null,
         pnu: null,
-        source: "복수 필지 개별 조회 합계",
+        source: officialAll ? "토지대장 면적 합계 (VWorld 토지특성정보, 필지별)" : "복수 필지 개별 조회 합계",
         approximate: parcels.some((item) => item.parcel?.approximate),
         bbox: undefined,
       };

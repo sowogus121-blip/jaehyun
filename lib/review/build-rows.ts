@@ -142,7 +142,10 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     note: override
       ? (apiArea ? `조회값 ${fmt(apiArea)}㎡ 대신 입력값 적용` : "")
       : officialArea ? [land?.landCategory ? `지목 ${land.landCategory}` : "", "도로 편입·제외면적 별도 확인"].filter(Boolean).join(" · ")
-      : review?.parcel?.approximate ? "지적도형 환산 개략면적 · 토지대장 대조 필요" : "도로 편입·제외면적 별도 확인",
+      : [
+        (review?.parcels?.length ?? 0) > 1 ? "합필 " + review!.parcels.map((x) => `${(x.location?.parcelAddress ?? x.inputAddress).split(/\s+/).slice(-1)[0]} ${x.parcel?.area != null ? fmt(x.parcel.area) + "㎡" : "?"}`).join(" + ") : "",
+        review?.parcel?.approximate ? "지적도형 환산 개략면적 · 토지대장 대조 필요" : "도로 편입·제외면적 별도 확인",
+      ].filter(Boolean).join(" · "),
     status: override ? "user" : apiArea ? (officialArea || !review?.parcel?.approximate ? "verified" : "candidate") : "missing",
     params: area ? { siteArea: area } : undefined,
     sources: officialArea ? [{ title: "VWorld 토지특성정보 (토지대장 면적)", url: "https://www.vworld.kr", kind: "api" }] : review?.parcel ? [{ title: review.parcel.source, url: "https://www.vworld.kr", kind: "api" }] : [],

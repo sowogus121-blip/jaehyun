@@ -50,7 +50,8 @@ function findObjects(value: unknown, test: (o: Record<string, unknown>) => boole
   return out;
 }
 
-async function landCharacteristics(pnu: string, key: string, domain: string): Promise<SiteFacts["land"]> {
+/** 토지대장 면적(토지특성정보 lndpclAr) — 합필 필지별 공식 면적에도 사용 */
+export async function landCharacteristics(pnu: string, key: string, domain: string): Promise<SiteFacts["land"]> {
   const year = new Date().getFullYear();
   for (const stdrYear of [String(year), String(year - 1), ""]) {
     const params = new URLSearchParams({ key, domain, pnu, format: "json", numOfRows: "10", pageNo: "1" });
