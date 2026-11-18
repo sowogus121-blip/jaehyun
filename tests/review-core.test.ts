@@ -277,3 +277,24 @@ describe("역세권 경계 50m = 검토요망", () => {
     expect(row(buildRows(site(addr), r2), "park.lh03").note).toContain("불가(청년형)");
   });
 });
+
+describe("최신 결정고시 자동 적용 (planDecision)", () => {
+  it("지번의 가구·획지와 최근 건축물 결정이 있으면 지구단위계획·건폐율/용적률 행을 확정한다", () => {
+    const addr = "경기도 가상시 가상구 가상동 101";
+    const r = review({ address: addr, zone: "일반상업지역", area: 900, districtPlan: true });
+    const gosi = (no: string, date: string) => ({ seq: "1", gosiNo: no, title: "[변경] 가상단지 지구단위계획 결정", date, url: "https://www.eum.go.kr/web/gs/gv/gvGosiDet.jsp?seq=1" });
+    r.planDecision = {
+      checkedAt: "2026-11-19", place: "가상동", lot: "101", keywords: ["가상"], status: "resolved",
+      parcel: { label: "상업2", block: "3", lot: "1", area: 900, line: "3 900.0 1 가상동 101 900.0", gosi: gosi("가상시 고시 제2025-10호", "2025-03-01") },
+      rule: { label: "상업2", use: "C1", useText: null, bcr: 70, far: 600, height: "-", setback: "건축한계선 : 2m", lines: ["상업 2", "용도 C1", "건폐율 70% 이하", "용적률 600% 이하"], gosi: gosi("가상시 고시 제2020-5호", "2020-05-01") },
+      checked: [],
+    };
+    const rows = buildRows(site(addr), r);
+    expect(row(rows, "plan.district").status).toBe("verified");
+    expect(row(rows, "plan.district").content).toContain("상업2 가구 3");
+    expect(row(rows, "plan.bcrfar").status).toBe("verified");
+    expect(resolveParams(rows).far?.value).toBe(600);
+    expect(resolveParams(rows).bcr?.value).toBe(70);
+    expect(row(rows, "plan.height").content).toContain("최고높이 지정 없음");
+  });
+});
