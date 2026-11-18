@@ -712,25 +712,29 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
   const mechTransitFail = lh && mechNeedsTransit && !site.transitWithin500m && transitEff === "outside";
   put({
     id: "park.mech.lh",
-    content: rules
+    content: mech?.excluded
+      ? `매입제외: "${mech.excludedQuote}" (공고 '매입제외 주택' 항목)\n→ 기계식주차를 계획하면 LH 매입 대상에서 제외 · 전량 자주식으로 계획`
+      : rules
       ? `역세권 청년·신혼형 오피스텔 및 도시형생활주택은 총 주차대수의 ${rules.mechanicalMaxPercent}% 이하 계획\n0.3대 완화를 받을 시 기계식주차 설치 지양`
       : mech ? [mech.requirement ? `허용요건: ${mech.requirement}` : "", mech.ratioText ? `비율: ${mech.ratioText}` : ""].filter(Boolean).join("\n")
       : notice ? "공고문에서 기계식주차 인수기준 문구를 찾지 못함 · 공고문 확인" : "관할 LH 지역본부 공고 미확인",
     law: notice ? notice.title + pageLabel((notice.extractedCriteria ?? []).filter((c) => /기계식/.test(c.quote)).map((c) => c.page)) : "LH 지역본부 신축매입약정 공고",
-    note: mechTransitFail ? `불가: 역세권 500m 요건 미충족 → LH 인수 기준상 기계식 불가(전량 자주식) · ${transitBasis}${plannedHint}`
+    note: mech?.excluded ? "지역본부 공고가 기계식주차 주택을 매입제외로 규정 · 조례상 기계식 허용 여부와 무관"
+      : mechTransitFail ? `불가: 역세권 500m 요건 미충족 → LH 인수 기준상 기계식 불가(전량 자주식) · ${transitBasis}${plannedHint}`
       : mechNeedsTransit && transitEff === "borderline" ? `검토요망: 역세권 경계 거리(500m 초과 50m 이내) → 기계식 우선 반영 · 출구 위치 확인 필요 · ${transitBasis}${plannedHint}`
       : mechNeedsTransit && (transitEff === "within" || site.transitWithin500m) ? `역세권 요건 ${usePlanned ? "조건부 충족(개통 예정역)" : "충족"}${transitEff === "within" ? ` (${transitBasis})` : ""} · 공급유형·주택유형 요건 함께 충족 필요`
       : mech ? "공고문 PDF에서 자동 추출 · 지자체 조례 기준과 LH 인수 기준 중 엄격한 값 적용" : "지자체 조례 기준과 LH 인수 기준 중 엄격한 값을 적용",
-    status: (rules || mech?.maxPercent) && notice?.isCurrent ? "verified" : notice ? "candidate" : "missing",
-    params: mechTransitFail ? { lhMechApartment: "prohibited", lhMechUrban: "prohibited", lhMechOfficetel: "prohibited" }
+    status: (rules || mech?.maxPercent || mech?.excluded) && notice?.isCurrent ? "verified" : notice ? "candidate" : "missing",
+    params: mech?.excluded ? { lhMechApartment: "prohibited", lhMechUrban: "prohibited", lhMechOfficetel: "prohibited" }
+      : mechTransitFail ? { lhMechApartment: "prohibited", lhMechUrban: "prohibited", lhMechOfficetel: "prohibited" }
       : rules ? { lhMechApartment: "prohibited", lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: rules.mechanicalMaxPercent }
       : mech?.maxPercent ? { ...(mech.apartmentExcluded ? { lhMechApartment: "prohibited" as const } : {}), lhMechUrban: "conditional", lhMechOfficetel: "conditional", lhMechMaxPercent: mech.maxPercent } : undefined,
     sources: noticeSource ? [{ ...noticeSource, ...(mech ? {
-      excerpt: [mech.requirement, mech.ratioText].filter(Boolean).join(" / "), verbatim: true,
+      excerpt: [mech.excludedQuote, mech.requirement, mech.ratioText].filter(Boolean).join(" / "), verbatim: true,
       page: [...new Set((notice?.extractedCriteria ?? []).filter((c) => /기계식/.test(c.quote) && c.page).map((c) => c.page!))],
-      highlights: [mech.requirement, mech.ratioText?.match(/총\s*주차대수의\s*\d+\s*%\s*이하로\s*계획/)?.[0]].filter((x): x is string => !!x),
+      highlights: [mech.excludedQuote, mech.requirement, mech.ratioText?.match(/총\s*주차대수의\s*\d+\s*%\s*이하로\s*계획/)?.[0]].filter((x): x is string => !!x),
     } : {}) }] : [],
-    missing: rules || mech?.maxPercent ? undefined : "공고문 기계식 인수기준 조항",
+    missing: rules || mech?.maxPercent || mech?.excluded ? undefined : "공고문 기계식 인수기준 조항",
   });
   put({
     id: "lh.notice",
