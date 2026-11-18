@@ -146,7 +146,7 @@ export function describeTiers(tiers: ParkingTier[], word: string) {
  * 예) "⑤ 기계식 주차 설치 허용기준 ㅇ (대상요건) (1) 서울·인천·경기도 역세권(…500m 내), (2) 청년용, 신혼·신생아Ⅰ,Ⅱ용 (3) 주거용오피스텔 또는 도시형생활주택(3가지 요건 모두 충족 시)"
  *     "ㅇ 기계식 주차 비율 * 150세대 이상 : 총 주차대수의 50% 이하로 계획 …"
  */
-export interface LhMechRule { requirement: string | null; ratioText: string | null; maxPercent: number | null; apartmentExcluded: boolean }
+export interface LhMechRule { requirement: string | null; ratioText: string | null; maxPercent: number | null; apartmentExcluded: boolean; /** 매입제외 주택에 "기계식 주차 방식을 적용·설계한 경우"가 있으면 true (예: 2026 충북본부) */ excluded: boolean; excludedQuote: string | null }
 export function extractLhMechRule(quotes: string[]): LhMechRule | null {
   const all = quotes.map((q) => q.replace(/\s+/g, " ")).join(" ");
   const reqStart = all.search(/\(대상요건\)|기계식\s*주차\s*설치\s*허용기준/);
@@ -167,8 +167,10 @@ export function extractLhMechRule(quotes: string[]): LhMechRule | null {
     ratioText = tail.slice(0, end > 0 ? end + (tail[end] === "우" ? 2 : 0) : 200).trim();
   }
   const pct = (ratioText ?? "").match(/총\s*주차대수의\s*(\d+)\s*%\s*이하/);
-  if (!requirement && !ratioText) return null;
+  const ex = all.match(/기계식\s*주차\s*방식을?\s*적용\s*.{0,3}?\s*설계한\s*경우/);
+  if (!requirement && !ratioText && !ex) return null;
   return {
+    excluded: !!ex, excludedQuote: ex ? ex[0] : null,
     requirement, ratioText, maxPercent: pct ? Number(pct[1]) : null,
     apartmentExcluded: !!requirement && /주거용\s*오피스텔\s*또는\s*도시형\s*생활주택/.test(requirement) && !/공동주택|아파트/.test(requirement),
   };
