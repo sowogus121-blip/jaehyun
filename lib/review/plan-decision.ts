@@ -25,14 +25,15 @@ export interface ListResult { keywords: string[]; rows: Array<{ seq: string; gos
 export interface ScanResult { seq: string; gosiNo: string; title: string; date: string | null; url: string; parcel: ParcelBlock | null; rule: BuildingRule | null; ruleUnchanged: boolean; placeMention: boolean; errors: string[]; error?: string }
 /** 고시 목록·고시 1건 읽기를 맡는 쪽: 브라우저 직접(토지이음) 또는 서버 API */
 export interface DecisionBackend {
-  list(address: string, names: string[]): Promise<ListResult>;
+  /** keywords를 주면 그 검색어로만 (계획 이름으로 이력 전체 찾기) */
+  list(address: string, names: string[], keywords?: string[]): Promise<ListResult>;
   scan(seq: string, place: string, lot: string, label: string | null): Promise<ScanResult>;
 }
 type Post = (body: Record<string, unknown>) => Promise<unknown>;
 /** 서버 API(/api/plan-decision) 백엔드 */
 export function serverBackend(post: Post): DecisionBackend {
   return {
-    list: async (address, names) => await post({ step: "list", address, names }) as ListResult,
+    list: async (address, names, keywords) => await post({ step: "list", address, names, keywords }) as ListResult,
     scan: async (seq, place, lot, label) => await post({ step: "scan", seq, place, lot, label }) as ScanResult,
   };
 }
@@ -109,6 +110,15 @@ export async function resolvePlanDecision(backend: DecisionBackend, address: str
   // 2) 같은 계획의 고시를 최신순으로: 더 최근 가구·획지 조서, 가장 최근에 실제로 결정된 건축물 결정조서
   if (hitGroup && base.parcel) {
     const label = base.parcel.label;
+    // 계획 이름으로 고시 이력 전체를 다시 찾는다 (검색어 하나로는 최근 30건만 보임)
+    const planName = planNameOf(base.parcel.gosi.title);
+    if (planName.length >= 2) {
+      try {
+        const more = await backend.list(address, [], [planName]);
+        const have = new Set(hitGroup.map((r) => r.seq));
+        for (const r of (more.rows ?? []) as Row[]) if (!have.has(r.seq) && planNameOf(r.title) === planName) hitGroup.push(r);
+      } catch { /* 기존 목록으로 */ }
+    }
     const ordered = [...hitGroup].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || Number(b.seq) - Number(a.seq));
     for (const row of ordered) {
       const r = await scan(row, label);

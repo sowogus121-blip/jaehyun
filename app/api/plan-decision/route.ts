@@ -23,14 +23,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "지원하지 않는 형식" }, { status: 415 });
     } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "추출 실패" }, { status: 422 }); }
   }
-  const body = await request.json().catch(() => null) as { step?: string; address?: string; names?: string[]; seq?: string; place?: string; lot?: string; label?: string | null } | null;
+  const body = await request.json().catch(() => null) as { step?: string; address?: string; names?: string[]; keywords?: string[]; seq?: string; place?: string; lot?: string; label?: string | null } | null;
   if (!body?.step) return NextResponse.json({ error: "step 필요" }, { status: 400 });
   const down = eumUnavailable();
   if (down) return NextResponse.json({ error: down }, { status: 503 });
   try {
     if (body.step === "list") {
-      const keywords = decisionKeywords(String(body.address ?? ""), Array.isArray(body.names) ? body.names.map(String) : []);
-      return NextResponse.json({ keywords, rows: await listDecisionGosi(keywords) });
+      const override = Array.isArray(body.keywords) ? body.keywords.map(String).filter(Boolean) : [];
+      const keywords = override.length ? override : decisionKeywords(String(body.address ?? ""), Array.isArray(body.names) ? body.names.map(String) : []);
+      return NextResponse.json({ keywords, rows: await listDecisionGosi(keywords, override.length ? 6 : 3) });
     }
     if (body.step === "scan") {
       if (!/^\d+$/.test(String(body.seq)) || !body.place || !body.lot) return NextResponse.json({ error: "seq·place·lot 필요" }, { status: 400 });

@@ -96,11 +96,11 @@ async function gosiText(seq: string) {
 }
 
 export const browserBackend: DecisionBackend = {
-  async list(address, names) {
-    const keywords = decisionKeywords(address, names);
+  async list(address, names, override) {
+    const keywords = override?.length ? override : decisionKeywords(address, names);
     const rows = new Map<string, ReturnType<typeof parseGosiList>[number]>();
     for (const kw of keywords.slice(0, 3)) {
-      for (let page = 1; page <= 3; page++) {
+      for (let page = 1; page <= (override?.length ? 6 : 3); page++) {
         const html = await getEuc(`${EUM}/web/gs/gv/gvGosiList.jsp?zonenm=${eucKrEncode(kw)}&selSggCd=&pageNo=${page}`);
         const got = parseGosiList(html);
         for (const r of got) rows.set(r.seq, r);
