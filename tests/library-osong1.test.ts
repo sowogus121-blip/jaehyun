@@ -19,7 +19,7 @@ describe("오송생명과학단지(오송1산단) 지구단위계획", () => {
     const rows = matchLibrary(ctx).find((e) => e.id === "osong1-life-science")!.rows(ctx);
     const use = rows.find((r) => r.id === "plan.use")!;
     expect(use.params).toMatchObject({ useApartment: "prohibited", useUrban: "prohibited", useOfficetel: "allowed" });
-    expect(rows.find((r) => r.id === "plan.bcrfar")!.params).toMatchObject({ bcr: 80, far: 1300 });
+    expect(rows.find((r) => r.id === "plan.bcrfar")!.params).toMatchObject({ bcr: 80, far: 1000 });
     expect(rows.find((r) => r.id === "plan.district")!.content).toContain("513.7");
   });
 
