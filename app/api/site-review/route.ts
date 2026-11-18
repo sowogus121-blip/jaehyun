@@ -323,7 +323,9 @@ export async function POST(request: NextRequest) {
         getLandUse(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
         getParcelInfo(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin),
       ]);
-      return { inputAddress: parcelAddress, location: additionalLocation, parcel: cadastral, landUse: additionalUse.items, errors: additionalUse.errors };
+      // 토지이용 조회가 일시 실패하면 한 번 더 시도
+      const use = additionalUse.errors.length ? await getLandUse(additionalLocation.x, additionalLocation.y, vworldKey, request.nextUrl.origin).catch(() => additionalUse) : additionalUse;
+      return { inputAddress: parcelAddress, location: additionalLocation, parcel: cadastral, landUse: use.items, errors: use.errors };
     } catch (error) {
       return { inputAddress: parcelAddress, location: null, parcel: null, landUse: [], errors: [error instanceof Error ? error.message : "필지 조회 실패"] };
     }
@@ -362,7 +364,8 @@ export async function POST(request: NextRequest) {
       officialAll = official.every((v) => v !== null && v > 0);
       if (officialAll) parcels.forEach((item, i) => { if (item.parcel) item.parcel = { ...item.parcel, area: official[i]!, approximate: false, source: "토지대장 면적 (VWorld 토지특성정보)" }; });
     }
-    if (!duplicatePnu && !mixedJurisdiction && parcels.every((item) => item.parcel?.area && item.parcel.area > 0 && item.errors.length === 0)) {
+    // 면적 합산은 필지별 면적이 모두 있으면 가능 (토지이용 조회 오류는 별도 오류로 표시)
+    if (!duplicatePnu && !mixedJurisdiction && parcels.every((item) => item.parcel?.area && item.parcel.area > 0 && item.location)) {
       parcel = {
         area: Math.round(parcels.reduce((sum, item) => sum + (item.parcel?.area ?? 0), 0) * 10) / 10,
         landCategory: [...new Set(parcels.map((item) => item.parcel?.landCategory).filter(Boolean))].join(" · ") || null,
