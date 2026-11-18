@@ -10,6 +10,19 @@ export const preferredRegion = "icn1";
  *  - {step:"scan", seq, place, lot, label} → 고시 1건에서 지번의 가구·획지와 건축물 결정내용
  */
 export async function POST(request: NextRequest) {
+  // 브라우저가 내려받은 HWP/HWPX/PDF 첨부의 텍스트 추출 (토지이음 접속 없음)
+  if (request.nextUrl.searchParams.get("step") === "text") {
+    const form = await request.formData().catch(() => null);
+    const file = form?.get("file");
+    if (!(file instanceof File)) return NextResponse.json({ error: "file 필요" }, { status: 400 });
+    const data = new Uint8Array(await file.arrayBuffer());
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    try {
+      if (ext === "hwp") { const { extractHwpText } = await import("../../../lib/server/hwp"); return NextResponse.json({ text: await extractHwpText(data) }); }
+      if (ext === "hwpx" || ext === "pdf") { const { extractDocumentText } = await import("../../../lib/server/document-parser"); return NextResponse.json({ text: (await extractDocumentText(data, ext, 2_000_000)).text }); }
+      return NextResponse.json({ error: "지원하지 않는 형식" }, { status: 415 });
+    } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "추출 실패" }, { status: 422 }); }
+  }
   const body = await request.json().catch(() => null) as { step?: string; address?: string; names?: string[]; seq?: string; place?: string; lot?: string; label?: string | null } | null;
   if (!body?.step) return NextResponse.json({ error: "step 필요" }, { status: 400 });
   const down = eumUnavailable();
