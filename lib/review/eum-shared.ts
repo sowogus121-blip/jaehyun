@@ -116,5 +116,5 @@ export function pickDecisionRows(rows: GosiListRow[]): GosiListRow[] {
     .filter((r) => { const t = r.title.replace(/\s+/g, ""); return DECISION_TITLE.test(t) && !DECISION_EXCLUDE.test(t); })
     .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || Number(b.seq) - Number(a.seq))
     .filter((r) => { const k = r.gosiNo.replace(/\s+/g, "") || r.seq; if (seen.has(k)) return false; seen.add(k); return true; })
-    .slice(0, 40);
+    .slice(0, 80);
 }

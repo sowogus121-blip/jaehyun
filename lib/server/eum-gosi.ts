@@ -289,10 +289,10 @@ export async function grepGosi(seq: string, pattern: RegExp, maxFiles = 3): Prom
   return { title: detail.title, gosiNo: detail.gosiNo, date: detail.date, attachments: detail.attachments.map((a) => a.name), hits: hits.slice(0, 120), errors };
 }
 
-export async function listDecisionGosi(keywords: string[]): Promise<GosiListRow[]> {
+export async function listDecisionGosi(keywords: string[], pages = 3): Promise<GosiListRow[]> {
   const rows = new Map<string, GosiListRow>();
   for (const kw of keywords.slice(0, 3)) {
-    try { for (const r of await searchGosi(kw, null, 3)) rows.set(r.seq, r); } catch { /* 다음 검색어 */ }
+    try { for (const r of await searchGosi(kw, null, pages)) rows.set(r.seq, r); } catch { /* 다음 검색어 */ }
   }
   return pickDecisionRows([...rows.values()]);
 }
