@@ -26,3 +26,20 @@ describe("결정고시 가구·획지·건축물 결정 추출", () => {
     expect(placeLotOf("서울특별시 노원구 상계동 1268")).toEqual({ place: "상계동", lot: "1268" });
   });
 });
+
+import { planNameOf, regionRelevant } from "../lib/review/plan-decision";
+describe("결정고시 후보 정리", () => {
+  it("계획 이름", () => {
+    expect(planNameOf("[변경] 오송생명과학단지 산업단지계획 변경 및 지형도면")).toBe("오송생명과학단지");
+    expect(planNameOf("[변경] 오송생명과학단지 개발사업 실시계획(변경) 승인 고시")).toBe("오송생명과학단지");
+  });
+  it("다른 지역 고시 제외", () => {
+    const addr = "충청북도 청주시 흥덕구 오송읍 만수리 866";
+    expect(regionRelevant({ seq: "1", gosiNo: "경기도 용인시 고시 제2026-240호", title: "오송…", date: null, agency: "경기도 용인시" }, addr, ["오송"])).toBe(false);
+    expect(regionRelevant({ seq: "2", gosiNo: "국토교통부 고시 제2024-948호", title: "[변경] 오송생명과학단지 산업단지계획 변경 및 지형도면", date: null, agency: "국토교통부" }, addr, ["오송"])).toBe(true);
+    expect(regionRelevant({ seq: "3", gosiNo: "충청북도 청주시 고시 제2026-70호", title: "x", date: null, agency: "충청북도 청주시" }, addr, ["오송"])).toBe(true);
+  });
+});
+describe("계획 이름 (도시관리계획 괄호)", () => {
+  it("상계역 주변", () => expect(planNameOf("[변경] 도시관리계획(상계역 주변 지구단위계획) 결정(경미한 변경) 및 지형도면 고시")).toBe("상계역 주변"));
+});
