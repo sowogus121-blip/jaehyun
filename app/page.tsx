@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Project } from "@/lib/review/types";
 import type { SiteReviewResult, UploadedDocument } from "@/lib/types";
 import { applyReview, duplicateProject, importProjectJson, loadProjects, newProject, rebuildRows, saveProjects } from "@/lib/project/store";
-import { resolvePlanDecision } from "@/lib/review/plan-decision";
+import { resolvePlanDecision, serverBackend } from "@/lib/review/plan-decision";
+import { browserBackend, browserCanReachEum } from "@/lib/review/plan-decision-browser";
 import { ProjectsView, type NewProjectForm } from "./components/ProjectsView";
 import { LegalView } from "./components/LegalView";
 import { MassingView } from "./components/MassingView";
@@ -20,6 +21,16 @@ const NAV: Array<{ id: View; no: string; label: string; sub: string }> = [
   { id: "output", no: "④", label: "결과 출력", sub: "엑셀·PDF·JSON" },
   { id: "worklog", no: "⑤", label: "업무일지", sub: "날짜별 진행 기록" },
 ];
+
+/** 토지이음 결정고시 확인: 브라우저에서 직접(우선) → 안 되면 서버 경유 */
+async function runPlanDecision(address: string, names: string[]) {
+  const post = async (body: Record<string, unknown>) => (await fetch("/api/plan-decision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+  const direct = await browserCanReachEum();
+  const first = await resolvePlanDecision(direct ? browserBackend : serverBackend(post), address, names);
+  if (first.status === "error" && direct) return resolvePlanDecision(serverBackend(post), address, names);
+  return first;
+}
+if (typeof window !== "undefined") (window as unknown as { __planDecision?: typeof runPlanDecision }).__planDecision = runPlanDecision;
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -65,12 +76,8 @@ export default function Home() {
       const names = [...(review.siteFacts?.designations ?? []).map((d) => d.name), ...(review.landUse ?? []).map((l) => l.name)];
       if (names.some((n) => /지구단위|산업단지|택지개발|도시개발/.test(n))) {
         setToast("결정고시 최신순 확인 중… (토지이음)");
-        const post = async (body: Record<string, unknown>) => {
-          const r = await fetch("/api/plan-decision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-          return r.json();
-        };
         const address = review.location?.parcelAddress || p.site.address;
-        const decision = await resolvePlanDecision(post, address, names);
+        const decision = await runPlanDecision(address, names);
         setProjects((list) => list.map((x) => (x.id === p.id && x.review ? rebuildRows({ ...x, review: { ...x.review, planDecision: decision } }) : x)));
         setToast(decision.status === "resolved"
           ? `결정고시 적용: ${decision.rule!.gosi.gosiNo} (${decision.parcel!.label}) · 고시 ${decision.checked.length}건 확인`

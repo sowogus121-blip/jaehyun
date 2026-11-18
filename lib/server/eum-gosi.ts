@@ -8,50 +8,13 @@
  * 공식 Open API가 아니라 공식 화면을 읽는 방식이다. 찾은 고시는 "후보"이며 이 필지·획지 적용은 판정하지 않는다.
  */
 import { extractDocumentText, parseUploadedDocument, type DocumentCandidate } from "./document-parser";
+import { eucKrEncode, parseGosiList, parseGosiDetail, decisionKeywords, pickDecisionRows, type GosiListRow, type GosiDetail } from "../review/eum-shared";
+export { eucKrEncode, parseGosiList, parseGosiDetail, decisionKeywords, type GosiListRow, type GosiDetail };
+
 
 const BASE = "https://www.eum.go.kr";
 const UA = "Mozilla/5.0 (compatible; LH-Plan-Lab/0.8; +https://lh-plan-lab.vercel.app)";
 const MAX_FILE = 8 * 1024 * 1024;
-
-// ───────── EUC-KR 퍼센트 인코딩 (토지이음 검색어는 EUC-KR만 인식) ─────────
-let eucTable: Map<string, string> | null = null;
-function buildEucTable() {
-  const table = new Map<string, string>();
-  const decoder = new TextDecoder("euc-kr");
-  for (let lead = 0x81; lead <= 0xfe; lead++) {
-    for (let trail = 0x41; trail <= 0xfe; trail++) {
-      const ch = decoder.decode(new Uint8Array([lead, trail]));
-      if (ch.length === 1 && ch !== "�" && !table.has(ch)) {
-        table.set(ch, "%" + lead.toString(16).toUpperCase() + "%" + trail.toString(16).toUpperCase());
-      }
-    }
-  }
-  return table;
-}
-export function eucKrEncode(value: string): string {
-  eucTable ??= buildEucTable();
-  let out = "";
-  for (const ch of value) {
-    if (/^[A-Za-z0-9\-_.~]$/.test(ch)) out += ch;
-    else if (ch === " ") out += "+";
-    else if (ch.charCodeAt(0) < 0x80) out += encodeURIComponent(ch);
-    else out += eucTable.get(ch) ?? "";
-  }
-  return out;
-}
-
-function decodeText(html: string) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<br\s*\/?>|<\/p>|<\/tr>|<\/li>|<\/div>/gi, "\n")
-    .replace(/<\/t[dh]>/gi, " ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&")
-    .replace(/[ \t ]+/g, " ")
-    .replace(/\s*\n\s*/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 // 연결 차단·장애 시 같은 인스턴스에서 10분간 재시도하지 않는다(대기시간 단축 + 토지이음 부하 방지).
 let downUntil = 0;
@@ -77,8 +40,9 @@ async function timedNow(url: string, init: RequestInit = {}, ms = 10_000) {
   try {
     response = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(ms), headers: { "User-Agent": UA, ...(init.headers ?? {}) } });
   } catch (error) {
-    downUntil = Date.now() + 10 * 60_000;
-    downReason = "토지이음 서버 연결 불가(일시 차단 또는 장애) · 10분 뒤 자동 재시도";
+    // 일시 오류(타임아웃 등)로 오래 막지 않도록 1분만 쉰다
+    downUntil = Date.now() + 60_000;
+    downReason = "토지이음 서버 연결 불가(일시 차단 또는 장애) · 1분 뒤 자동 재시도" + (error instanceof Error && error.message ? ` [${error.message.slice(0, 80)}]` : "");
     throw new Error(downReason + (error instanceof Error && error.message ? ` [${error.message}]` : ""));
   }
   if (!response.ok) throw new Error(`토지이음 HTTP ${response.status}`);
@@ -94,20 +58,6 @@ async function getHtmlWithCookie(url: string, ms = 10_000) {
   return { html: new TextDecoder("euc-kr").decode(await response.arrayBuffer()), cookie };
 }
 
-// ───────── 목록 ─────────
-export interface GosiListRow { seq: string; date: string | null; gosiNo: string; title: string; agency: string }
-export function parseGosiList(html: string): GosiListRow[] {
-  const rows: GosiListRow[] = [];
-  for (const tr of html.split(/<tr class="center">/).slice(1)) {
-    const link = tr.match(/gvGosiDet\.jsp\?seq=(\d+)[^'"]*['"]\s*title=['"]([^'"]*)['"]/);
-    if (!link) continue;
-    const date = tr.match(/<td class="mb">\s*(\d{4}-\d{2}-\d{2})\s*<\/td>/)?.[1] ?? null;
-    const titles = [...tr.matchAll(/<td class="left mb" title="([^"]*)"/g)].map((m) => m[1].trim());
-    rows.push({ seq: link[1], date, gosiNo: titles[0] ?? "", title: link[2].replace(/\s+/g, " ").trim(), agency: titles.at(-1) ?? "" });
-  }
-  return rows;
-}
-
 export async function searchGosi(keyword: string, sggCd: string | null, pages = 1): Promise<GosiListRow[]> {
   const out: GosiListRow[] = [];
   for (let page = 1; page <= pages; page++) {
@@ -117,32 +67,6 @@ export async function searchGosi(keyword: string, sggCd: string | null, pages = 
     if (rows.length < 10) break;
   }
   return out;
-}
-
-// ───────── 상세 ─────────
-export interface GosiDetail {
-  seq: string; title: string; gosiNo: string; agency: string; date: string | null;
-  body: string; attachments: Array<{ name: string; path: string; ext: string }>;
-}
-export function parseGosiDetail(html: string, seq: string): GosiDetail {
-  const cell = (label: string) => {
-    const m = html.match(new RegExp(`>${label}</th>\\s*<td[^>]*>([\\s\\S]*?)</td>`));
-    return m ? decodeText(m[1]) : "";
-  };
-  const title = decodeText(html.match(/<thead>\s*<tr>\s*<th[^>]*>([\s\S]*?)<\/th>/)?.[1] ?? "");
-  const attachments = [...html.matchAll(/download\('\/web\/FileDownload\.do',\s*'([^']+)'\)/g)].map((m) => {
-    const path = m[1];
-    const name = path.split("/").pop() ?? path;
-    return { name, path, ext: (name.split(".").pop() ?? "").toLowerCase() };
-  });
-  const editView = html.indexOf('class="edit_view"');
-  let body = "";
-  if (editView >= 0) {
-    const rest = html.slice(editView);
-    const end = rest.search(/목록으로|class="btn_list|<!--\s*\/\/\s*edit_view/);
-    body = decodeText("<div " + rest.slice(0, end > 0 ? end : 60_000));
-  }
-  return { seq, title, gosiNo: cell("고시번호"), agency: cell("담당기관"), date: cell("고시일") || null, body, attachments };
 }
 
 export function gosiUrl(seq: string) {
@@ -365,50 +289,12 @@ export async function grepGosi(seq: string, pattern: RegExp, maxFiles = 3): Prom
   return { title: detail.title, gosiNo: detail.gosiNo, date: detail.date, attachments: detail.attachments.map((a) => a.name), hits: hits.slice(0, 120), errors };
 }
 
-// ───────── 최신 결정고시 자동 적용 (지구단위계획·산업단지계획) ─────────
-// 클라이언트가 단계별로 호출한다: list → (최신 고시부터) scan … 해당 지번의 가구·획지와 건축물 결정내용을 찾을 때까지.
-// 한 번의 요청이 길어지지 않도록 고시 1건씩 처리한다.
-
-const DECISION_TITLE = /지구단위계획|산업단지\s*계획|산업단지계획|실시계획|개발계획|택지개발|도시개발|정비계획|결정/;
-const DECISION_EXCLUDE = /열람|공람|입안|주민의견|건축허가제한|행위제한|토지거래|보상|수용|사업인정|도로구역|교육환경|자연재해/;
-
-/** 대상지 이름 후보: VWorld 지정명(괄호 안 이름 포함) + 읍·면 이름 + 동·리 이름 + 구 이름 */
-export function decisionKeywords(address: string, names: string[]): string[] {
-  const out: string[] = [];
-  for (const n of names) {
-    const inner = n.match(/\(([^)]+)\)/)?.[1];
-    for (const v of [inner, n.replace(/\(.*?\)/g, "")]) {
-      const s = (v ?? "").replace(/지구단위계획(?:구역)?|국가산업단지|일반산업단지|산업단지|택지개발(?:예정)?지구|도시개발구역|정비구역|구역$|지구$/g, "").replace(/\d+$/, "").trim();
-      if (s.length >= 2) out.push(s);
-    }
-  }
-  const tokens = address.trim().split(/\s+/);
-  const eupmyeon = tokens.find((t) => /[읍면]$/.test(t));
-  if (eupmyeon) out.push(eupmyeon.replace(/[읍면]$/, ""));
-  const dong = tokens.find((t, i) => i > 1 && /(?:\d*동|\d*가|리)$/.test(t) && !/[읍면]$/.test(t));
-  if (dong) out.push(dong.replace(/\d*(?:동|가|리)$/, ""));
-  const gu = tokens.find((t, i) => i > 0 && /구$/.test(t));
-  if (gu) out.push(gu.replace(/구$/, ""));
-  return [...new Set(out.filter((s) => s.length >= 2))].slice(0, 4);
-}
-
 export async function listDecisionGosi(keywords: string[]): Promise<GosiListRow[]> {
   const rows = new Map<string, GosiListRow>();
   for (const kw of keywords.slice(0, 3)) {
-    try {
-      for (const r of await searchGosi(kw, null, 3)) {
-        const t = r.title.replace(/\s+/g, "");
-        if (!DECISION_TITLE.test(t) || DECISION_EXCLUDE.test(t)) continue;
-        rows.set(r.seq, r);
-      }
-    } catch { /* 다음 검색어 */ }
+    try { for (const r of await searchGosi(kw, null, 3)) rows.set(r.seq, r); } catch { /* 다음 검색어 */ }
   }
-  // 같은 고시번호가 부서별로 중복 등록된 경우 하나만
-  const seen = new Set<string>();
-  return [...rows.values()]
-    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || Number(b.seq) - Number(a.seq))
-    .filter((r) => { const k = r.gosiNo.replace(/\s+/g, "") || r.seq; if (seen.has(k)) return false; seen.add(k); return true; })
-    .slice(0, 40);
+  return pickDecisionRows([...rows.values()]);
 }
 
 export interface GosiScanResult {
