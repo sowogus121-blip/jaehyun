@@ -235,6 +235,11 @@ export function osong1BlockOf(address: string): string {
   return OSONG1_LOTS[`${m[1]}${m[2]}`] ?? "";
 }
 const OSONG1_LOT_AREA: Record<string, number> = { "만수리866": 513.7, "만수리867": 459.9, "만수리869": 460.6, "만수리870": 514.6 };
+// 최신 결정: 국토교통부고시 제2018-698호(관보 제19383호, 2018.11.21) 오송생명과학단지 산업단지계획 변경 —
+// 지구단위계획 결정(변경)조서에 상업용지 가구·획지와 건축물 용도·건폐율·용적률이 다시 실림. 2017.1 결정조서의 C1 1,300%는 이 고시의 1,000%로 대체됨.
+const OSONG1_GOSI_2018_URL = "https://gwanbo.go.kr";
+const osong1Gosi = (article: string, excerpt?: string, highlights?: string[]): SourceRef =>
+  ({ title: "국토교통부고시 제2018-698호 오송생명과학단지 산업단지계획 변경 (관보 제19383호, 2018.11.21)", article, url: OSONG1_GOSI_2018_URL, effectiveDate: "2018-11-21", excerpt, highlights, kind: "plan" });
 const osong1 = (article: string, excerpt?: string, highlights?: string[]): SourceRef =>
   ({ title: "오송생명과학단지 지구단위계획 결정조서·시행지침 (2017.1)", article, url: OSONG1_PLAN_URL, excerpt, highlights, kind: "plan" });
 
@@ -263,10 +268,10 @@ const osong1Plan: LibraryEntry = {
       content: block
         ? `오송생명과학단지 지구단위계획구역 · ${block.replace(/-(\d+)$/, " 가구 획지 $1번")}${ctx.blockNo ? " (검토자 지정)" : " (결정조서 지번 대조)"}` + (lotArea && !merged ? `\n결정조서 획지면적 ${lotArea.toLocaleString()}㎡` : "") + mergeLine
         : "오송생명과학단지 지구단위계획구역 · 결정조서에서 해당 지번의 가구·획지 미확인",
-      law: "오송생명과학단지 지구단위계획 결정조서(상업용지 가구·획지), 시행지침 제30조",
+      law: "국토교통부고시 제2018-698호 지구단위계획 결정(변경)조서(상업용지 가구·획지), 시행지침 제30조",
       note: "획지 분할 불가 · 합병 허용(넓은 도로 접 필지의 지침 적용, 도로폭 같으면 강화된 규정). 대전국토청 고시 제2025-141호 실시계획 변경에서 상업용지 변경없음",
       status: block ? "verified" : "candidate",
-      sources: [osong1("결정조서 상업용지 (p.30), 시행지침 제30조", block === "상업4-5" ? "상업4 ⑤ 1,948.8㎡ — 만수리 866 513.7 / 867 459.9 / 869 460.6 / 870 514.6" : undefined, block === "상업4-5" ? ["⑤", "1,948.8"] : undefined)],
+      sources: [osong1Gosi("지구단위계획 결정(변경)조서 라) 상업용지 (관보 p.90~91)", block === "상업4-5" ? "상업4 5 1,948.8 — 만수리 866 513.7 / 867 459.9 / 869 460.6 / 870 514.6" : undefined, block === "상업4-5" ? ["1,948.8"] : undefined), osong1("결정조서 상업용지 (p.30), 시행지침 제30조", block === "상업4-5" ? "상업4 ⑤ 1,948.8㎡ — 만수리 866 513.7 / 867 459.9 / 869 460.6 / 870 514.6" : undefined, block === "상업4-5" ? ["⑤", "1,948.8"] : undefined)],
       missing: block ? undefined : "해당 필지 가구·획지번호",
     };
     if (!/^상업4-[1-6]$/.test(block)) return [plan];
@@ -288,19 +293,22 @@ const osong1Plan: LibraryEntry = {
       sources: [osong1("시행지침 제31조 <표7> (PDF p.63)", "C1 … 일반상업 지역에서 건축 가능한 건축물 / 불허용도 ∙ 단독 및 공동주택 …", ["단독 및 공동주택"])],
     }, {
       id: "plan.bcrfar",
-      content: `건폐율 80% 이하\n용적률 1,300% 이하 (${block}, C1)`,
-      law: "오송생명과학단지 지구단위계획 결정조서 건축물 기준(p.38), 시행지침 제31조 <표7>",
-      note: "조례 일반값(1,000%)보다 지구단위계획 획지 기준이 우선",
+      content: `건폐율 80% 이하\n용적률 1,000% 이하 (${block}, C1)`,
+      law: "국토교통부고시 제2018-698호 건축물 용도·건폐율·용적률 결정(변경)조서 (상업4 ①~⑥)",
+      note: "2017.1 결정조서·시행지침 <표7>의 C1 1,300%는 2018.11.21 고시에서 1,000%로 결정 — 최신 고시 적용",
       status: "verified",
-      params: { bcr: 80, far: 1300 },
-      sources: [osong1("시행지침 제31조 <표7>", "C1 … 80 이하 1300 이하", ["80 이하", "1300 이하"])],
+      params: { bcr: 80, far: 1000 },
+      sources: [
+        osong1Gosi("5) 건축물 결정(변경)조서 — 상업4 (관보 p.97)", "용도 C1 · 건폐율 80% 이하 · 용적률 1,000% 이하 · 높이(층) - · 건축선 건축한계선 : 1m, 2m", ["80% 이하", "1,000% 이하"]),
+        osong1("시행지침 제31조 <표7> (구 기준)", "C1 … 80 이하 1300 이하", ["1300 이하"]),
+      ],
     }, {
       id: "plan.height",
       content: "최고높이 지정 없음 (C1)\n건축한계선 1m·2m 지정 구간 — 결정도 확인",
-      law: "오송생명과학단지 지구단위계획 결정조서 건축물 기준(p.38)",
+      law: "국토교통부고시 제2018-698호 건축물 결정(변경)조서 (상업4)",
       note: "높이는 건축법·일조 등 일반 기준 적용",
       status: "verified",
-      sources: [osong1("결정조서 건축물 기준 (p.38)")],
+      sources: [osong1Gosi("5) 건축물 결정(변경)조서 — 상업4 (관보 p.97)", "높이(층) - · 건축선 건축한계선 : 1m, 2m", ["건축한계선 : 1m, 2m"])],
     }];
   },
 };
