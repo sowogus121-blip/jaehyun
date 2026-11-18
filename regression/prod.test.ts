@@ -10,6 +10,7 @@ import { resolveParams, candidateParams } from "../lib/review/params";
 import { runScenario, defaultScenario, DEFAULT_ASSUMPTIONS, summaryRows } from "../lib/massing/engine";
 import { buildDetailedOverview } from "../lib/report/detailed-overview";
 import type { SiteReviewResult } from "../lib/types";
+import { resolvePlanDecision } from "../lib/review/plan-decision";
 
 const BASE = process.env.REGRESSION_BASE ?? "https://lh-plan-lab.vercel.app";
 const SITES = (process.env.REGRESSION_SITES || [
@@ -54,6 +55,15 @@ describe("운영 회귀검토", () => {
       log(`- 역세권: ${tr ? `${tr.verdict} · ${short(tr.basis, 160)}${(tr.planned ?? []).length ? ` · 예정 ${tr.planned!.map((p) => `${p.name} ${p.distance}m`).join(",")}` : ""}` : "없음"}`);
       log(`- LH 공고: ${data.lhNotice ? `${data.lhNotice.title} · 기준 ${(data.lhNotice.extractedCriteria ?? []).length}건 (쪽 ${[...new Set((data.lhNotice.extractedCriteria ?? []).map((c) => c.page).filter(Boolean))].join(",")})` : "없음"}`);
 
+      const dnames = [...(data.siteFacts?.designations ?? []).map((d) => d.name), ...(data.landUse ?? []).map((l) => l.name)];
+      if (dnames.some((n) => /지구단위|산업단지|택지개발|도시개발/.test(n))) {
+        const t1 = Date.now();
+        const post = async (body: Record<string, unknown>) => (await fetch(`${BASE}/api/plan-decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(90_000) })).json();
+        const dec = await resolvePlanDecision(post, data.location.parcelAddress ?? address, dnames);
+        (data as SiteReviewResult).planDecision = dec;
+        log(`- 결정고시: ${dec.status} · ${Math.round((Date.now() - t1) / 1000)}s · 검색어 ${dec.keywords.join(",")} · 가구 ${dec.parcel ? `${dec.parcel.label}-${dec.parcel.block}-${dec.parcel.lot} ${dec.parcel.area}㎡ (${dec.parcel.gosi.gosiNo})` : "-"} · 결정 ${dec.rule ? `${dec.rule.use ?? ""} ${dec.rule.bcr}%/${dec.rule.far}% 높이 ${dec.rule.height} (${dec.rule.gosi.gosiNo})` : "-"}${dec.error ? " · 오류 " + dec.error : ""}`);
+        log(`  - 확인 고시: ${dec.checked.map((c) => `${c.gosiNo}(${c.date}) ${c.parcel ? "지번O" : "지번X"}/${c.rule}`).join(" | ")}`);
+      }
       let p = newProject({ address, extraParcels: parcelAddresses, business: "lh-purchase", uses: ["apartment", "urban", "officetel"], supplies: ["youth"] });
       p = applyReview(p, data);
       const rows = p.rows;

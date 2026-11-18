@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Project } from "@/lib/review/types";
 import type { SiteReviewResult, UploadedDocument } from "@/lib/types";
 import { applyReview, duplicateProject, importProjectJson, loadProjects, newProject, rebuildRows, saveProjects } from "@/lib/project/store";
+import { resolvePlanDecision } from "@/lib/review/plan-decision";
 import { ProjectsView, type NewProjectForm } from "./components/ProjectsView";
 import { LegalView } from "./components/LegalView";
 import { MassingView } from "./components/MassingView";
@@ -59,6 +60,23 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || "공식자료 조회 실패");
       setProjects((list) => list.map((x) => (x.id === p.id ? applyReview(x, data as SiteReviewResult) : x)));
       setToast("공식자료 조회 완료 · 법규검토표를 갱신했습니다. 검토자 수정 행은 유지됩니다.");
+      // 지구단위계획·산업단지 대상지: 토지이음 결정고시를 최신순으로 확인해 가구·획지와 건축물 결정내용을 적용
+      const review = data as SiteReviewResult;
+      const names = [...(review.siteFacts?.designations ?? []).map((d) => d.name), ...(review.landUse ?? []).map((l) => l.name)];
+      if (names.some((n) => /지구단위|산업단지|택지개발|도시개발/.test(n))) {
+        setToast("결정고시 최신순 확인 중… (토지이음)");
+        const post = async (body: Record<string, unknown>) => {
+          const r = await fetch("/api/plan-decision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          return r.json();
+        };
+        const address = review.location?.parcelAddress || p.site.address;
+        const decision = await resolvePlanDecision(post, address, names);
+        setProjects((list) => list.map((x) => (x.id === p.id && x.review ? rebuildRows({ ...x, review: { ...x.review, planDecision: decision } }) : x)));
+        setToast(decision.status === "resolved"
+          ? `결정고시 적용: ${decision.rule!.gosi.gosiNo} (${decision.parcel!.label}) · 고시 ${decision.checked.length}건 확인`
+          : decision.status === "parcel-only" ? `가구·획지 확인(${decision.parcel!.gosi.gosiNo}) · 건축물 결정내용은 확인한 고시 ${decision.checked.length}건에 없음`
+          : `결정고시에서 이 지번을 찾지 못함 (확인 ${decision.checked.length}건${decision.error ? " · " + decision.error : ""})`);
+      }
     } catch (e) {
       setToast(e instanceof Error ? e.message : "공식자료 조회 실패");
     }
