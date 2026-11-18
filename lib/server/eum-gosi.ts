@@ -364,3 +364,94 @@ export async function grepGosi(seq: string, pattern: RegExp, maxFiles = 3): Prom
   }
   return { title: detail.title, gosiNo: detail.gosiNo, date: detail.date, attachments: detail.attachments.map((a) => a.name), hits: hits.slice(0, 120), errors };
 }
+
+// ───────── 최신 결정고시 자동 적용 (지구단위계획·산업단지계획) ─────────
+// 클라이언트가 단계별로 호출한다: list → (최신 고시부터) scan … 해당 지번의 가구·획지와 건축물 결정내용을 찾을 때까지.
+// 한 번의 요청이 길어지지 않도록 고시 1건씩 처리한다.
+
+const DECISION_TITLE = /지구단위계획|산업단지\s*계획|산업단지계획|실시계획|개발계획|택지개발|도시개발|정비계획|결정/;
+const DECISION_EXCLUDE = /열람|공람|입안|주민의견|건축허가제한|행위제한|토지거래|보상|수용|사업인정|도로구역|교육환경|자연재해/;
+
+/** 대상지 이름 후보: VWorld 지정명(괄호 안 이름 포함) + 읍·면 이름 + 동·리 이름 + 구 이름 */
+export function decisionKeywords(address: string, names: string[]): string[] {
+  const out: string[] = [];
+  for (const n of names) {
+    const inner = n.match(/\(([^)]+)\)/)?.[1];
+    for (const v of [inner, n.replace(/\(.*?\)/g, "")]) {
+      const s = (v ?? "").replace(/지구단위계획(?:구역)?|국가산업단지|일반산업단지|산업단지|택지개발(?:예정)?지구|도시개발구역|정비구역|구역$|지구$/g, "").replace(/\d+$/, "").trim();
+      if (s.length >= 2) out.push(s);
+    }
+  }
+  const tokens = address.trim().split(/\s+/);
+  const eupmyeon = tokens.find((t) => /[읍면]$/.test(t));
+  if (eupmyeon) out.push(eupmyeon.replace(/[읍면]$/, ""));
+  const dong = tokens.find((t, i) => i > 1 && /(?:\d*동|\d*가|리)$/.test(t) && !/[읍면]$/.test(t));
+  if (dong) out.push(dong.replace(/\d*(?:동|가|리)$/, ""));
+  const gu = tokens.find((t, i) => i > 0 && /구$/.test(t));
+  if (gu) out.push(gu.replace(/구$/, ""));
+  return [...new Set(out.filter((s) => s.length >= 2))].slice(0, 4);
+}
+
+export async function listDecisionGosi(keywords: string[]): Promise<GosiListRow[]> {
+  const rows = new Map<string, GosiListRow>();
+  for (const kw of keywords.slice(0, 3)) {
+    try {
+      for (const r of await searchGosi(kw, null, 3)) {
+        const t = r.title.replace(/\s+/g, "");
+        if (!DECISION_TITLE.test(t) || DECISION_EXCLUDE.test(t)) continue;
+        rows.set(r.seq, r);
+      }
+    } catch { /* 다음 검색어 */ }
+  }
+  // 같은 고시번호가 부서별로 중복 등록된 경우 하나만
+  const seen = new Set<string>();
+  return [...rows.values()]
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || Number(b.seq) - Number(a.seq))
+    .filter((r) => { const k = r.gosiNo.replace(/\s+/g, "") || r.seq; if (seen.has(k)) return false; seen.add(k); return true; })
+    .slice(0, 40);
+}
+
+export interface GosiScanResult {
+  seq: string; gosiNo: string; title: string; date: string | null; url: string;
+  parcel: import("../review/gosi-decision").ParcelBlock | null;
+  rule: import("../review/gosi-decision").BuildingRule | null;
+  /** 건축물 결정조서 '변경없음 게재생략' */
+  ruleUnchanged: boolean;
+  /** 고시문에 대상 리·동 이름이 나오는지 (같은 계획인지 판단용) */
+  placeMention: boolean;
+  errors: string[];
+}
+
+const scanCache = new Map<string, { at: number; value: GosiScanResult }>();
+
+export async function scanGosiForParcel(seq: string, place: string, lot: string, label: string | null): Promise<GosiScanResult> {
+  const key = [seq, place, lot, label].join("|");
+  const hit = scanCache.get(key);
+  if (hit && Date.now() - hit.at < 12 * 3600_000) return hit.value;
+  const { findParcelBlock, findBuildingRule, buildingTableUnchanged } = await import("../review/gosi-decision");
+  const page = await getHtmlWithCookie(gosiUrl(seq), 15_000);
+  const detail = parseGosiDetail(page.html, seq);
+  const errors: string[] = [];
+  const texts: string[] = [detail.body];
+  const { extractHwpText } = await import("./hwp");
+  const files = detail.attachments
+    .filter((a) => ["pdf", "hwpx", "hwp"].includes(a.ext) && !/도면|고시도|위치도|계획도|결정도|조감도/.test(a.name))
+    .sort((a, b) => Number(/고시문|조서|지침|결정/.test(b.name)) - Number(/고시문|조서|지침|결정/.test(a.name)))
+    .slice(0, 3);
+  for (const a of files) {
+    try {
+      const data = await downloadAttachment(seq, a.path, page.cookie);
+      texts.push(a.ext === "hwp" ? await extractHwpText(data) : (await extractDocumentText(data, a.ext as "pdf" | "hwpx", 2_000_000)).text);
+    } catch (e) { errors.push(`${a.name}: ${e instanceof Error ? e.message : "실패"}`); }
+  }
+  const text = texts.join("\n");
+  const parcel = findParcelBlock(text, place, lot);
+  const useLabel = label ?? parcel?.label ?? null;
+  const value: GosiScanResult = {
+    seq, gosiNo: detail.gosiNo, title: detail.title, date: detail.date, url: gosiUrl(seq),
+    parcel, rule: useLabel ? findBuildingRule(text, useLabel) : null, ruleUnchanged: buildingTableUnchanged(text),
+    placeMention: text.replace(/\s+/g, "").includes(place), errors,
+  };
+  if (!errors.length) scanCache.set(key, { at: Date.now(), value });
+  return value;
+}

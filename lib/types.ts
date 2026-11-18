@@ -363,6 +363,8 @@ export interface SiteReviewResult {
   transit?: import("./server/transit").TransitCheck | null;
   /** 국가법령정보센터 외 대체 출처 사용 표시 (예: ELIS) */
   lawSources?: string[];
+  /** 최신 결정고시 자동 적용 결과 (지구단위계획·산업단지계획 결정조서의 가구·획지와 건축물 결정내용) */
+  planDecision?: import("./review/plan-decision").PlanDecision | null;
   errors: string[];
   unresolved: string[];
 }

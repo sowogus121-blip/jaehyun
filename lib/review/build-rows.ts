@@ -6,6 +6,7 @@
  */
 import type { SiteReviewResult } from "../types";
 import { findZone, LAW, lawUrl, ref, useRestrictionRef, SUNLIGHT_TEXT, SUNLIGHT_HIGHLIGHTS, OPEN_SPACE_ZONES, OPEN_SPACE_FLOOR_AREA } from "./national";
+import { apartmentProhibited } from "./gosi-decision";
 import { matchLibrary, autoBlockOf, type LibraryContext, type RowPatch } from "./library";
 import { findArticle, zoneRatio, type Article } from "./articles";
 import { assessParcelAssembly } from "../parcel-assembly";
@@ -787,6 +788,54 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
     for (const patch of entry.rows(ctx)) applyPatch(rows, patch, entry.title);
   }
 
+  // ── 최신 결정고시 자동 적용 (토지이음 고시를 최신순으로 확인한 결과) ──
+  const dec = review?.planDecision;
+  if (dec?.parcel && dec.rule) {
+    const p = dec.parcel, r = dec.rule;
+    const chain = dec.checked.filter((c) => c.parcel || c.rule !== "none").map((c) => `${c.gosiNo}(${c.date ?? "-"}${c.rule === "found" ? " 결정" : c.rule === "unchanged" ? " 변경없음" : ""})`).join(" → ");
+    const gosiSrc = (g: typeof p.gosi, article: string, excerpt: string, highlights: string[]): SourceRef => ({ title: `${g.gosiNo} ${g.title}`.trim(), article, url: g.url, effectiveDate: g.date ?? undefined, excerpt, highlights, kind: "plan" });
+    // 검증 라이브러리 값이 이 고시보다 최신 근거면 라이브러리를 유지
+    const newest = (id: string) => Math.max(0, ...(rows.get(id)?.sources ?? []).map((x) => Date.parse(x.effectiveDate ?? "") || 0));
+    const ruleDate = Date.parse(r.gosi.date ?? "") || 0;
+    const blockText = `${p.label}${p.block ? ` 가구 ${p.block}` : ""}${p.lot ? ` · 획지 ${p.lot}` : ""}`;
+    if (newest("plan.district") <= ruleDate || !rows.get("plan.district") || rows.get("plan.district")!.status !== "verified") {
+      const cur = rows.get("plan.district");
+      put({ ...(cur ?? {}), id: "plan.district",
+        content: `${blockText}${p.area ? ` (획지면적 ${fmt(p.area)}㎡)` : ""}\n가구·획지 근거: ${p.gosi.gosiNo} (${p.gosi.date ?? "-"})`,
+        law: `${p.gosi.gosiNo} 가구 및 획지 결정조서`,
+        note: `토지이음 결정고시 최신순 확인: ${chain}`,
+        status: "verified", missing: undefined,
+        sources: [gosiSrc(p.gosi, "가구 및 획지 결정조서", p.line, [p.line])] } as ReviewRow);
+    }
+    if (newest("plan.bcrfar") <= ruleDate) {
+      put({ ...(rows.get("plan.bcrfar") ?? {}), id: "plan.bcrfar",
+        content: `건폐율 ${r.bcr ?? "-"}% 이하\n용적률 ${r.far !== null ? r.far.toLocaleString() : "-"}% 이하 (${p.label}${r.use ? `, 용도 ${r.use}` : ""})`,
+        law: `${r.gosi.gosiNo} 건축물 결정조서 (${r.gosi.date ?? "-"})`,
+        note: `가장 최근에 결정된 고시 값 적용 · 이후 고시는 변경없음 확인 (${chain})`,
+        status: "verified", missing: undefined,
+        params: { ...(r.bcr !== null ? { bcr: r.bcr } : {}), ...(r.far !== null ? { far: r.far } : {}) },
+        sources: [gosiSrc(r.gosi, `건축물 결정조서 — ${p.label}`, r.lines.join(" · "), r.lines.filter((l) => /%|용도/.test(l)))] } as ReviewRow);
+    }
+    if (newest("plan.height") <= ruleDate && (r.height || r.setback)) {
+      const h = !r.height || /^-$|없음/.test(r.height) ? "최고높이 지정 없음" : `최고높이 ${r.height}`;
+      put({ ...(rows.get("plan.height") ?? {}), id: "plan.height",
+        content: `${h}${r.setback ? `\n${r.setback}` : ""} (${p.label})`,
+        law: `${r.gosi.gosiNo} 건축물 결정조서`, note: "높이 미지정이면 건축법·일조 등 일반 기준 적용",
+        status: "verified", missing: undefined,
+        params: r.height && /(\d+)\s*층/.test(r.height) ? { maxFloors: Number(r.height.match(/(\d+)\s*층/)![1]) } : undefined,
+        sources: [gosiSrc(r.gosi, `건축물 결정조서 — ${p.label}`, r.lines.join(" · "), [r.height ?? "", r.setback ?? ""].filter(Boolean))] } as ReviewRow);
+    }
+    const ban = apartmentProhibited(r.useText);
+    if (ban !== null && newest("plan.use") <= ruleDate) {
+      put({ ...(rows.get("plan.use") ?? {}), id: "plan.use",
+        content: `${p.label} 허용·불허 용도 (결정조서)\n${r.useText}`,
+        law: `${r.gosi.gosiNo} 건축물 결정조서`, note: ban ? "불허 용도에 공동주택 포함" : "불허 용도에 공동주택 없음",
+        status: "verified", missing: undefined,
+        params: ban ? { useApartment: "prohibited", useUrban: "prohibited" } : undefined,
+        sources: [gosiSrc(r.gosi, `건축물 결정조서 — ${p.label}`, r.useText ?? "", ["공동주택"])] } as ReviewRow);
+    }
+  }
+
   // 라이브러리로 원문 대조가 끝난 항목은 관련 후보 행도 확정한다.
   const dRow = rows.get("plan.district");
   const planSrc = dRow && dRow.status === "verified" ? dRow.sources.find((x) => x.kind === "plan" && x.url) : undefined;
@@ -815,7 +864,7 @@ export function buildRows(site: SiteInput, review: SiteReviewResult | null): Rev
 
   // 지구단위계획 구역인데 획지 기준이 확정되지 않았다면 건폐율·용적률·용도·높이를 후보로 묶는다.
   // 결정조서 지번 대조로 획지가 자동 확정된 경우(라이브러리 등록 구역)는 예외
-  if (districtPlanOf(review) && !site.blockNo && !autoBlockOf(ctx.address)) {
+  if (districtPlanOf(review) && !site.blockNo && !autoBlockOf(ctx.address) && !(review?.planDecision?.parcel && review.planDecision.rule)) {
     for (const id of ["plan.bcrfar", "plan.use", "plan.height"]) {
       const row = rows.get(id);
       if (row && (row.status === "verified" || row.status === "user")) {
